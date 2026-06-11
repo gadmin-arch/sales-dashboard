@@ -1,0 +1,66 @@
+Created At: 2026-06-11T04:49:07Z
+Completed At: 2026-06-11T04:49:07Z
+File Path: `file:///Users/irfanzuhdiabdillah/Code/2026/sales-dashboard/app/dashboard/sales/page.tsx`
+Total Lines: 428
+Total Bytes: 21605
+Showing lines 1 to 428
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+1: 'use client'
+2: 
+3: import { useState, useEffect, useCallback } from 'react'
+4: import { KPICard } from '@/components/kpi-card'
+5: import { ChartPeriodToggle } from '@/components/chart-period-toggle'
+6: import { Button } from '@/components/ui/button'
+7: import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+8: import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+9: import {
+10:   LineChart, Line, PieChart, Pie, Cell, BarChart, Bar,
+11:   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+12: } from 'recharts'
+13: import { FileText, Briefcase, DollarSign, TrendingUp, Filter, X, Loader2 } from 'lucide-react'
+14: 
+15: interface SalesData {
+16:   kpis: { totalProjects: number; totalSales: number; totalQuotations: number; totalQuotationValue: number }
+17:   quotStatusBreakdown: Record<string, number>
+18:   salesByType: { name: string; value: number }[]
+19:   revenueTrend: { name: string; value: number; material: number; service: number }[]
+20:   priceComposition: { name: string; material: number; service: number }[]
+21:   topProjects: { prjId: string; name: string; salesOwner: string; customer: string; type: string; currency: string; total: number; material: number; service: number; poDate: string }[]
+22:   topSalesPersons: { name: string; totalPrice: number; projectCount: number; quotationCount: number }[]
+23:   summary: { type: string; quotationCount: number; projectCount: number; totalPrice: number; material: number; service: number }[]
+24:   salesUserList: { id
+<truncated 20094 bytes>
+    <thead className="border-b border-border bg-muted/50">
+397:                 <tr>
+398:                   <th className="px-6 py-3 text-left font-medium text-muted-foreground">Type</th>
+399:                   <th className="px-6 py-3 text-right font-medium text-muted-foreground">Quotations</th>
+400:                   <th className="px-6 py-3 text-right font-medium text-muted-foreground">Projects</th>
+401:                   <th className="px-6 py-3 text-right font-medium text-muted-foreground">Material</th>
+402:                   <th className="px-6 py-3 text-right font-medium text-muted-foreground">Service</th>
+403:                   <th className="px-6 py-3 text-right font-medium text-muted-foreground">Total Price</th>
+404:                 </tr>
+405:               </thead>
+406:               <tbody>
+407:                 {data.summary.length === 0 && (
+408:                   <tr><td colSpan={6} className="px-6 py-8 text-center text-muted-foreground">No data</td></tr>
+409:                 )}
+410:                 {data.summary.map((row, i) => (
+411:                   <tr key={i} className="border-b border-border">
+412:                     <td className="px-6 py-3 text-foreground">{row.type}</td>
+413:                     <td className="px-6 py-3 text-right text-foreground">{row.quotationCount}</td>
+414:                     <td className="px-6 py-3 text-right text-foreground">{row.projectCount}</td>
+415:                     <td className="px-6 py-3 text-right text-foreground">{fmtRp(row.material)}</td>
+416:                     <td className="px-6 py-3 text-right text-foreground">{fmtRp(row.service)}</td>
+417:                     <td className="px-6 py-3 text-right font-semibold text-foreground">{fmtRp(row.totalPrice)}</td>
+418:                   </tr>
+419:                 ))}
+420:               </tbody>
+421:             </table>
+422:           </div>
+423:         </CardContent>
+424:       </Card>
+425:     </div>
+426:   )
+427: }
+428: 
+The above content shows the entire, complete file contents of the requested file.
