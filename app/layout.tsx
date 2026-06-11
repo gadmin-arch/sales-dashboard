@@ -42,7 +42,7 @@ export default function RootLayout({
   const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || 'placeholder'
 
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
+    <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`} suppressHydrationWarning>
       <body className="font-sans antialiased">
         <GoogleOAuthProvider clientId={clientId}>
           <AuthProvider>

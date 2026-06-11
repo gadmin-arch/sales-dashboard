@@ -17,6 +17,7 @@ interface SalesData {
   salesByType: { name: string; value: number }[]
   revenueTrend: { name: string; value: number; material: number; service: number }[]
   priceComposition: { name: string; material: number; service: number }[]
+  poComposition: { name: string; value: number }[]
   topProjects: { prjId: string; name: string; salesOwner: string; customer: string; type: string; currency: string; total: number; material: number; service: number; poDate: string }[]
   topSalesPersons: { name: string; totalPrice: number; projectCount: number; quotationCount: number }[]
   summary: { type: string; quotationCount: number; projectCount: number; totalPrice: number; material: number; service: number }[]
@@ -85,6 +86,9 @@ export default function SalesPage() {
   const [error, setError] = useState<string | null>(null)
   const [chartPeriod, setChartPeriod] = useState<'monthly' | 'weekly'>('monthly')
   const [tableSearch, setTableSearch] = useState('')
+  const [tableCustomerFilter, setTableCustomerFilter] = useState('all')
+  const [tableSalesOwnerFilter, setTableSalesOwnerFilter] = useState('all')
+  const [tableOrderTypeFilter, setTableOrderTypeFilter] = useState('all')
 
   const getYTDDateRange = () => {
     const now = new Date()
@@ -222,15 +226,85 @@ export default function SalesPage() {
 
   const filteredProjects = useMemo(() => {
     if (!data) return []
-    if (!tableSearch) return data.topProjects
-    const q = tableSearch.toLowerCase()
-    return data.topProjects.filter(p =>
-      p.name.toLowerCase().includes(q) ||
-      p.customer.toLowerCase().includes(q) ||
-      p.salesOwner.toLowerCase().includes(q) ||
-      p.prjId.toLowerCase().includes(q)
+    let projects = data.topProjects
+
+    // 1. Search
+    if (tableSearch) {
+      const q = tableSearch.toLowerCase()
+      projects = projects.filter(p =>
+        p.name.toLowerCase().includes(q) ||
+        p.customer.toLowerCase().includes(q) ||
+        p.salesOwner.toLowerCase().includes(q) ||
+        p.prjId.toLowerCase().includes(q)
+      )
+    }
+
+    // 2. Customer
+    if (tableCustomerFilter && tableCustomerFilter !== 'all') {
+      projects = projects.filter(p => p.customer === tableCustomerFilter)
+    }
+
+    // 3. Sales Owner
+    if (tableSalesOwnerFilter && tableSalesOwnerFilter !== 'all') {
+      projects = projects.filter(p => p.salesOwner === tableSalesOwnerFilter)
+    }
+
+    // 4. Order Type
+    if (tableOrderTypeFilter && tableOrderTypeFilter !== 'all') {
+      projects = projects.filter(p => p.type === tableOrderTypeFilter)
+    }
+
+    return projects.slice(0, 10)
+  }, [data, tableSearch, tableCustomerFilter, tableSalesOwnerFilter, tableOrderTypeFilter])
+
+  const uniqueCustomers = useMemo(() => {
+    if (!data) return []
+    const set = new Set<string>()
+    data.topProjects.forEach(p => {
+      if (p.customer) set.add(p.customer)
+    })
+    return Array.from(set).sort()
+  }, [data])
+
+  const uniqueSalesOwners = useMemo(() => {
+    if (!data) return []
+    const set = new Set<string>()
+    data.topProjects.forEach(p => {
+      if (p.salesOwner) set.add(p.salesOwner)
+    })
+    return Array.from(set).sort()
+  }, [data])
+
+  const uniqueOrderTypes = useMemo(() => {
+    if (!data) return []
+    const set = new Set<string>()
+    data.topProjects.forEach(p => {
+      if (p.type) set.add(p.type)
+    })
+    return Array.from(set).sort()
+  }, [data])
+
+  const salesByTypeTotal = useMemo(() => {
+    return data?.salesByType?.reduce((s, x) => s + x.value, 0) || 0
+  }, [data])
+
+  const poCompositionTotal = useMemo(() => {
+    return data?.poComposition?.reduce((s, x) => s + x.value, 0) || 0
+  }, [data])
+
+  const summaryTotals = useMemo(() => {
+    if (!data || !data.summary) return { projectCount: 0, material: 0, service: 0, totalPrice: 0 }
+    return data.summary.reduce(
+      (acc, row) => {
+        acc.projectCount += row.projectCount
+        acc.material += row.material
+        acc.service += row.service
+        acc.totalPrice += row.totalPrice
+        return acc
+      },
+      { projectCount: 0, material: 0, service: 0, totalPrice: 0 }
     )
-  }, [data, tableSearch])
+  }, [data])
 
   // Custom select arrow styles
   const selectStyle = {
@@ -418,7 +492,7 @@ export default function SalesPage() {
       </div>
 
       {/* Charts Grid 1 */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
         {/* Sales Revenue Trends */}
         <Card className="lg:col-span-2 border-border">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -467,13 +541,87 @@ export default function SalesPage() {
                   paddingAngle={4}
                   dataKey="value"
                   stroke="none"
+                  label={({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
+                    const RADIAN = Math.PI / 180;
+                    const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+                    const x = cx + radius * Math.cos(-midAngle * RADIAN);
+                    const y = cy + radius * Math.sin(-midAngle * RADIAN);
+                    return percent > 0.05 ? (
+                      <text x={x} y={y} fill="#0a1628" textAnchor="middle" dominantBaseline="central" className="text-[10px] font-bold">
+                        {`${(percent * 100).toFixed(0)}%`}
+                      </text>
+                    ) : null;
+                  }}
                 >
                   {data.salesByType.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
                   ))}
                 </Pie>
-                <Tooltip formatter={(value) => fmtRp(Number(value))} />
-                <Legend formatter={(value) => <span className="text-xs text-slate-300">{value}</span>} />
+                <Tooltip
+                  formatter={(value, name) => {
+                    const pct = salesByTypeTotal > 0 ? (Number(value) / salesByTypeTotal * 100).toFixed(1) : '0.0'
+                    return [`${fmtRp(Number(value))} (${pct}%)`, name]
+                  }}
+                />
+                <Legend
+                  formatter={(value) => {
+                    const item = data.salesByType.find((entry) => entry.name === value)
+                    const pct = (item && salesByTypeTotal > 0) ? (item.value / salesByTypeTotal * 100).toFixed(1) : '0.0'
+                    return <span className="text-xs text-slate-300">{value} ({pct}%)</span>
+                  }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        {/* PO Composition (Donut) */}
+        <Card className="border-border">
+          <CardHeader>
+            <CardTitle className="text-base font-semibold text-foreground">PO Composition</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={300}>
+              <PieChart>
+                <Pie
+                  data={data.poComposition}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={80}
+                  paddingAngle={4}
+                  dataKey="value"
+                  stroke="none"
+                  label={({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
+                    const RADIAN = Math.PI / 180;
+                    const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+                    const x = cx + radius * Math.cos(-midAngle * RADIAN);
+                    const y = cy + radius * Math.sin(-midAngle * RADIAN);
+                    return percent > 0.05 ? (
+                      <text x={x} y={y} fill="#0a1628" textAnchor="middle" dominantBaseline="central" className="text-[10px] font-bold">
+                        {`${(percent * 100).toFixed(0)}%`}
+                      </text>
+                    ) : null;
+                  }}
+                >
+                  {data.poComposition.map((entry, index) => {
+                    const COMP_COLORS: Record<string, string> = { 'PO Material': '#38bdf8', 'PO Service': '#00e5a0' }
+                    return <Cell key={`cell-${entry.name}`} fill={COMP_COLORS[entry.name] || '#38bdf8'} />
+                  })}
+                </Pie>
+                <Tooltip
+                  formatter={(value, name) => {
+                    const pct = poCompositionTotal > 0 ? (Number(value) / poCompositionTotal * 100).toFixed(1) : '0.0'
+                    return [`${fmtRp(Number(value))} (${pct}%)`, name]
+                  }}
+                />
+                <Legend
+                  formatter={(value) => {
+                    const item = data.poComposition.find((entry) => entry.name === value)
+                    const pct = (item && poCompositionTotal > 0) ? (item.value / poCompositionTotal * 100).toFixed(1) : '0.0'
+                    return <span className="text-xs text-slate-300">{value} ({pct}%)</span>
+                  }}
+                />
               </PieChart>
             </ResponsiveContainer>
           </CardContent>
@@ -534,17 +682,52 @@ export default function SalesPage() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Top Projects Table */}
         <Card className="lg:col-span-2 border-border overflow-hidden">
-          <CardHeader className="flex flex-row items-center justify-between pb-4">
+          <CardHeader className="flex flex-col gap-4 pb-4 md:flex-row md:items-center md:justify-between">
             <CardTitle className="text-base font-semibold text-foreground">Top Projects</CardTitle>
-            <div className="relative w-64">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <input
-                type="text"
-                placeholder="Search projects..."
-                value={tableSearch}
-                onChange={(e) => setTableSearch(e.target.value)}
-                className="w-full rounded-md border border-input bg-[#0a1628] pl-8 pr-3 py-1.5 text-sm text-foreground outline-none focus:ring-1 focus:ring-primary"
-              />
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative w-48">
+                <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                <input
+                  type="text"
+                  placeholder="Search..."
+                  value={tableSearch}
+                  onChange={(e) => setTableSearch(e.target.value)}
+                  className="w-full rounded-md border border-input bg-[#0a1628] pl-8 pr-3 py-1 text-xs text-foreground outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+              <select
+                value={tableCustomerFilter}
+                onChange={(e) => setTableCustomerFilter(e.target.value)}
+                className="rounded-md border border-[#1e2d4a] bg-[#0a1628] text-[#f8fafc] px-3 py-1 text-xs outline-none focus:border-[#38bdf8] focus:ring-1 focus:ring-[#38bdf8] appearance-none cursor-pointer"
+                style={{ ...selectStyle, paddingRight: '1.75rem', backgroundPosition: 'right 0.5rem center' }}
+              >
+                <option value="all" className="bg-[#0f1f35]">All Customers</option>
+                {uniqueCustomers.map(c => (
+                  <option key={c} value={c} className="bg-[#0f1f35]">{c}</option>
+                ))}
+              </select>
+              <select
+                value={tableSalesOwnerFilter}
+                onChange={(e) => setTableSalesOwnerFilter(e.target.value)}
+                className="rounded-md border border-[#1e2d4a] bg-[#0a1628] text-[#f8fafc] px-3 py-1 text-xs outline-none focus:border-[#38bdf8] focus:ring-1 focus:ring-[#38bdf8] appearance-none cursor-pointer"
+                style={{ ...selectStyle, paddingRight: '1.75rem', backgroundPosition: 'right 0.5rem center' }}
+              >
+                <option value="all" className="bg-[#0f1f35]">All Sales Owners</option>
+                {uniqueSalesOwners.map(so => (
+                  <option key={so} value={so} className="bg-[#0f1f35]">{so}</option>
+                ))}
+              </select>
+              <select
+                value={tableOrderTypeFilter}
+                onChange={(e) => setTableOrderTypeFilter(e.target.value)}
+                className="rounded-md border border-[#1e2d4a] bg-[#0a1628] text-[#f8fafc] px-3 py-1 text-xs outline-none focus:border-[#38bdf8] focus:ring-1 focus:ring-[#38bdf8] appearance-none cursor-pointer"
+                style={{ ...selectStyle, paddingRight: '1.75rem', backgroundPosition: 'right 0.5rem center' }}
+              >
+                <option value="all" className="bg-[#0f1f35]">All Types</option>
+                {uniqueOrderTypes.map(ot => (
+                  <option key={ot} value={ot} className="bg-[#0f1f35]">{ot}</option>
+                ))}
+              </select>
             </div>
           </CardHeader>
           <CardContent className="p-0">
@@ -669,6 +852,17 @@ export default function SalesPage() {
                   ))
                 )}
               </tbody>
+              {data.summary.length > 0 && (
+                <tfoot className="border-t border-border bg-slate-800/50 font-semibold">
+                  <tr>
+                    <td className="px-6 py-3 text-left text-foreground">Total</td>
+                    <td className="px-6 py-3 text-right text-foreground">{summaryTotals.projectCount}</td>
+                    <td className="px-6 py-3 text-right text-sky-400 font-bold">{fmtRp(summaryTotals.material)}</td>
+                    <td className="px-6 py-3 text-right text-emerald-400 font-bold">{fmtRp(summaryTotals.service)}</td>
+                    <td className="px-6 py-3 text-right font-extrabold text-[#f8fafc]">{fmtRp(summaryTotals.totalPrice)}</td>
+                  </tr>
+                </tfoot>
+              )}
             </table>
           </div>
         </CardContent>

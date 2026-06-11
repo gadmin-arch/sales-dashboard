@@ -133,7 +133,6 @@ export async function GET(request: NextRequest) {
     // ── Top projects ──
     const topProjects = [...filteredOrders]
       .sort((a, b) => b.prjPoTotal - a.prjPoTotal)
-      .slice(0, 10)
       .map((o) => {
         const salesOwnerId = o.prjOwner || orderToSalesOwner.get(o.prjId)
         const customerId = o.prjCompanyId || o.prjEndUserId
@@ -195,6 +194,14 @@ export async function GET(request: NextRequest) {
       service: Math.round(d.service),
     }))
 
+    // ── PO Composition (Material vs Service) ──
+    const totalMaterial = filteredOrders.reduce((s, o) => s + (o.prjPoMaterial || 0), 0)
+    const totalService = filteredOrders.reduce((s, o) => s + (o.prjPoService || 0), 0)
+    const poComposition = [
+      { name: 'PO Material', value: Math.round(totalMaterial) },
+      { name: 'PO Service', value: Math.round(totalService) }
+    ]
+
     // ── Sales users that appear in ANY order or quotation ──
     const activeUserIds = new Set<string>()
     for (const o of orders) {
@@ -225,6 +232,7 @@ export async function GET(request: NextRequest) {
       salesByType,
       revenueTrend,
       priceComposition,
+      poComposition,
       topProjects,
       topSalesPersons,
       summary,
