@@ -37,7 +37,7 @@ export async function getAllQuotations(): Promise<Quotation[]> {
     GOOGLE_CONFIG.quotations.sheets.quotations
   )
   // Filter out header row and deleted rows (deleted_at at index 30)
-  return rows.filter((r) => r[0] && r[0] !== 'q_id' && !r[30]).map(mapQuotation)
+  return rows.filter((r) => r[0] && r[0] !== 'q_id' && !r[29]).map(mapQuotation)
 }
 
 export async function getQuotationsByOwner(ownerId: string): Promise<Quotation[]> {
@@ -60,3 +60,17 @@ export function getStatusLabel(statusId: string): string {
 export function getQuotationTypeLabel(typeId: string): string {
   return typeMap?.get(typeId) || typeId
 }
+
+export async function getAllQuotationTypes(): Promise<QuotationType[]> {
+  await loadRefMaps()
+  const result: QuotationType[] = []
+  if (typeMap) {
+    for (const [qtId, qtDesc] of typeMap.entries()) {
+      if (qtId !== 'qt_id') {
+        result.push({ qtId, qtDesc })
+      }
+    }
+  }
+  return result
+}
+

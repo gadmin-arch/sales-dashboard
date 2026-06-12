@@ -48,11 +48,12 @@ export function mapOrder(row: string[]): Order {
   }
 }
 
-// Parse numbers like "1,500,000.00" or "100,000,000.00"
-// Format: comma = thousands separator, dot = decimal
+// Parse numbers like "1,500,000.00" or "100,000,000.00" or "Rp2,987,000"
+// Format: comma = thousands separator, dot = decimal, optional "Rp" prefix
 export function parseNum(val: string | undefined): number {
   if (!val) return 0
-  const cleaned = val.replace(/,/g, '')
+  // Remove "Rp" prefix, commas, and any other non-numeric chars except dot and minus
+  const cleaned = val.replace(/[^\d.-]/g, '')
   const n = parseFloat(cleaned)
   return isNaN(n) ? 0 : n
 }

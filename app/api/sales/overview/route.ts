@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getProjectOrders, getOrderTypeLabelSync, loadRefMaps as loadOrderRefMaps, getAllOrderTypes, getOrdersSheetHeaders } from '@/database/repos/orders'
-import { getAllQuotations, getStatusLabel, loadRefMaps as loadQuotRefMaps } from '@/database/repos/quotations'
+import { getAllQuotations, getStatusLabel, loadRefMaps as loadQuotRefMaps, getAllQuotationTypes } from '@/database/repos/quotations'
 import { getAllSalesUsers } from '@/database/repos/sales-users'
 import { getAllCompanies } from '@/database/repos/companies'
 import type { Order, Quotation, SalesUser, Company } from '@/database'
@@ -20,12 +20,15 @@ export async function GET(request: NextRequest) {
 
     await Promise.all([loadOrderRefMaps(), loadQuotRefMaps()])
 
-    const [orders, quotations, salesUsers, companies] = await Promise.all([
+    const [ordersRaw, quotationsRaw, salesUsers, companies] = await Promise.all([
       getProjectOrders(),
       getAllQuotations(),
       getAllSalesUsers(),
       getAllCompanies(),
     ])
+
+    const orders = ordersRaw.filter((o) => !o.deletedAt)
+    const quotations = quotationsRaw.filter((q) => !q.deletedAt)
 
     // Build company map for customer lookup
     const companyMap = new Map<string, string>()
@@ -139,7 +142,7 @@ export async function GET(request: NextRequest) {
         return {
           prjId: o.prjId,
           name: o.prjName,
-          salesOwner: userMap.get(salesOwnerId)?.name || salesOwnerId || '-',
+          salesOwner: userMap.get(salesOwnerId || '')?.name || salesOwnerId || '-',
           customer: companyMap.get(customerId) || customerId || '-',
           type: getOrderTypeLabelSync(o.prjOtId),
           currency: o.poCurrency,
@@ -194,6 +197,43 @@ export async function GET(request: NextRequest) {
       service: Math.round(d.service),
     }))
 
+    // ── Quotation Summary by Type ──
+    const quotationTypes = await getAllQuotationTypes()
+    const allTypes = [...quotationTypes, { qtId: '', qtDesc: '(Blank)' }]
+    const quotationSummary = allTypes
+      .map((qt) => {
+        const quotsOfType = filteredQuotations.filter((q) => {
+          if (!qt.qtId) {
+            return !q.qType || !quotationTypes.some((t) => t.qtId === q.qType)
+          }
+          return q.qType === qt.qtId
+        })
+        const wonQuots = quotsOfType.filter((q) => orders.some((o) => o.prjQId === q.qId))
+        
+        const totalQuotation = quotsOfType.length
+        const totalQuotationWon = wonQuots.length
+        const wonPercentage = totalQuotation > 0 ? (totalQuotationWon / totalQuotation) * 100 : 0
+        
+        const totalQuotationWonFinalPrice = wonQuots.reduce((sum, q) => sum + (q.qFinalPrice || 0), 0)
+        const relatedOrders = orders.filter((o) => wonQuots.some((q) => o.prjQId === q.qId))
+        const totalOrderPriceFromQuotation = relatedOrders.reduce((sum, o) => sum + (o.prjPoTotal || 0), 0)
+        
+        const orderToWonPricePercentage = totalQuotationWonFinalPrice > 0 
+          ? (totalOrderPriceFromQuotation / totalQuotationWonFinalPrice) * 100 
+          : 0
+
+        return {
+          qType: qt.qtDesc || qt.qtId || '(Blank)',
+          totalQuotation,
+          totalQuotationWon,
+          wonPercentage: Math.round(wonPercentage * 10) / 10,
+          totalQuotationWonFinalPrice: Math.round(totalQuotationWonFinalPrice),
+          totalOrderPriceFromQuotation: Math.round(totalOrderPriceFromQuotation),
+          orderToWonPricePercentage: Math.round(orderToWonPricePercentage * 10) / 10,
+        }
+      })
+      .filter((row) => row.totalQuotation > 0 || row.qType !== '(Blank)')
+
     // ── PO Composition (Material vs Service) ──
     const totalMaterial = filteredOrders.reduce((s, o) => s + (o.prjPoMaterial || 0), 0)
     const totalService = filteredOrders.reduce((s, o) => s + (o.prjPoService || 0), 0)
@@ -236,6 +276,7 @@ export async function GET(request: NextRequest) {
       topProjects,
       topSalesPersons,
       summary,
+      quotationSummary,
       salesUserList,
       currencyList,
       orderTypeList,

@@ -21,6 +21,7 @@ interface SalesData {
   topProjects: { prjId: string; name: string; salesOwner: string; customer: string; type: string; currency: string; total: number; material: number; service: number; poDate: string }[]
   topSalesPersons: { name: string; totalPrice: number; projectCount: number; quotationCount: number }[]
   summary: { type: string; quotationCount: number; projectCount: number; totalPrice: number; material: number; service: number }[]
+  quotationSummary: { qType: string; totalQuotation: number; totalQuotationWon: number; wonPercentage: number; totalQuotationWonFinalPrice: number; totalOrderPriceFromQuotation: number; orderToWonPricePercentage: number }[]
   salesUserList: { id: string; name: string; email: string }[]
   currencyList: string[]
   orderTypeList: { otId: string; otDescription: string }[]
@@ -304,6 +305,45 @@ export default function SalesPage() {
       },
       { projectCount: 0, material: 0, service: 0, totalPrice: 0 }
     )
+  }, [data])
+
+  const quotationSummaryTotals = useMemo(() => {
+    if (!data || !data.quotationSummary) {
+      return {
+        totalQuotation: 0,
+        totalQuotationWon: 0,
+        wonPercentage: 0,
+        totalQuotationWonFinalPrice: 0,
+        totalOrderPriceFromQuotation: 0,
+        orderToWonPricePercentage: 0,
+      }
+    }
+    const sums = data.quotationSummary.reduce(
+      (acc, row) => {
+        acc.totalQuotation += row.totalQuotation
+        acc.totalQuotationWon += row.totalQuotationWon
+        acc.totalQuotationWonFinalPrice += row.totalQuotationWonFinalPrice
+        acc.totalOrderPriceFromQuotation += row.totalOrderPriceFromQuotation
+        return acc
+      },
+      {
+        totalQuotation: 0,
+        totalQuotationWon: 0,
+        totalQuotationWonFinalPrice: 0,
+        totalOrderPriceFromQuotation: 0,
+      }
+    )
+
+    const wonPercentage = sums.totalQuotation > 0 ? (sums.totalQuotationWon / sums.totalQuotation) * 100 : 0
+    const orderToWonPricePercentage = sums.totalQuotationWonFinalPrice > 0
+      ? (sums.totalOrderPriceFromQuotation / sums.totalQuotationWonFinalPrice) * 100
+      : 0
+
+    return {
+      ...sums,
+      wonPercentage: Math.round(wonPercentage * 10) / 10,
+      orderToWonPricePercentage: Math.round(orderToWonPricePercentage * 10) / 10,
+    }
   }, [data])
 
   // Custom select arrow styles
@@ -860,6 +900,67 @@ export default function SalesPage() {
                     <td className="px-6 py-3 text-right text-sky-400 font-bold">{fmtRp(summaryTotals.material)}</td>
                     <td className="px-6 py-3 text-right text-emerald-400 font-bold">{fmtRp(summaryTotals.service)}</td>
                     <td className="px-6 py-3 text-right font-extrabold text-[#f8fafc]">{fmtRp(summaryTotals.totalPrice)}</td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Row 5: Quotation Summary by Type */}
+      <Card className="border-border overflow-hidden" id="quotation-summary-card">
+        <CardHeader className="flex flex-row items-center justify-between pb-4">
+          <CardTitle className="text-base font-semibold text-foreground">Quotation Summary by Type</CardTitle>
+          <span className="inline-flex rounded-full bg-blue-500/10 px-2.5 py-0.5 text-xs font-semibold text-blue-400 border border-blue-500/20">
+            Quotations & Conversion
+          </span>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm" id="quotation-summary-table">
+              <thead className="border-b border-border bg-slate-800/50">
+                <tr>
+                  <th className="px-6 py-3 text-left font-medium text-muted-foreground">Type</th>
+                  <th className="px-6 py-3 text-right font-medium text-muted-foreground">Total Quotations</th>
+                  <th className="px-6 py-3 text-right font-medium text-muted-foreground">Total Won</th>
+                  <th className="px-6 py-3 text-right font-medium text-muted-foreground">Win Rate (%)</th>
+                  <th className="px-6 py-3 text-right font-medium text-muted-foreground">Won Final Price</th>
+                  <th className="px-6 py-3 text-right font-medium text-muted-foreground">Total Order Price</th>
+                  <th className="px-6 py-3 text-right font-medium text-muted-foreground">Order/Won Price (%)</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {!data.quotationSummary || data.quotationSummary.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-6 py-8 text-center text-muted-foreground">
+                      No data
+                    </td>
+                  </tr>
+                ) : (
+                  data.quotationSummary.map((row, i) => (
+                    <tr key={i} className="hover:bg-slate-800/30 transition-colors">
+                      <td className="px-6 py-3 font-medium text-foreground">{row.qType}</td>
+                      <td className="px-6 py-3 text-right">{row.totalQuotation}</td>
+                      <td className="px-6 py-3 text-right text-emerald-400">{row.totalQuotationWon}</td>
+                      <td className="px-6 py-3 text-right font-semibold text-sky-400">{row.wonPercentage}%</td>
+                      <td className="px-6 py-3 text-right font-semibold">{fmtRp(row.totalQuotationWonFinalPrice)}</td>
+                      <td className="px-6 py-3 text-right font-semibold text-emerald-400">{fmtRp(row.totalOrderPriceFromQuotation)}</td>
+                      <td className="px-6 py-3 text-right font-bold text-sky-400">{row.orderToWonPricePercentage}%</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+              {data.quotationSummary && data.quotationSummary.length > 0 && (
+                <tfoot className="border-t border-border bg-slate-800/50 font-semibold">
+                  <tr>
+                    <td className="px-6 py-3 text-left text-foreground">Total</td>
+                    <td className="px-6 py-3 text-right text-foreground">{quotationSummaryTotals.totalQuotation}</td>
+                    <td className="px-6 py-3 text-right text-emerald-400 font-bold">{quotationSummaryTotals.totalQuotationWon}</td>
+                    <td className="px-6 py-3 text-right text-sky-400 font-bold">{quotationSummaryTotals.wonPercentage}%</td>
+                    <td className="px-6 py-3 text-right font-extrabold text-[#f8fafc]">{fmtRp(quotationSummaryTotals.totalQuotationWonFinalPrice)}</td>
+                    <td className="px-6 py-3 text-right text-emerald-400 font-extrabold">{fmtRp(quotationSummaryTotals.totalOrderPriceFromQuotation)}</td>
+                    <td className="px-6 py-3 text-right font-extrabold text-sky-400">{quotationSummaryTotals.orderToWonPricePercentage}%</td>
                   </tr>
                 </tfoot>
               )}

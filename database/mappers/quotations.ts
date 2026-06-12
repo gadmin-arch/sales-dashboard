@@ -7,7 +7,7 @@ import { parseNum } from './orders'
 // 10:q_barecost_service 11:q_service_price 12:q_barecost_material 13:q_material_price
 // 14:q_barecost_final 15:q_final_price 16:q_flag 17:q_file 18:q_type
 // 19:q_date 20:q_status 21:q_references 22:q_purchase_service 23:q_remarks
-// 24:q_owner 25:created_by ... deleted_at
+// 24:q_owner 25:created_by 26:created_at 27:updated_by 28:updated_at 29:deleted_at
 
 export function mapQuotation(row: string[]): Quotation {
   return {
@@ -37,7 +37,7 @@ export function mapQuotation(row: string[]): Quotation {
     qRemarks: row[23] || '',
     qOwner: row[24] || '',
     createdBy: row[25] || '',
-    deletedAt: row[30] || '',
+    deletedAt: row[29] || '',
   }
 }
 
