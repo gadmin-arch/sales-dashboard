@@ -40,7 +40,7 @@ interface SalesData {
   orderTypeList: { otId: string; otDescription: string }[]
 }
 
-type SortKey = 'prjId' | 'name' | 'customer' | 'salesOwner' | 'type'
+type SortKey = 'prjId' | 'name' | 'customer' | 'salesOwner' | 'type' | 'total'
 type SortDir = 'asc' | 'desc'
 
 /* ── Chart configs ── */
@@ -327,25 +327,27 @@ const [su, setSu] = useState('all'), [cur, setCur] = useState('all'), [ot, setOt
             </CardHeader>
             <CardContent className="p-0">
               <Table>
-<TableHeader><TableRow>
-                   <TableHead className={thClass} onClick={() => handleSort('prjId')}>Project ID <SortIcon column="prjId" sortKey={sortKey} sortDir={sortDir} /></TableHead>
-                   <TableHead className={thClass} onClick={() => handleSort('name')}>Name <SortIcon column="name" sortKey={sortKey} sortDir={sortDir} /></TableHead>
-                   <TableHead className={thClass} onClick={() => handleSort('customer')}>Customer <SortIcon column="customer" sortKey={sortKey} sortDir={sortDir} /></TableHead>
-                   <TableHead className={thClass} onClick={() => handleSort('salesOwner')}>Owner <SortIcon column="salesOwner" sortKey={sortKey} sortDir={sortDir} /></TableHead>
-                   <TableHead className={thClass} onClick={() => handleSort('type')}>Type <SortIcon column="type" sortKey={sortKey} sortDir={sortDir} /></TableHead>
-                 </TableRow></TableHeader>
-<TableBody>
-                   {filtered.length === 0 ? <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">No projects found</TableCell></TableRow> : filtered.map(p => (
+                <TableHeader><TableRow>
+                  <TableHead className={thClass} onClick={() => handleSort('prjId')}>Project ID <SortIcon column="prjId" sortKey={sortKey} sortDir={sortDir} /></TableHead>
+                  <TableHead className={thClass} onClick={() => handleSort('name')}>Name <SortIcon column="name" sortKey={sortKey} sortDir={sortDir} /></TableHead>
+                  <TableHead className={thClass} onClick={() => handleSort('customer')}>Customer <SortIcon column="customer" sortKey={sortKey} sortDir={sortDir} /></TableHead>
+                  <TableHead className={thClass} onClick={() => handleSort('salesOwner')}>Owner <SortIcon column="salesOwner" sortKey={sortKey} sortDir={sortDir} /></TableHead>
+                  <TableHead className={thClass} onClick={() => handleSort('type')}>Type <SortIcon column="type" sortKey={sortKey} sortDir={sortDir} /></TableHead>
+                  <TableHead className={thClass} onClick={() => handleSort('total')}>Total <SortIcon column="total" sortKey={sortKey} sortDir={sortDir} /></TableHead>
+                </TableRow></TableHeader>
+                <TableBody>
+                  {filtered.length === 0 ? <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No projects found</TableCell></TableRow> : filtered.map(p => (
                     <TableRow key={p.prjId}>
                       <TableCell className="text-xs font-semibold text-primary">{p.prjId}</TableCell>
                       <TableCell className="max-w-[140px] truncate" title={p.name}>{p.name}</TableCell>
                       <TableCell>{p.customer}</TableCell>
                       <TableCell>{p.salesOwner}</TableCell>
                       <TableCell><span className="inline-flex rounded-md px-2 py-0.5 text-[10px] font-medium border" style={{ color: `hsl(var(--type-${p.type.toLowerCase()}))` || 'var(--foreground)', borderColor: `hsl(var(--type-${p.type.toLowerCase()}))` + '40' || 'var(--border)', background: `hsl(var(--type-${p.type.toLowerCase()}))` + '10' || 'var(--muted)' }}>{p.type}</span></TableCell>
+                      <TableCell className="text-right font-medium">{fmtRp(p.total)}</TableCell>
                     </TableRow>
                   ))}
-</TableBody>
-             </Table>
+                </TableBody>
+              </Table>
             </CardContent>
           </Card>
 
