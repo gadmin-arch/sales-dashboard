@@ -61,4 +61,17 @@ export const GOOGLE_CONFIG = {
       companies: 'companies',
     },
   },
+
+  // Sales activities data
+  salesActivities: {
+    spreadsheetId: '1w6U9qZgQC85RX1nDDWDKJmpQFpt0HyAn8i4A58gUBM0',
+    sheets: {
+      activities: 'sales_activities',
+      types: 'sa_types',
+      levels: 'sa_levels',
+      statuses: 'sa_stauses',
+      log: 'sa_log',
+      evidences: 'sa_evidences',
+    },
+  },
 } as const

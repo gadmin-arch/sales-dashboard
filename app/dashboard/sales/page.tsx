@@ -1,16 +1,29 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { cn } from '@/lib/utils'
 import { KPICard } from '@/components/kpi-card'
 import { ChartPeriodToggle } from '@/components/chart-period-toggle'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from '@/components/ui/chart'
+import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts'
+import { DonutChart } from '@/components/donut-chart'
+import { FileText, Briefcase, DollarSign, TrendingUp, Loader2, Search, ListTodo, ExternalLink } from 'lucide-react'
+import { ThemeToggle, SalesPageShell } from '@/components/theme-toggle'
 import {
-  AreaChart, Area, PieChart, Pie, Cell, BarChart, Bar,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-} from 'recharts'
-import { FileText, Briefcase, DollarSign, TrendingUp, Loader2, Search } from 'lucide-react'
+  fmtCurrency,
+  onSel,
+  Progress,
+  SortIcon,
+  getYTD,
+  getQuickDateRange,
+} from '@/lib/sales-helpers'
+import type { SortDir } from '@/lib/sales-helpers'
 
+/* ── Types ── */
 interface SalesData {
   kpis: { totalProjects: number; totalSales: number; totalQuotations: number; totalQuotationValue: number }
   quotStatusBreakdown: Record<string, number>
@@ -21,953 +34,398 @@ interface SalesData {
   topProjects: { prjId: string; name: string; salesOwner: string; customer: string; type: string; currency: string; total: number; material: number; service: number; poDate: string }[]
   topSalesPersons: { name: string; totalPrice: number; projectCount: number; quotationCount: number }[]
   summary: { type: string; quotationCount: number; projectCount: number; totalPrice: number; material: number; service: number }[]
-  quotationSummary: { qType: string; totalQuotation: number; totalQuotationWon: number; wonPercentage: number; totalQuotationWonFinalPrice: number; totalOrderPriceFromQuotation: number; orderToWonPricePercentage: number }[]
+  quotationSummary: { qType: string; totalQuotation: number; totalQuotationWon: number; wonPercentage: number; totalQuotationWonFinalPrice: number; totalQuotationValue: number; totalOrderPriceFromQuotation: number; orderToWonPricePercentage: number }[]
   salesUserList: { id: string; name: string; email: string }[]
   currencyList: string[]
   orderTypeList: { otId: string; otDescription: string }[]
 }
 
-const PIE_COLORS = ['#38bdf8', '#00e5a0', '#fbbf24', '#f87171', '#818cf8', '#fb923c', '#a78bfa']
+type SortKey = 'prjId' | 'name' | 'customer' | 'salesOwner' | 'type'
+type SortDir = 'asc' | 'desc'
 
-function fmtRp(v: number): string {
-  if (v >= 1_000_000_000) return 'Rp' + (v / 1_000_000_000).toFixed(1) + 'B'
-  if (v >= 1_000_000) return 'Rp' + (v / 1_000_000).toFixed(0) + 'M'
-  if (v >= 1_000) return 'Rp' + (v / 1_000).toFixed(0) + 'K'
-  return 'Rp' + v.toLocaleString('id-ID')
-}
+/* ── Chart configs ── */
+const revenueConfig = { material: { label: 'PO Material', color: 'var(--chart-1)' }, service: { label: 'PO Service', color: 'var(--chart-2)' } }
+const priceConfig = { material: { label: 'Material %', color: 'var(--chart-1)' }, service: { label: 'Service %', color: 'var(--chart-2)' } }
+const PIE = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)', 'var(--chart-5)']
 
-function formatDateDisplay(d: string) {
-  if (!d) return ''
-  const date = new Date(d)
-  return date.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })
-}
-
-/* ── Scoped Dark Navy Styles ── */
-const darkNavyStyles = {
-  '--background': '#0a1628',
-  '--foreground': '#f8fafc',
-  '--card': '#0f1f35',
-  '--card-foreground': '#f8fafc',
-  '--popover': '#0f1f35',
-  '--popover-foreground': '#f8fafc',
-  '--primary': '#38bdf8',
-  '--primary-foreground': '#0a1628',
-  '--secondary': '#1e293b',
-  '--secondary-foreground': '#f8fafc',
-  '--muted': '#1a2d4a',
-  '--muted-foreground': '#94a3b8',
-  '--accent': '#1a2d4a',
-  '--accent-foreground': '#f8fafc',
-  '--destructive': '#7f1d1d',
-  '--destructive-foreground': '#f8fafc',
-  '--border': '#1e2d4a',
-  '--input': '#1e2d4a',
-  '--ring': '#38bdf8',
-  backgroundColor: '#0a1628',
-  color: '#f8fafc',
-} as React.CSSProperties
-
-function ChartTooltip({ active, payload, label }: any) {
-  if (!active || !payload?.length) return null
-  return (
-    <div className="bg-[#0f1f35] border border-[#1e2d4a] rounded-lg p-3 shadow-lg">
-      <p className="text-slate-400 text-xs mb-1.5 font-medium">{label}</p>
-      {payload.map((entry: any, i: number) => (
-        <p key={i} className="text-sm font-bold" style={{ color: entry.color }}>
-          {entry.name}: {fmtRp(Number(entry.value))}
-        </p>
-      ))}
-    </div>
-  )
-}
-
+/* ═══════════════════════════════════════ */
 export default function SalesPage() {
   const [data, setData] = useState<SalesData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [chartPeriod, setChartPeriod] = useState<'monthly' | 'weekly'>('monthly')
   const [tableSearch, setTableSearch] = useState('')
-  const [tableCustomerFilter, setTableCustomerFilter] = useState('all')
-  const [tableSalesOwnerFilter, setTableSalesOwnerFilter] = useState('all')
-  const [tableOrderTypeFilter, setTableOrderTypeFilter] = useState('all')
+  const [tCust, setTCust] = useState('all'), [tOwner, setTOwner] = useState('all'), [tType, setTType] = useState('all')
 
-  const getYTDDateRange = () => {
-    const now = new Date()
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-    const start = new Date(now.getFullYear(), 0, 1)
-    return {
-      dateFrom: start.toISOString().split('T')[0],
-      dateTo: today.toISOString().split('T')[0]
-    }
+  const getYTD = () => { const n = new Date(); return { from: new Date(n.getFullYear(), 0, 1).toLocaleDateString('en-CA'), to: new Date(n.getFullYear(), n.getMonth(), n.getDate()).toLocaleDateString('en-CA') } }
+  const [dateFrom, setDateFrom] = useState(getYTD().from), [dateTo, setDateTo] = useState(getYTD().to)
+const [su, setSu] = useState('all'), [cur, setCur] = useState('all'), [ot, setOt] = useState('all')
+   const [lFrom, setLFrom] = useState(dateFrom), [lTo, setLTo] = useState(dateTo), [lSu, setLSu] = useState(su), [lCur, setLCur] = useState(cur), [lOt, setLOt] = useState(ot)
+   const [sortKey, setSortKey] = useState<SortKey>('prjId'), [sortDir, setSortDir] = useState<SortDir>('asc'), [page, setPage] = useState(1)
+
+   const fmtRp = useCallback((v: number) => fmtCurrency(v, cur === 'all' ? 'IDR' : cur), [cur])
+
+  /* ── Price Composition Tooltip ── */
+  function PriceTooltip({ active, payload, label }: any) {
+    if (!active || !payload?.length) return null
+    return (
+      <div className="rounded-lg border border-border/50 bg-background px-2.5 py-1.5 text-xs shadow-xl">
+        <div className="font-medium mb-1">{label}</div>
+        {payload.map((item: any, i: number) => {
+          const color = item.payload?.fill || item.color
+          const name = item.name
+          return (
+            <div key={i} className={i > 0 ? 'mt-0.5' : ''}>
+              <div className="flex items-center gap-1.5">
+                <div className="h-2 w-2 shrink-0 rounded-[2px]" style={{ backgroundColor: color }} />
+                <span className="font-mono font-medium text-foreground tabular-nums">{item.value}%</span>
+                <span className="text-muted-foreground">{name}</span>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+  function RevenueTooltip({ active, payload, label }: any) {
+    if (!active || !payload?.length) return null
+    return (
+      <div className="rounded-lg border border-border/50 bg-background px-2.5 py-1.5 text-xs shadow-xl">
+        <div className="font-medium mb-1">{label}</div>
+        {payload.map((item: any, i: number) => {
+          const color = item.payload?.fill || item.color
+          const name = item.name
+          const val = fmtRp(Number(item.value))
+          return (
+            <div key={i} className={i > 0 ? 'mt-0.5' : ''}>
+              <div className="flex items-center gap-1.5">
+                <div className="h-2 w-2 shrink-0 rounded-[2px]" style={{ backgroundColor: color }} />
+                <span className="font-mono font-medium text-foreground tabular-nums">{val}</span>
+                <span className="text-muted-foreground">{name}</span>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    )
   }
 
-  const [dateFrom, setDateFrom] = useState(getYTDDateRange().dateFrom)
-  const [dateTo, setDateTo] = useState(getYTDDateRange().dateTo)
-  const [salesUser, setSalesUser] = useState('all')
-  const [currency, setCurrency] = useState('all')
-  const [orderType, setOrderType] = useState('all')
-
-  const [localDateFrom, setLocalDateFrom] = useState(dateFrom)
-  const [localDateTo, setLocalDateTo] = useState(dateTo)
-  const [localSalesUser, setLocalSalesUser] = useState(salesUser)
-  const [localCurrency, setLocalCurrency] = useState(currency)
-  const [localOrderType, setLocalOrderType] = useState(orderType)
-
-  const fetchData = useCallback(async (params: Record<string, string>) => {
-    setLoading(true)
-    setError(null)
+  const doFetch = useCallback(async (p: Record<string, string>) => {
+    setLoading(true); setError(null)
     try {
-      const p = new URLSearchParams()
-      Object.entries(params).forEach(([k, v]) => {
-        if (v && v !== 'all') p.set(k, v)
-      })
-      const res = await fetch('/api/sales/overview?' + p.toString())
-      if (!res.ok) throw new Error('Failed to load data')
-      setData(await res.json())
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load data')
-    } finally {
-      setLoading(false)
-    }
+      const q = new URLSearchParams(); Object.entries(p).forEach(([k, v]) => { if (v && v !== 'all') q.set(k, v) })
+      const res = await fetch('/api/sales/overview?' + q.toString())
+      if (!res.ok) throw new Error('Failed'); setData(await res.json())
+    } catch (e) { setError(e instanceof Error ? e.message : 'Failed') } finally { setLoading(false) }
   }, [])
 
-  useEffect(() => {
-    fetchData({
-      dateFrom,
-      dateTo,
-      salesUser: salesUser === 'all' ? '' : salesUser,
-      currency: currency === 'all' ? '' : currency,
-      orderType: orderType === 'all' ? '' : orderType,
-      period: chartPeriod
-    })
-  }, [fetchData])
-
-  const handlePeriodChange = (p: 'monthly' | 'weekly') => {
-    setChartPeriod(p)
-    fetchData({
-      dateFrom,
-      dateTo,
-      salesUser: salesUser === 'all' ? '' : salesUser,
-      currency: currency === 'all' ? '' : currency,
-      orderType: orderType === 'all' ? '' : orderType,
-      period: p
-    })
+  useEffect(() => { doFetch({ dateFrom, dateTo, salesUser: su, currency: cur, orderType: ot, period: chartPeriod }) }, [doFetch, dateFrom, dateTo, su, cur, ot, chartPeriod])
+  const onPeriod = (p: 'monthly' | 'weekly') => { setChartPeriod(p); doFetch({ dateFrom, dateTo, salesUser: su, currency: cur, orderType: ot, period: p }) }
+  const onApply = () => { setDateFrom(lFrom); setDateTo(lTo); setSu(lSu); setCur(lCur); setOt(lOt) }
+  const onClear = () => { const d = getYTD(); setLFrom(d.from); setLTo(d.to); setLSu('all'); setLCur('all'); setLOt('all'); setDateFrom(d.from); setDateTo(d.to); setSu('all'); setCur('all'); setOt('all') }
+  const setQuick = (r: 'thisMonth' | 'last30' | '6month' | '1year' | 'lastYear' | 'YTD') => {
+    const t = new Date(); let f = ''; let to = t.toLocaleDateString('en-CA')
+    if (r === 'YTD') f = `${t.getFullYear()}-01-01`
+    else if (r === 'thisMonth') f = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-01`
+    else if (r === 'last30') { const p = new Date(); p.setDate(t.getDate() - 30); f = p.toLocaleDateString('en-CA') }
+    else if (r === '6month') { const p = new Date(); p.setMonth(t.getMonth() - 6); f = p.toLocaleDateString('en-CA') }
+    else if (r === '1year') { const p = new Date(); p.setFullYear(t.getFullYear() - 1); f = p.toLocaleDateString('en-CA') }
+    else if (r === 'lastYear') { const ly = t.getFullYear() - 1; f = `${ly}-01-01`; to = `${ly}-12-31` }
+    setLFrom(f); setLTo(to)
   }
 
-  const handleApplyFilters = () => {
-    setDateFrom(localDateFrom)
-    setDateTo(localDateTo)
-    setSalesUser(localSalesUser)
-    setCurrency(localCurrency)
-    setOrderType(localOrderType)
-    fetchData({
-      dateFrom: localDateFrom,
-      dateTo: localDateTo,
-      salesUser: localSalesUser === 'all' ? '' : localSalesUser,
-      currency: localCurrency === 'all' ? '' : localCurrency,
-      orderType: localOrderType === 'all' ? '' : localOrderType,
-      period: chartPeriod
-    })
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortKey(key); setSortDir('desc') }
+    setPage(1)
   }
 
-  const handleClearFilters = () => {
-    const defaultRange = getYTDDateRange()
-    setLocalDateFrom(defaultRange.dateFrom)
-    setLocalDateTo(defaultRange.dateTo)
-    setLocalSalesUser('all')
-    setLocalCurrency('all')
-    setLocalOrderType('all')
-
-    setDateFrom(defaultRange.dateFrom)
-    setDateTo(defaultRange.dateTo)
-    setSalesUser('all')
-    setCurrency('all')
-    setOrderType('all')
-
-    fetchData({
-      dateFrom: defaultRange.dateFrom,
-      dateTo: defaultRange.dateTo,
-      salesUser: '',
-      currency: '',
-      orderType: '',
-      period: chartPeriod
-    })
-  }
-
-  const setQuickRange = (range: 'thisMonth' | 'last30' | '6month' | '1year' | 'lastYear' | 'YTD') => {
-    const today = new Date()
-    let from = ''
-    let to = today.toISOString().split('T')[0]
-    
-    if (range === 'YTD') {
-      from = `${today.getFullYear()}-01-01`
-    } else if (range === 'thisMonth') {
-      from = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
-    } else if (range === 'last30') {
-      const past = new Date()
-      past.setDate(today.getDate() - 30)
-      from = past.toISOString().split('T')[0]
-    } else if (range === '6month') {
-      const past = new Date()
-      past.setMonth(today.getMonth() - 6)
-      from = past.toISOString().split('T')[0]
-    } else if (range === '1year') {
-      const past = new Date()
-      past.setFullYear(today.getFullYear() - 1)
-      from = past.toISOString().split('T')[0]
-    } else if (range === 'lastYear') {
-      const lastYear = today.getFullYear() - 1
-      from = `${lastYear}-01-01`
-      to = `${lastYear}-12-31`
-    }
-    
-    setLocalDateFrom(from)
-    setLocalDateTo(to)
-  }
-
-  const filteredProjects = useMemo(() => {
+  const filtered = useMemo(() => {
     if (!data) return []
-    let projects = data.topProjects
-
-    // 1. Search
-    if (tableSearch) {
-      const q = tableSearch.toLowerCase()
-      projects = projects.filter(p =>
-        p.name.toLowerCase().includes(q) ||
-        p.customer.toLowerCase().includes(q) ||
-        p.salesOwner.toLowerCase().includes(q) ||
-        p.prjId.toLowerCase().includes(q)
-      )
-    }
-
-    // 2. Customer
-    if (tableCustomerFilter && tableCustomerFilter !== 'all') {
-      projects = projects.filter(p => p.customer === tableCustomerFilter)
-    }
-
-    // 3. Sales Owner
-    if (tableSalesOwnerFilter && tableSalesOwnerFilter !== 'all') {
-      projects = projects.filter(p => p.salesOwner === tableSalesOwnerFilter)
-    }
-
-    // 4. Order Type
-    if (tableOrderTypeFilter && tableOrderTypeFilter !== 'all') {
-      projects = projects.filter(p => p.type === tableOrderTypeFilter)
-    }
-
-    return projects.slice(0, 10)
-  }, [data, tableSearch, tableCustomerFilter, tableSalesOwnerFilter, tableOrderTypeFilter])
-
-  const uniqueCustomers = useMemo(() => {
-    if (!data) return []
-    const set = new Set<string>()
-    data.topProjects.forEach(p => {
-      if (p.customer) set.add(p.customer)
+    let p = data.topProjects
+    if (tableSearch) { const q = tableSearch.toLowerCase(); p = p.filter(x => [x.name, x.customer, x.salesOwner, x.prjId, x.type].some(s => s.toLowerCase().includes(q))) }
+    if (tCust !== 'all') p = p.filter(x => x.customer === tCust)
+    if (tOwner !== 'all') p = p.filter(x => x.salesOwner === tOwner)
+    if (tType !== 'all') p = p.filter(x => x.type === tType)
+    p = p.sort((a, b) => {
+      const aVal = a[sortKey], bVal = b[sortKey]
+      if (typeof aVal === 'string' && typeof bVal === 'string') return sortDir === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal)
+      return sortDir === 'asc' ? (aVal > bVal ? 1 : -1) : (bVal > aVal ? 1 : -1)
     })
-    return Array.from(set).sort()
-  }, [data])
+    return p.slice((page - 1) * 10, page * 10)
+  }, [data, tableSearch, tCust, tOwner, tType, sortKey, sortDir, page])
 
-  const uniqueSalesOwners = useMemo(() => {
-    if (!data) return []
-    const set = new Set<string>()
-    data.topProjects.forEach(p => {
-      if (p.salesOwner) set.add(p.salesOwner)
-    })
-    return Array.from(set).sort()
-  }, [data])
+  const custs = useMemo(() => !data ? [] : [...new Set(data.topProjects.map(p => p.customer).filter(Boolean))].sort(), [data])
+  const owners = useMemo(() => !data ? [] : [...new Set(data.topProjects.map(p => p.salesOwner).filter(Boolean))].sort(), [data])
+  const types = useMemo(() => !data ? [] : [...new Set(data.topProjects.map(p => p.type).filter(Boolean))].sort(), [data])
+  const revTotal = useMemo(() => data?.revenueTrend?.reduce((s, x) => s + x.value, 0) || 0, [data])
+  const sByTypeTotal = useMemo(() => data?.salesByType?.reduce((s, x) => s + x.value, 0) || 0, [data])
+  const poTotal = useMemo(() => data?.poComposition?.reduce((s, x) => s + x.value, 0) || 0, [data])
+  const revTooltipFormatter = (v: any, n: any) => { const pct = revTotal > 0 ? ((Number(v) / revTotal) * 100).toFixed(1) : '0.0'; return [`${fmtRp(Number(v))} (${pct}%)`, n] as [string, string] }
+  const priceTotal = useMemo(() => data?.priceComposition?.reduce((s, x) => s + x.material + x.service, 0) || 0, [data])
 
-  const uniqueOrderTypes = useMemo(() => {
-    if (!data) return []
-    const set = new Set<string>()
-    data.topProjects.forEach(p => {
-      if (p.type) set.add(p.type)
-    })
-    return Array.from(set).sort()
-  }, [data])
-
-  const salesByTypeTotal = useMemo(() => {
-    return data?.salesByType?.reduce((s, x) => s + x.value, 0) || 0
-  }, [data])
-
-  const poCompositionTotal = useMemo(() => {
-    return data?.poComposition?.reduce((s, x) => s + x.value, 0) || 0
-  }, [data])
-
-  const summaryTotals = useMemo(() => {
-    if (!data || !data.summary) return { projectCount: 0, material: 0, service: 0, totalPrice: 0 }
-    return data.summary.reduce(
-      (acc, row) => {
-        acc.projectCount += row.projectCount
-        acc.material += row.material
-        acc.service += row.service
-        acc.totalPrice += row.totalPrice
-        return acc
-      },
-      { projectCount: 0, material: 0, service: 0, totalPrice: 0 }
-    )
-  }, [data])
-
-  const quotationSummaryTotals = useMemo(() => {
-    if (!data || !data.quotationSummary) {
-      return {
-        totalQuotation: 0,
-        totalQuotationWon: 0,
-        wonPercentage: 0,
-        totalQuotationWonFinalPrice: 0,
-        totalOrderPriceFromQuotation: 0,
-        orderToWonPricePercentage: 0,
-      }
-    }
-    const sums = data.quotationSummary.reduce(
-      (acc, row) => {
-        acc.totalQuotation += row.totalQuotation
-        acc.totalQuotationWon += row.totalQuotationWon
-        acc.totalQuotationWonFinalPrice += row.totalQuotationWonFinalPrice
-        acc.totalOrderPriceFromQuotation += row.totalOrderPriceFromQuotation
-        return acc
-      },
-      {
-        totalQuotation: 0,
-        totalQuotationWon: 0,
-        totalQuotationWonFinalPrice: 0,
-        totalOrderPriceFromQuotation: 0,
-      }
-    )
-
-    const wonPercentage = sums.totalQuotation > 0 ? (sums.totalQuotationWon / sums.totalQuotation) * 100 : 0
-    const orderToWonPricePercentage = sums.totalQuotationWonFinalPrice > 0
-      ? (sums.totalOrderPriceFromQuotation / sums.totalQuotationWonFinalPrice) * 100
-      : 0
-
-    return {
-      ...sums,
-      wonPercentage: Math.round(wonPercentage * 10) / 10,
-      orderToWonPricePercentage: Math.round(orderToWonPricePercentage * 10) / 10,
-    }
-  }, [data])
-
-  // Custom select arrow styles
-  const selectStyle = {
-    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E")`,
-    backgroundRepeat: 'no-repeat',
-    backgroundPosition: 'right 0.75rem center',
-    backgroundSize: '1rem',
-    paddingRight: '2.25rem',
-  }
-
-  if (loading && !data) {
-    return (
-      <div className="flex items-center justify-center min-h-[80vh] bg-[#0a1628] text-slate-100">
-        <Loader2 className="animate-spin h-8 w-8 text-[#38bdf8]" />
-      </div>
-    )
-  }
-
-  if (error && !data) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[80vh] bg-[#0a1628] text-slate-100">
-        <p className="text-red-400 mb-4">{error}</p>
-        <Button onClick={() => handleClearFilters()}>Retry</Button>
-      </div>
-    )
-  }
-
+  if (loading && !data) return <div className="flex items-center justify-center min-h-[80vh]"><Loader2 className="animate-spin h-8 w-8 text-primary" /></div>
+  if (error && !data) return <div className="flex flex-col items-center justify-center min-h-[80vh]"><p className="text-destructive mb-4">{error}</p><Button onClick={onClear}>Retry</Button></div>
   if (!data) return null
 
+  const thClass = "text-xs font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors [&_svg]:inline [&_svg]:ml-1 [&_svg]:align-middle"
+
   return (
-    <div className="dark bg-background text-foreground min-h-screen p-8 space-y-6" style={darkNavyStyles}>
-      <style>{`
-        @keyframes loadingSlide {
-          0% { transform: translateX(-100%); }
-          100% { transform: translateX(250%); }
-        }
-        .loading-bar-inner {
-          animation: loadingSlide 1.5s infinite ease-in-out;
-        }
-      `}</style>
+    <SalesPageShell>
+      <div className="bg-background text-foreground min-h-screen space-y-6">
 
-      {/* Header */}
-      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">Sales Performance Dashboard</h1>
-          <p className="text-sm text-muted-foreground">PT. Multi Daya Mitra</p>
+        {/* Header */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div><h1 className="text-2xl font-bold tracking-tight">Sales Performance Dashboard</h1><p className="text-sm text-muted-foreground">PT. Multi Daya Mitra</p></div>
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <a href="/dashboard/sales/activities" className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"><ListTodo className="h-4 w-4" /> Sales Activities <ExternalLink className="h-3 w-3" /></a>
+          </div>
         </div>
-      </div>
 
-      {/* Loading line indicator */}
-      {loading && data && (
-        <div className="w-full h-1 bg-[#1e2d4a] overflow-hidden rounded-full mb-6 relative">
-          <div className="absolute top-0 bottom-0 left-0 w-1/3 bg-gradient-to-r from-[#38bdf8] to-[#00e5a0] rounded-full loading-bar-inner" />
-        </div>
-      )}
 
-      {/* Filter Card */}
-      <Card className="border-border">
-        <CardContent className="pt-6">
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
-            {/* Date Range Inputs */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-muted-foreground">Date Range</label>
-              <div className="flex items-center gap-2">
-                <input
-                  type="date"
-                  value={localDateFrom}
-                  onChange={(e) => setLocalDateFrom(e.target.value)}
-                  className="w-full rounded-md border border-[#1e2d4a] bg-[#0a1628] px-3 py-1.5 text-sm text-foreground outline-none focus:border-[#38bdf8] focus:ring-1 focus:ring-[#38bdf8]"
-                />
-                <span className="text-xs text-muted-foreground">to</span>
-                <input
-                  type="date"
-                  value={localDateTo}
-                  onChange={(e) => setLocalDateTo(e.target.value)}
-                  className="w-full rounded-md border border-[#1e2d4a] bg-[#0a1628] px-3 py-1.5 text-sm text-foreground outline-none focus:border-[#38bdf8] focus:ring-1 focus:ring-[#38bdf8]"
-                />
+        {/* Filters */}
+        <Card><CardContent className="pt-5">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3 lg:grid-cols-5 items-start">
+            <div className="space-y-1.5 md:col-span-2 lg:col-span-1">
+              <label className="text-xs font-medium text-muted-foreground">Date Range</label>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <input type="date" value={lFrom} onChange={e => setLFrom(e.target.value)} className="w-[120px] rounded-lg border border-input bg-background px-2 py-1.5 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary" />
+                <span className="text-xs text-muted-foreground">—</span>
+                <input type="date" value={lTo} onChange={e => setLTo(e.target.value)} className="w-[120px] rounded-lg border border-input bg-background px-2 py-1.5 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary" />
               </div>
-              {/* Quick Date Range Buttons */}
-              <div className="flex flex-wrap gap-1 mt-2">
-                <Button variant="outline" size="sm" className="h-7 px-2 text-[10px] border-input hover:bg-slate-800" onClick={() => setQuickRange('thisMonth')}>
-                  This Month
-                </Button>
-                <Button variant="outline" size="sm" className="h-7 px-2 text-[10px] border-input hover:bg-slate-800" onClick={() => setQuickRange('last30')}>
-                  Last 30 Days
-                </Button>
-                <Button variant="outline" size="sm" className="h-7 px-2 text-[10px] border-input hover:bg-slate-800" onClick={() => setQuickRange('6month')}>
-                  6 Months
-                </Button>
-                <Button variant="outline" size="sm" className="h-7 px-2 text-[10px] border-input hover:bg-slate-800" onClick={() => setQuickRange('1year')}>
-                  1 Year
-                </Button>
-                <Button variant="outline" size="sm" className="h-7 px-2 text-[10px] border-input hover:bg-slate-800" onClick={() => setQuickRange('lastYear')}>
-                  Last Year
-                </Button>
-                <Button variant="outline" size="sm" className="h-7 px-2 text-[10px] border-input hover:bg-slate-800" onClick={() => setQuickRange('YTD')}>
-                  YTD
-                </Button>
-              </div>
+              <div className="flex flex-wrap gap-1">{(['thisMonth', 'last30', '6month', '1year', 'lastYear', 'YTD'] as const).map(r => <Button key={r} variant="outline" size="xs" onClick={() => setQuick(r)}>{r === 'last30' ? '30d' : r === '6month' ? '6mo' : r === '1year' ? '1yr' : r === 'lastYear' ? 'LY' : r === 'thisMonth' ? 'MTD' : 'YTD'}</Button>)}</div>
             </div>
-
-            {/* Sales Person Select */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-muted-foreground">Sales Owner</label>
-              <select
-                value={localSalesUser}
-                onChange={(e) => setLocalSalesUser(e.target.value)}
-                className="w-full rounded-md border border-[#1e2d4a] bg-[#0a1628] text-[#f8fafc] px-3 py-1.5 text-sm outline-none focus:border-[#38bdf8] focus:ring-1 focus:ring-[#38bdf8] appearance-none cursor-pointer"
-                style={selectStyle}
-              >
-                <option value="all" className="bg-[#0f1f35] text-[#f8fafc]">All Sales Owners</option>
-                {data.salesUserList.map((u) => (
-                  <option key={u.id} value={u.id} className="bg-[#0f1f35] text-[#f8fafc]">{u.name}</option>
-                ))}
-              </select>
+            <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Sales Owner</label>
+              <Select value={lSu} onValueChange={onSel(setLSu)}>
+                <SelectTrigger><SelectValue>{lSu === 'all' ? 'All Sales Owners' : data.salesUserList.find(u => u.id === lSu)?.name ?? lSu}</SelectValue></SelectTrigger>
+                <SelectContent><SelectItem value="all">All Sales Owners</SelectItem>{data.salesUserList.map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}</SelectContent>
+              </Select>
             </div>
-
-            {/* Currency Select */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-muted-foreground">Currency</label>
-              <select
-                value={localCurrency}
-                onChange={(e) => setLocalCurrency(e.target.value)}
-                className="w-full rounded-md border border-[#1e2d4a] bg-[#0a1628] text-[#f8fafc] px-3 py-1.5 text-sm outline-none focus:border-[#38bdf8] focus:ring-1 focus:ring-[#38bdf8] appearance-none cursor-pointer"
-                style={selectStyle}
-              >
-                <option value="all" className="bg-[#0f1f35] text-[#f8fafc]">All Currencies</option>
-                {data.currencyList.map((c) => (
-                  <option key={c} value={c} className="bg-[#0f1f35] text-[#f8fafc]">{c}</option>
-                ))}
-              </select>
+            <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Currency</label>
+              <Select value={lCur} onValueChange={onSel(setLCur)}>
+                <SelectTrigger><SelectValue>{lCur === 'all' ? 'All Currencies' : lCur}</SelectValue></SelectTrigger>
+                <SelectContent><SelectItem value="all">All Currencies</SelectItem>{data.currencyList.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+              </Select>
             </div>
-
-            {/* Order Type Select */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-muted-foreground">Order Type</label>
-              <select
-                value={localOrderType}
-                onChange={(e) => setLocalOrderType(e.target.value)}
-                className="w-full rounded-md border border-[#1e2d4a] bg-[#0a1628] text-[#f8fafc] px-3 py-1.5 text-sm outline-none focus:border-[#38bdf8] focus:ring-1 focus:ring-[#38bdf8] appearance-none cursor-pointer"
-                style={selectStyle}
-              >
-                <option value="all" className="bg-[#0f1f35] text-[#f8fafc]">All Order Types</option>
-                {data.orderTypeList.map((ot) => (
-                  <option key={ot.otId} value={ot.otId} className="bg-[#0f1f35] text-[#f8fafc]">{ot.otDescription}</option>
-                ))}
-              </select>
+            <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Order Type</label>
+              <Select value={lOt} onValueChange={onSel(setLOt)}>
+                <SelectTrigger><SelectValue>{lOt === 'all' ? 'All Order Types' : data.orderTypeList.find(o => o.otId === lOt)?.otDescription ?? lOt}</SelectValue></SelectTrigger>
+                <SelectContent><SelectItem value="all">All Order Types</SelectItem>{data.orderTypeList.map(o => <SelectItem key={o.otId} value={o.otId}>{o.otDescription}</SelectItem>)}</SelectContent>
+              </Select>
             </div>
           </div>
-
-          {/* Apply & Clear buttons */}
-          <div className="mt-4 flex justify-end gap-2 border-t border-border pt-4">
-            <Button variant="outline" onClick={handleClearFilters} className="bg-transparent text-foreground border-input hover:bg-slate-800">
-              Clear Filters
-            </Button>
-            <Button onClick={handleApplyFilters} className="bg-[#38bdf8] text-[#0a1628] hover:bg-[#38bdf8]/90 font-semibold">
+          <div className="mt-4 flex justify-end gap-2 border-t border-border pt-3">
+            <Button variant="outline" size="sm" onClick={onClear}>Clear</Button>
+            <Button size="sm" onClick={onApply} className="relative">
               Apply Filters
+              {(lFrom !== dateFrom || lTo !== dateTo || lSu !== su || lCur !== cur || lOt !== ot) && <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-orange-500 border-2 border-background" />}
             </Button>
           </div>
-        </CardContent>
-      </Card>
+          {loading && data && <div className="w-full h-1 bg-border overflow-hidden rounded-full mt-3"><div className="h-1/3 bg-primary rounded-full loading-bar-inner" /></div>}
+        </CardContent></Card>
 
-      {/* KPI Cards Row */}
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-        <KPICard
-          title="Total Projects"
-          value={data.kpis.totalProjects.toString()}
-          icon={<Briefcase className="h-5 w-5" />}
-        />
-        <KPICard
-          title="Total Sales"
-          value={fmtRp(data.kpis.totalSales)}
-          icon={<DollarSign className="h-5 w-5" />}
-        />
-        <KPICard
-          title="Total Quotations"
-          value={data.kpis.totalQuotations.toString()}
-          icon={<FileText className="h-5 w-5" />}
-        />
-        <KPICard
-          title="Quotation Value"
-          value={fmtRp(data.kpis.totalQuotationValue)}
-          icon={<TrendingUp className="h-5 w-5" />}
-        />
-      </div>
+        {/* KPIs */}
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <KPICard title="Total Projects" value={data.kpis.totalProjects.toString()} icon={<Briefcase className="h-4 w-4" />} />
+          <KPICard title="Total Sales" value={fmtRp(data.kpis.totalSales)} icon={<DollarSign className="h-4 w-4" />} />
+          <KPICard title="Total Quotations" value={data.kpis.totalQuotations.toString()} icon={<FileText className="h-4 w-4" />} />
+          <KPICard title="Quotation Value" value={fmtRp(data.kpis.totalQuotationValue)} icon={<TrendingUp className="h-4 w-4" />} />
+        </div>
 
-      {/* Charts Grid 1 */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
-        {/* Sales Revenue Trends */}
-        <Card className="lg:col-span-2 border-border">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-base font-semibold text-foreground">Sales Revenue Trends</CardTitle>
-            <ChartPeriodToggle period={chartPeriod} onPeriodChange={handlePeriodChange} />
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <AreaChart data={data.revenueTrend} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="colorMaterial" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.2}/>
-                    <stop offset="95%" stopColor="#38bdf8" stopOpacity={0}/>
-                  </linearGradient>
-                  <linearGradient id="colorService" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#00e5a0" stopOpacity={0.2}/>
-                    <stop offset="95%" stopColor="#00e5a0" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e2d4a" />
-                <XAxis dataKey="name" stroke="#94a3b8" tickLine={false} axisLine={{ stroke: '#1e2d4a' }} className="text-xs" />
-                <YAxis stroke="#94a3b8" tickFormatter={fmtRp} tickLine={false} axisLine={false} className="text-xs" />
-                <Tooltip content={<ChartTooltip />} />
-                <Legend />
-                <Area type="monotone" dataKey="material" stackId="1" stroke="#38bdf8" fillOpacity={1} fill="url(#colorMaterial)" name="PO Material" />
-                <Area type="monotone" dataKey="service" stackId="1" stroke="#00e5a0" fillOpacity={1} fill="url(#colorService)" name="PO Service" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+        {/* Charts Row 1 */}
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
+          <Card className="lg:col-span-2">
+            <CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-sm font-semibold">Sales Revenue Trends</CardTitle><ChartPeriodToggle period={chartPeriod} onPeriodChange={onPeriod} /></CardHeader>
+            <CardContent>
+              <ChartContainer config={revenueConfig} className="h-[280px] w-full">
+                <BarChart data={data.revenueTrend} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                  <XAxis dataKey="name" stroke="var(--muted-foreground)" tickLine={false} axisLine={{ stroke: 'var(--border)' }} className="text-xs" />
+                  <YAxis stroke="var(--muted-foreground)" tickFormatter={fmtRp} tickLine={false} axisLine={false} className="text-xs" />
+                  <Tooltip content={<RevenueTooltip />} />
+                  <ChartLegend content={<ChartLegendContent />} />
+                  <Bar dataKey="material" stackId="a" fill="var(--color-material)" name="Material" />
+                  <Bar dataKey="service" stackId="a" fill="var(--color-service)" name="Service" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ChartContainer>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader><CardTitle className="text-sm font-semibold">Sales by Type</CardTitle></CardHeader>
+            <CardContent>
+              <DonutChart
+                data={data.salesByType}
+                height={280}
+                total={sByTypeTotal}
+                currency={cur === 'all' ? 'IDR' : cur}
+                formatValue={(v, n) => { const pct = sByTypeTotal > 0 ? (v / sByTypeTotal * 100).toFixed(1) : '0.0'; return `${fmtRp(v)} (${pct}%)` }}
+              />
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader><CardTitle className="text-sm font-semibold">PO Composition</CardTitle></CardHeader>
+            <CardContent>
+              <DonutChart
+                data={data.poComposition}
+                height={280}
+                total={poTotal}
+                currency={cur === 'all' ? 'IDR' : cur}
+                formatValue={(v, n) => { const pct = poTotal > 0 ? (v / poTotal * 100).toFixed(1) : '0.0'; return `${fmtRp(v)} (${pct}%)` }}
+              />
+            </CardContent>
+          </Card>
+        </div>
 
-        {/* Sales by Type (Donut) */}
-        <Card className="border-border">
-          <CardHeader>
-            <CardTitle className="text-base font-semibold text-foreground">Sales by Type</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={data.salesByType}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={80}
-                  paddingAngle={4}
-                  dataKey="value"
-                  stroke="none"
-                  label={({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
-                    const RADIAN = Math.PI / 180;
-                    const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
-                    const x = cx + radius * Math.cos(-midAngle * RADIAN);
-                    const y = cy + radius * Math.sin(-midAngle * RADIAN);
-                    return percent > 0.05 ? (
-                      <text x={x} y={y} fill="#0a1628" textAnchor="middle" dominantBaseline="central" className="text-[10px] font-bold">
-                        {`${(percent * 100).toFixed(0)}%`}
-                      </text>
-                    ) : null;
-                  }}
-                >
-                  {data.salesByType.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  formatter={(value, name) => {
-                    const pct = salesByTypeTotal > 0 ? (Number(value) / salesByTypeTotal * 100).toFixed(1) : '0.0'
-                    return [`${fmtRp(Number(value))} (${pct}%)`, name]
-                  }}
-                />
-                <Legend
-                  formatter={(value) => {
-                    const item = data.salesByType.find((entry) => entry.name === value)
-                    const pct = (item && salesByTypeTotal > 0) ? (item.value / salesByTypeTotal * 100).toFixed(1) : '0.0'
-                    return <span className="text-xs text-slate-300">{value} ({pct}%)</span>
-                  }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        {/* PO Composition (Donut) */}
-        <Card className="border-border">
-          <CardHeader>
-            <CardTitle className="text-base font-semibold text-foreground">PO Composition</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={data.poComposition}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={80}
-                  paddingAngle={4}
-                  dataKey="value"
-                  stroke="none"
-                  label={({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
-                    const RADIAN = Math.PI / 180;
-                    const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
-                    const x = cx + radius * Math.cos(-midAngle * RADIAN);
-                    const y = cy + radius * Math.sin(-midAngle * RADIAN);
-                    return percent > 0.05 ? (
-                      <text x={x} y={y} fill="#0a1628" textAnchor="middle" dominantBaseline="central" className="text-[10px] font-bold">
-                        {`${(percent * 100).toFixed(0)}%`}
-                      </text>
-                    ) : null;
-                  }}
-                >
-                  {data.poComposition.map((entry, index) => {
-                    const COMP_COLORS: Record<string, string> = { 'PO Material': '#38bdf8', 'PO Service': '#00e5a0' }
-                    return <Cell key={`cell-${entry.name}`} fill={COMP_COLORS[entry.name] || '#38bdf8'} />
-                  })}
-                </Pie>
-                <Tooltip
-                  formatter={(value, name) => {
-                    const pct = poCompositionTotal > 0 ? (Number(value) / poCompositionTotal * 100).toFixed(1) : '0.0'
-                    return [`${fmtRp(Number(value))} (${pct}%)`, name]
-                  }}
-                />
-                <Legend
-                  formatter={(value) => {
-                    const item = data.poComposition.find((entry) => entry.name === value)
-                    const pct = (item && poCompositionTotal > 0) ? (item.value / poCompositionTotal * 100).toFixed(1) : '0.0'
-                    return <span className="text-xs text-slate-300">{value} ({pct}%)</span>
-                  }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Charts Grid 2 */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* Price Composition */}
-        <Card className="border-border">
-          <CardHeader>
-            <CardTitle className="text-base font-semibold text-foreground">Price Composition (%)</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
+        {/* Charts Row 2 */}
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <Card><CardHeader><CardTitle className="text-sm font-semibold">Price Composition (%)</CardTitle></CardHeader><CardContent>
+            <ChartContainer config={priceConfig} className="h-[260px] w-full">
               <BarChart data={data.priceComposition} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e2d4a" />
-                <XAxis dataKey="name" stroke="#94a3b8" tickLine={false} axisLine={{ stroke: '#1e2d4a' }} className="text-xs" />
-                <YAxis domain={[0, 100]} stroke="#94a3b8" tickFormatter={(v) => `${v}%`} tickLine={false} axisLine={false} className="text-xs" />
-                <Tooltip formatter={(v) => `${v}%`} />
-                <Legend />
-                <Bar dataKey="material" stackId="a" fill="#38bdf8" name="Material %" />
-                <Bar dataKey="service" stackId="a" fill="#00e5a0" name="Service %" />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                <XAxis dataKey="name" stroke="var(--muted-foreground)" tickLine={false} axisLine={{ stroke: 'var(--border)' }} className="text-xs" />
+                <YAxis domain={[0, 100]} stroke="var(--muted-foreground)" tickFormatter={v => `${v}%`} tickLine={false} axisLine={false} className="text-xs" />
+                <Tooltip content={<PriceTooltip />} />
+                <ChartLegend content={<ChartLegendContent />} />
+                <Bar dataKey="material" stackId="a" fill="var(--color-material)" radius={[0, 0, 4, 4]} name="Material" />
+                <Bar dataKey="service" stackId="a" fill="var(--color-service)" radius={[4, 4, 0, 0]} name="Service" />
               </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+            </ChartContainer>
+          </CardContent></Card>
+          <Card>
+            <CardHeader><CardTitle className="text-sm font-semibold">Quotation Status</CardTitle></CardHeader>
+            <CardContent>
+              <DonutChart
+                data={Object.entries(data.quotStatusBreakdown).map(([name, value]) => ({ name, value }))}
+                height={260}
+                donut={false}
+              />
+            </CardContent>
+          </Card>
+        </div>
 
-        {/* Quotation Status */}
-        <Card className="border-border">
-          <CardHeader>
-            <CardTitle className="text-base font-semibold text-foreground">Quotation Status</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={Object.entries(data.quotStatusBreakdown).map(([name, value]) => ({ name, value }))}
-                  cx="50%"
-                  cy="50%"
-                  outerRadius={80}
-                  dataKey="value"
-                  stroke="none"
-                >
-                  {Object.keys(data.quotStatusBreakdown).map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-                <Legend formatter={(value) => <span className="text-xs text-slate-300">{value}</span>} />
-              </PieChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Row 3: Top Projects & Top Sales Persons */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* Top Projects Table */}
-        <Card className="lg:col-span-2 border-border overflow-hidden">
-          <CardHeader className="flex flex-col gap-4 pb-4 md:flex-row md:items-center md:justify-between">
-            <CardTitle className="text-base font-semibold text-foreground">Top Projects</CardTitle>
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="relative w-48">
-                <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
-                <input
-                  type="text"
-                  placeholder="Search..."
-                  value={tableSearch}
-                  onChange={(e) => setTableSearch(e.target.value)}
-                  className="w-full rounded-md border border-input bg-[#0a1628] pl-8 pr-3 py-1 text-xs text-foreground outline-none focus:ring-1 focus:ring-primary"
-                />
+        {/* Top Projects + Top Sales Persons */}
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <Card className="lg:col-span-2 overflow-hidden">
+            <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <CardTitle className="text-sm font-semibold">Top Projects</CardTitle>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative w-40"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" /><input type="text" placeholder="Search..." value={tableSearch} onChange={e => { setTableSearch(e.target.value); setPage(1) }} className="w-full rounded-lg border border-input bg-background pl-8 pr-3 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary" /></div>
+                <Select value={tCust} onValueChange={v => { onSel(setTCust)(v, {} as any); setPage(1) }}>
+                  <SelectTrigger className="w-28 h-7 text-xs"><SelectValue>{tCust === 'all' ? 'All Customers' : tCust}</SelectValue></SelectTrigger>
+                  <SelectContent><SelectItem value="all">All Customers</SelectItem>{custs.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                </Select>
+                <Select value={tOwner} onValueChange={v => { onSel(setTOwner)(v, {} as any); setPage(1) }}>
+                  <SelectTrigger className="w-28 h-7 text-xs"><SelectValue>{tOwner === 'all' ? 'All Owners' : tOwner}</SelectValue></SelectTrigger>
+                  <SelectContent><SelectItem value="all">All Owners</SelectItem>{owners.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
+                </Select>
+                <Select value={tType} onValueChange={v => { onSel(setTType)(v, {} as any); setPage(1) }}>
+                  <SelectTrigger className="w-24 h-7 text-xs"><SelectValue>{tType === 'all' ? 'All Types' : tType}</SelectValue></SelectTrigger>
+                  <SelectContent><SelectItem value="all">All Types</SelectItem>{types.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+                </Select>
               </div>
-              <select
-                value={tableCustomerFilter}
-                onChange={(e) => setTableCustomerFilter(e.target.value)}
-                className="rounded-md border border-[#1e2d4a] bg-[#0a1628] text-[#f8fafc] px-3 py-1 text-xs outline-none focus:border-[#38bdf8] focus:ring-1 focus:ring-[#38bdf8] appearance-none cursor-pointer"
-                style={{ ...selectStyle, paddingRight: '1.75rem', backgroundPosition: 'right 0.5rem center' }}
-              >
-                <option value="all" className="bg-[#0f1f35]">All Customers</option>
-                {uniqueCustomers.map(c => (
-                  <option key={c} value={c} className="bg-[#0f1f35]">{c}</option>
-                ))}
-              </select>
-              <select
-                value={tableSalesOwnerFilter}
-                onChange={(e) => setTableSalesOwnerFilter(e.target.value)}
-                className="rounded-md border border-[#1e2d4a] bg-[#0a1628] text-[#f8fafc] px-3 py-1 text-xs outline-none focus:border-[#38bdf8] focus:ring-1 focus:ring-[#38bdf8] appearance-none cursor-pointer"
-                style={{ ...selectStyle, paddingRight: '1.75rem', backgroundPosition: 'right 0.5rem center' }}
-              >
-                <option value="all" className="bg-[#0f1f35]">All Sales Owners</option>
-                {uniqueSalesOwners.map(so => (
-                  <option key={so} value={so} className="bg-[#0f1f35]">{so}</option>
-                ))}
-              </select>
-              <select
-                value={tableOrderTypeFilter}
-                onChange={(e) => setTableOrderTypeFilter(e.target.value)}
-                className="rounded-md border border-[#1e2d4a] bg-[#0a1628] text-[#f8fafc] px-3 py-1 text-xs outline-none focus:border-[#38bdf8] focus:ring-1 focus:ring-[#38bdf8] appearance-none cursor-pointer"
-                style={{ ...selectStyle, paddingRight: '1.75rem', backgroundPosition: 'right 0.5rem center' }}
-              >
-                <option value="all" className="bg-[#0f1f35]">All Types</option>
-                {uniqueOrderTypes.map(ot => (
-                  <option key={ot} value={ot} className="bg-[#0f1f35]">{ot}</option>
-                ))}
-              </select>
-            </div>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="border-b border-border bg-slate-800/50">
-                  <tr>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">Project ID</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">Name</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">Customer</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">Sales Owner</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">Type</th>
-                    <th className="px-4 py-3 text-right font-medium text-muted-foreground">Total</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {filteredProjects.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
-                        No projects found
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredProjects.map((p) => (
-                      <tr key={p.prjId} className="hover:bg-slate-800/30 transition-colors">
-                        <td className="px-4 py-3 font-semibold text-[#38bdf8]">{p.prjId}</td>
-                        <td className="px-4 py-3 max-w-[150px] truncate" title={p.name}>{p.name}</td>
-                        <td className="px-4 py-3">{p.customer}</td>
-                        <td className="px-4 py-3">{p.salesOwner}</td>
-                        <td className="px-4 py-3">
-                          <span className="inline-flex rounded-full bg-slate-800 px-2.5 py-0.5 text-xs font-semibold text-slate-200 border border-slate-700">
-                            {p.type}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-right font-bold text-[#f8fafc]">{fmtRp(p.total)}</td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+<TableHeader><TableRow>
+                   <TableHead className={thClass} onClick={() => handleSort('prjId')}>Project ID <SortIcon column="prjId" sortKey={sortKey} sortDir={sortDir} /></TableHead>
+                   <TableHead className={thClass} onClick={() => handleSort('name')}>Name <SortIcon column="name" sortKey={sortKey} sortDir={sortDir} /></TableHead>
+                   <TableHead className={thClass} onClick={() => handleSort('customer')}>Customer <SortIcon column="customer" sortKey={sortKey} sortDir={sortDir} /></TableHead>
+                   <TableHead className={thClass} onClick={() => handleSort('salesOwner')}>Owner <SortIcon column="salesOwner" sortKey={sortKey} sortDir={sortDir} /></TableHead>
+                   <TableHead className={thClass} onClick={() => handleSort('type')}>Type <SortIcon column="type" sortKey={sortKey} sortDir={sortDir} /></TableHead>
+                 </TableRow></TableHeader>
+<TableBody>
+                   {filtered.length === 0 ? <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">No projects found</TableCell></TableRow> : filtered.map(p => (
+                    <TableRow key={p.prjId}>
+                      <TableCell className="text-xs font-semibold text-primary">{p.prjId}</TableCell>
+                      <TableCell className="max-w-[140px] truncate" title={p.name}>{p.name}</TableCell>
+                      <TableCell>{p.customer}</TableCell>
+                      <TableCell>{p.salesOwner}</TableCell>
+                      <TableCell><span className="inline-flex rounded-md px-2 py-0.5 text-[10px] font-medium border" style={{ color: `hsl(var(--type-${p.type.toLowerCase()}))` || 'var(--foreground)', borderColor: `hsl(var(--type-${p.type.toLowerCase()}))` + '40' || 'var(--border)', background: `hsl(var(--type-${p.type.toLowerCase()}))` + '10' || 'var(--muted)' }}>{p.type}</span></TableCell>
+                    </TableRow>
+                  ))}
+</TableBody>
+             </Table>
+            </CardContent>
+          </Card>
 
-        {/* Top Sales Persons List */}
-        <Card className="border-border">
-          <CardHeader>
-            <CardTitle className="text-base font-semibold text-foreground">Top Sales Persons</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {data.topSalesPersons.length === 0 ? (
-              <p className="text-center text-muted-foreground py-8">No data found</p>
-            ) : (
-              data.topSalesPersons.map((sp, i) => {
-                const maxPrice = data.topSalesPersons[0]?.totalPrice || 1
-                const pct = (sp.totalPrice / maxPrice) * 100
+          <Card>
+            <CardHeader><CardTitle className="text-sm font-semibold">Top Sales Persons</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              {data.topSalesPersons.length === 0 ? <p className="text-center text-muted-foreground py-8">No data</p> : data.topSalesPersons.map((sp, i) => {
+                const max = data.topSalesPersons[0]?.totalPrice || 1, pct = (sp.totalPrice / max) * 100
                 return (
                   <div key={i} className="flex items-center gap-3">
-                    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-800 text-xs font-bold text-slate-300 border border-slate-700 shrink-0">
-                      {i + 1}
-                    </div>
+                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-primary text-[10px] font-bold shrink-0">{i + 1}</div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-foreground truncate">{sp.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {sp.projectCount} projects · {sp.quotationCount} quotations
-                      </p>
-                      <div className="mt-1 h-1.5 w-full rounded-full bg-slate-800 overflow-hidden">
-                        <div
-                          className="h-full rounded-full"
-                          style={{
-                            width: `${pct}%`,
-                            background: `linear-gradient(90deg, ${PIE_COLORS[i % PIE_COLORS.length]}, ${PIE_COLORS[i % PIE_COLORS.length]}88)`
-                          }}
-                        />
-                      </div>
+                      <p className="text-sm font-semibold truncate">{sp.name}</p>
+                      <p className="text-xs text-muted-foreground">{sp.projectCount} projects · {sp.quotationCount} quotations</p>
+                      <Progress value={pct} className="mt-1" />
                     </div>
-                    <div className="text-sm font-bold text-foreground shrink-0">{fmtRp(sp.totalPrice)}</div>
+                    <div className="text-sm font-bold shrink-0">{fmtRp(sp.totalPrice)}</div>
                   </div>
                 )
-              })
-            )}
+              })}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Sales Summary */}
+        <Card className="overflow-hidden">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="text-sm font-semibold">Sales Summary by Type</CardTitle>
+            <span className="inline-flex rounded-md px-2.5 py-1 text-[10px] font-medium bg-muted text-muted-foreground border border-border">Orders Only</span>
+          </CardHeader>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader><TableRow><TableHead className="text-xs font-medium text-muted-foreground">Type</TableHead><TableHead className="text-xs font-medium text-muted-foreground text-right">Projects</TableHead><TableHead className="text-xs font-medium text-muted-foreground text-right">Material</TableHead><TableHead className="text-xs font-medium text-muted-foreground text-right">Service</TableHead><TableHead className="text-xs font-medium text-muted-foreground text-right">Total Price</TableHead></TableRow></TableHeader>
+              <TableBody>
+                {data.summary.length === 0 ? <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">No data</TableCell></TableRow> : data.summary.map((r, i) => (
+                  <TableRow key={i}><TableCell className="font-medium">{r.type}</TableCell><TableCell className="text-right">{r.projectCount}</TableCell><TableCell className="text-right chart-1">{fmtRp(r.material)}</TableCell><TableCell className="text-right chart-2">{fmtRp(r.service)}</TableCell><TableCell className="text-right font-bold">{fmtRp(r.totalPrice)}</TableCell></TableRow>
+                ))}
+              </TableBody>
+              {data.summary.length > 0 && (
+                <TableFooter><TableRow><TableCell className="font-bold">Total</TableCell><TableCell className="text-right">{data.summary.reduce((a, r) => a + r.projectCount, 0)}</TableCell><TableCell className="text-right chart-1 font-bold">{fmtRp(data.summary.reduce((a, r) => a + r.material, 0))}</TableCell><TableCell className="text-right chart-2 font-bold">{fmtRp(data.summary.reduce((a, r) => a + r.service, 0))}</TableCell><TableCell className="text-right font-bold">{fmtRp(data.summary.reduce((a, r) => a + r.totalPrice, 0))}</TableCell></TableRow></TableFooter>
+              )}
+            </Table>
+          </CardContent>
+        </Card>
+
+        {/* Quotation Summary */}
+        <Card className="overflow-hidden">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="text-sm font-semibold">Quotation Summary by Type</CardTitle>
+            <span className="inline-flex rounded-md px-2.5 py-1 text-[10px] font-medium bg-muted text-muted-foreground border border-border">Quotations & Conversion</span>
+          </CardHeader>
+          <CardContent className="p-0">
+            <Table>
+<TableHeader><TableRow><TableHead className="text-xs font-medium text-muted-foreground">Type</TableHead><TableHead className="text-xs font-medium text-muted-foreground text-right">Total</TableHead><TableHead className="text-xs font-medium text-muted-foreground text-right">Total Value</TableHead><TableHead className="text-xs font-medium text-muted-foreground text-right">Won</TableHead><TableHead className="text-xs font-medium text-muted-foreground text-right">Win %</TableHead><TableHead className="text-xs font-medium text-muted-foreground text-right">Won Price</TableHead><TableHead className="text-xs font-medium text-muted-foreground text-right">Order Price</TableHead><TableHead className="text-xs font-medium text-muted-foreground text-right">Order/Won %</TableHead></TableRow></TableHeader>
+               <TableBody>
+                 {!data.quotationSummary?.length ? <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">No data</TableCell></TableRow> : data.quotationSummary.map((r, i) => (
+                   <TableRow key={i}>
+                    <TableCell className="font-medium">{r.qType}</TableCell>
+                    <TableCell className="text-right">{r.totalQuotation}</TableCell>
+                    <TableCell className="text-right font-medium">{fmtRp(r.totalQuotationValue)}</TableCell>
+                    <TableCell className="text-right chart-2">{r.totalQuotationWon}</TableCell>
+                    <TableCell className="text-right font-medium chart-1">{r.wonPercentage}%</TableCell>
+                    <TableCell className="text-right font-medium">{fmtRp(r.totalQuotationWonFinalPrice)}</TableCell>
+                    <TableCell className="text-right font-medium chart-2" title={`From ${r.totalQuotationWon} won quotations`}>{fmtRp(r.totalOrderPriceFromQuotation)}</TableCell>
+                    <TableCell className="text-right font-bold chart-1" title={`Order Price / Won Price × 100`}>{r.orderToWonPricePercentage}%</TableCell>
+                  </TableRow>
+                 ))}
+</TableBody>
+              {data.quotationSummary.length > 0 && (() => {
+                const totOrder = data.quotationSummary.reduce((a, r) => a + r.totalOrderPriceFromQuotation, 0)
+                const totWonPrice = data.quotationSummary.reduce((a, r) => a + r.totalQuotationWonFinalPrice, 0)
+                const totPct = totWonPrice > 0 ? Math.round((totOrder / totWonPrice) * 1000) / 10 : 0
+                return (
+                <TableFooter><TableRow><TableCell className="font-bold">Total</TableCell><TableCell className="text-right font-bold">{data.quotationSummary.reduce((a, r) => a + r.totalQuotation, 0)}</TableCell><TableCell className="text-right font-bold">{fmtRp(data.quotationSummary.reduce((a, r) => a + r.totalQuotationValue, 0))}</TableCell><TableCell className="text-right font-bold">{data.quotationSummary.reduce((a, r) => a + r.totalQuotationWon, 0)}</TableCell><TableCell className="text-right font-bold chart-1">{Math.round(data.quotationSummary.reduce((a, r) => a + r.wonPercentage * r.totalQuotation, 0) / data.quotationSummary.reduce((a, r) => a + r.totalQuotation, 0) || 0)}%</TableCell><TableCell className="text-right font-bold">{fmtRp(totWonPrice)}</TableCell><TableCell className="text-right font-bold chart-2">{fmtRp(totOrder)}</TableCell><TableCell className="text-right font-bold chart-1">{totPct}%</TableCell></TableRow></TableFooter>
+                )
+              })()}
+            </Table>
           </CardContent>
         </Card>
       </div>
-
-      {/* Row 4: Sales Summary by Type (Orders Only) */}
-      <Card className="border-border overflow-hidden">
-        <CardHeader className="flex flex-row items-center justify-between pb-4">
-          <CardTitle className="text-base font-semibold text-foreground">Sales Summary by Type</CardTitle>
-          <span className="inline-flex rounded-full bg-green-500/10 px-2.5 py-0.5 text-xs font-semibold text-green-400 border border-green-500/20">
-            Orders Only
-          </span>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="border-b border-border bg-slate-800/50">
-                <tr>
-                  <th className="px-6 py-3 text-left font-medium text-muted-foreground">Type</th>
-                  <th className="px-6 py-3 text-right font-medium text-muted-foreground">Projects</th>
-                  <th className="px-6 py-3 text-right font-medium text-muted-foreground">Material</th>
-                  <th className="px-6 py-3 text-right font-medium text-muted-foreground">Service</th>
-                  <th className="px-6 py-3 text-right font-medium text-muted-foreground">Total Price</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {data.summary.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="px-6 py-8 text-center text-muted-foreground">
-                      No data
-                    </td>
-                  </tr>
-                ) : (
-                  data.summary.map((row, i) => (
-                    <tr key={i} className="hover:bg-slate-800/30 transition-colors">
-                      <td className="px-6 py-3 font-medium text-foreground">{row.type}</td>
-                      <td className="px-6 py-3 text-right">{row.projectCount}</td>
-                      <td className="px-6 py-3 text-right text-sky-400">{fmtRp(row.material)}</td>
-                      <td className="px-6 py-3 text-right text-emerald-400">{fmtRp(row.service)}</td>
-                      <td className="px-6 py-3 text-right font-bold text-foreground">{fmtRp(row.totalPrice)}</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-              {data.summary.length > 0 && (
-                <tfoot className="border-t border-border bg-slate-800/50 font-semibold">
-                  <tr>
-                    <td className="px-6 py-3 text-left text-foreground">Total</td>
-                    <td className="px-6 py-3 text-right text-foreground">{summaryTotals.projectCount}</td>
-                    <td className="px-6 py-3 text-right text-sky-400 font-bold">{fmtRp(summaryTotals.material)}</td>
-                    <td className="px-6 py-3 text-right text-emerald-400 font-bold">{fmtRp(summaryTotals.service)}</td>
-                    <td className="px-6 py-3 text-right font-extrabold text-[#f8fafc]">{fmtRp(summaryTotals.totalPrice)}</td>
-                  </tr>
-                </tfoot>
-              )}
-            </table>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Row 5: Quotation Summary by Type */}
-      <Card className="border-border overflow-hidden" id="quotation-summary-card">
-        <CardHeader className="flex flex-row items-center justify-between pb-4">
-          <CardTitle className="text-base font-semibold text-foreground">Quotation Summary by Type</CardTitle>
-          <span className="inline-flex rounded-full bg-blue-500/10 px-2.5 py-0.5 text-xs font-semibold text-blue-400 border border-blue-500/20">
-            Quotations & Conversion
-          </span>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm" id="quotation-summary-table">
-              <thead className="border-b border-border bg-slate-800/50">
-                <tr>
-                  <th className="px-6 py-3 text-left font-medium text-muted-foreground">Type</th>
-                  <th className="px-6 py-3 text-right font-medium text-muted-foreground">Total Quotations</th>
-                  <th className="px-6 py-3 text-right font-medium text-muted-foreground">Total Won</th>
-                  <th className="px-6 py-3 text-right font-medium text-muted-foreground">Win Rate (%)</th>
-                  <th className="px-6 py-3 text-right font-medium text-muted-foreground">Won Final Price</th>
-                  <th className="px-6 py-3 text-right font-medium text-muted-foreground">Total Order Price</th>
-                  <th className="px-6 py-3 text-right font-medium text-muted-foreground">Order/Won Price (%)</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {!data.quotationSummary || data.quotationSummary.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="px-6 py-8 text-center text-muted-foreground">
-                      No data
-                    </td>
-                  </tr>
-                ) : (
-                  data.quotationSummary.map((row, i) => (
-                    <tr key={i} className="hover:bg-slate-800/30 transition-colors">
-                      <td className="px-6 py-3 font-medium text-foreground">{row.qType}</td>
-                      <td className="px-6 py-3 text-right">{row.totalQuotation}</td>
-                      <td className="px-6 py-3 text-right text-emerald-400">{row.totalQuotationWon}</td>
-                      <td className="px-6 py-3 text-right font-semibold text-sky-400">{row.wonPercentage}%</td>
-                      <td className="px-6 py-3 text-right font-semibold">{fmtRp(row.totalQuotationWonFinalPrice)}</td>
-                      <td className="px-6 py-3 text-right font-semibold text-emerald-400">{fmtRp(row.totalOrderPriceFromQuotation)}</td>
-                      <td className="px-6 py-3 text-right font-bold text-sky-400">{row.orderToWonPricePercentage}%</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-              {data.quotationSummary && data.quotationSummary.length > 0 && (
-                <tfoot className="border-t border-border bg-slate-800/50 font-semibold">
-                  <tr>
-                    <td className="px-6 py-3 text-left text-foreground">Total</td>
-                    <td className="px-6 py-3 text-right text-foreground">{quotationSummaryTotals.totalQuotation}</td>
-                    <td className="px-6 py-3 text-right text-emerald-400 font-bold">{quotationSummaryTotals.totalQuotationWon}</td>
-                    <td className="px-6 py-3 text-right text-sky-400 font-bold">{quotationSummaryTotals.wonPercentage}%</td>
-                    <td className="px-6 py-3 text-right font-extrabold text-[#f8fafc]">{fmtRp(quotationSummaryTotals.totalQuotationWonFinalPrice)}</td>
-                    <td className="px-6 py-3 text-right text-emerald-400 font-extrabold">{fmtRp(quotationSummaryTotals.totalOrderPriceFromQuotation)}</td>
-                    <td className="px-6 py-3 text-right font-extrabold text-sky-400">{quotationSummaryTotals.orderToWonPricePercentage}%</td>
-                  </tr>
-                </tfoot>
-              )}
-            </table>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+    </SalesPageShell>
   )
 }

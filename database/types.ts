@@ -196,3 +196,60 @@ export interface QuotationLog {
   createdBy: string
   createdAt: string
 }
+
+// ── sales activities sheet ──
+export interface SalesActivity {
+  saId: string
+  saLeadId: string
+  saOId: string
+  saRfqId: string
+  saQId: string
+  saPrjId: string
+  saDescription: string
+  saDate: string
+  saType: string
+  saLevel: string
+  saStatus: string
+  saUserId: string
+  createdBy: string
+  createdAt: string
+  updatedBy: string
+  updatedAt: string
+  deletedAt?: string
+}
+
+export interface SalesActivityType {
+  satId: string
+  satDescription: string
+}
+
+export interface SalesActivityLevel {
+  salId: string
+  salDescription: string
+}
+
+export interface SalesActivityStatus {
+  sasId: string
+  sasDescription: string
+}
+
+export interface SalesActivityLog {
+  salogId: string
+  salogSaId: string
+  salogStatusOld: string
+  salogStatusNew: string
+  createdBy: string
+  createdAt: string
+}
+
+export interface SalesActivityEvidence {
+  saeId: string
+  saeSaId: string
+  saeDescription: string
+  saeFile: string
+  createdBy: string
+  createdAt: string
+  updatedBy: string
+  updatedAt: string
+  deletedAt?: string
+}

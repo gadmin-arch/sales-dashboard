@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getProjectOrders, getOrderTypeLabelSync, loadRefMaps as loadOrderRefMaps, getAllOrderTypes, getOrdersSheetHeaders } from '@/database/repos/orders'
+import { getProjectOrders, getOrderTypeLabelSync, loadRefMaps as loadOrderRefMaps, getAllOrderTypes } from '@/database/repos/orders'
 import { getAllQuotations, getStatusLabel, loadRefMaps as loadQuotRefMaps, getAllQuotationTypes } from '@/database/repos/quotations'
 import { getAllSalesUsers } from '@/database/repos/sales-users'
 import { getAllCompanies } from '@/database/repos/companies'
+import { formatMonth, formatWeek, sortByPeriod, parseDate } from '@/lib/utils-date-currency'
 import type { Order, Quotation, SalesUser, Company } from '@/database'
 
 export async function GET(request: NextRequest) {
@@ -108,7 +109,7 @@ export async function GET(request: NextRequest) {
       revenueAgg[key].material += o.prjPoMaterial
       revenueAgg[key].service += o.prjPoService
     }
-    const revenueTrend = sortPeriods(revenueAgg, period).map(([name, v]) => ({
+    const revenueTrend = sortByPeriod(revenueAgg, period).map(([name, v]) => ({
       name,
       value: Math.round(v.total),
       material: Math.round(v.material),
@@ -124,7 +125,7 @@ export async function GET(request: NextRequest) {
       priceCompByPeriod[key].material += o.prjPoMaterial
       priceCompByPeriod[key].service += o.prjPoService
     }
-    const priceComposition = sortPeriods(priceCompByPeriod, period).map(([name, v]) => {
+    const priceComposition = sortByPeriod(priceCompByPeriod, period).map(([name, v]) => {
       const total = v.material + v.service
       return {
         name,
@@ -217,7 +218,8 @@ export async function GET(request: NextRequest) {
         const totalQuotationWonFinalPrice = wonQuots.reduce((sum, q) => sum + (q.qFinalPrice || 0), 0)
         const relatedOrders = orders.filter((o) => wonQuots.some((q) => o.prjQId === q.qId))
         const totalOrderPriceFromQuotation = relatedOrders.reduce((sum, o) => sum + (o.prjPoTotal || 0), 0)
-        
+        const totalQuotationValue = quotsOfType.reduce((sum, q) => sum + (q.qFinalPrice || 0), 0)
+
         const orderToWonPricePercentage = totalQuotationWonFinalPrice > 0 
           ? (totalOrderPriceFromQuotation / totalQuotationWonFinalPrice) * 100 
           : 0
@@ -229,6 +231,7 @@ export async function GET(request: NextRequest) {
           wonPercentage: Math.round(wonPercentage * 10) / 10,
           totalQuotationWonFinalPrice: Math.round(totalQuotationWonFinalPrice),
           totalOrderPriceFromQuotation: Math.round(totalOrderPriceFromQuotation),
+          totalQuotationValue: Math.round(totalQuotationValue),
           orderToWonPricePercentage: Math.round(orderToWonPricePercentage * 10) / 10,
         }
       })
@@ -297,46 +300,11 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// ── helpers ──
+// ── helpers (using shared utils) ──
 
-function sortPeriods<T>(data: Record<string, T>, period: 'monthly' | 'weekly'): [string, T][] {
-  return Object.entries(data).sort(([a], [b]) => {
-    return period === 'weekly' ? parseWeekKey(a) - parseWeekKey(b) : parseMonthKey(a) - parseMonthKey(b)
-  })
-}
-
-function parseMonthKey(key: string): number {
-  const months: Record<string, number> = { Jan: 1, Feb: 2, Mar: 3, Apr: 4, May: 5, Jun: 6, Jul: 7, Aug: 8, Sep: 9, Oct: 10, Nov: 11, Dec: 12 }
-  const parts = key.split(' ')
-  if (parts.length !== 2) return 0
-  return (parseInt(parts[1]) || 0) * 100 + (months[parts[0]] || 0)
-}
-
-function parseWeekKey(key: string): number {
-  const match = key.match(/^W(\d+) (\d{4})$/)
-  if (!match) return 0
-  return (parseInt(match[2]) || 0) * 100 + (parseInt(match[1]) || 0)
-}
-
-function formatWeek(dateStr: string): string | null {
-  const d = parseDate(dateStr)
-  if (!d) return null
-  const startOfYear = new Date(d.getFullYear(), 0, 1)
-  const days = Math.floor((d.getTime() - startOfYear.getTime()) / (24 * 60 * 60 * 1000))
-  const weekNum = Math.ceil((days + startOfYear.getDay() + 1) / 7)
-  return 'W' + weekNum + ' ' + d.getFullYear()
-}
-
-function formatMonth(dateStr: string): string | null {
-  const d = parseDate(dateStr)
-  if (!d) return null
-  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-  return months[d.getMonth()] + ' ' + d.getFullYear()
-}
-
-function filterByDateRange(orders: Order[], from: string, to: string): Order[] {
-  if (!from && !to) return orders
-  return orders.filter((o) => {
+function filterByDateRange(items: any[], from: string, to: string) {
+  if (!from && !to) return items
+  return items.filter((o: any) => {
     if (!o.prjPoDate) return false
     const d = parseDate(o.prjPoDate)
     if (!d) return true
@@ -346,9 +314,9 @@ function filterByDateRange(orders: Order[], from: string, to: string): Order[] {
   })
 }
 
-function filterQuotationsByDate(quots: Quotation[], from: string, to: string): Quotation[] {
+function filterQuotationsByDate(quots: any[], from: string, to: string) {
   if (!from && !to) return quots
-  return quots.filter((q) => {
+  return quots.filter((q: any) => {
     if (!q.qDate) return false
     const d = parseDate(q.qDate)
     if (!d) return true
@@ -356,20 +324,4 @@ function filterQuotationsByDate(quots: Quotation[], from: string, to: string): Q
     if (to && d > new Date(to + 'T23:59:59')) return false
     return true
   })
-}
-
-function parseDate(str: string): Date | null {
-  if (!str) return null
-  const slashMatch = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
-  if (slashMatch) {
-    const [, m, d, y] = slashMatch
-    return new Date(parseInt(y), parseInt(m) - 1, parseInt(d))
-  }
-  const dashMatch = str.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/)
-  if (dashMatch) {
-    const [, d, m, y] = dashMatch
-    return new Date(parseInt(y), parseInt(m) - 1, parseInt(d))
-  }
-  const iso = new Date(str)
-  return isNaN(iso.getTime()) ? null : iso
 }

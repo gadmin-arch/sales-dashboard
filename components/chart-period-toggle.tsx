@@ -1,5 +1,7 @@
 'use client'
 
+import { cn } from '@/lib/utils'
+
 interface ChartPeriodToggleProps {
   period: 'monthly' | 'weekly'
   onPeriodChange: (period: 'monthly' | 'weekly') => void
@@ -7,27 +9,21 @@ interface ChartPeriodToggleProps {
 
 export function ChartPeriodToggle({ period, onPeriodChange }: ChartPeriodToggleProps) {
   return (
-    <div className="flex gap-2">
-      <button
-        onClick={() => onPeriodChange('monthly')}
-        className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
-          period === 'monthly'
-            ? 'bg-blue-600 text-white'
-            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-        }`}
-      >
-        Monthly
-      </button>
-      <button
-        onClick={() => onPeriodChange('weekly')}
-        className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
-          period === 'weekly'
-            ? 'bg-blue-600 text-white'
-            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-        }`}
-      >
-        Weekly
-      </button>
+    <div className="flex items-center gap-0.5 rounded-lg border border-border p-0.5">
+      {(['monthly', 'weekly'] as const).map((p) => (
+        <button
+          key={p}
+          onClick={() => onPeriodChange(p)}
+          className={cn(
+            'rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
+            period === p
+              ? 'bg-primary text-primary-foreground'
+              : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+          )}
+        >
+          {p === 'monthly' ? 'Monthly' : 'Weekly'}
+        </button>
+      ))}
     </div>
   )
 }

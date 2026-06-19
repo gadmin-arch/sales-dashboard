@@ -61,50 +61,50 @@ export function DateRangeFilter({
 
   return (
     <div className="flex-1">
-      <label className="block text-sm font-semibold text-slate-700 mb-2">{label}</label>
+      <label className="block text-sm font-semibold text-muted-foreground mb-2">{label}</label>
       <div className="flex flex-col gap-2">
-        <div className="flex gap-2 items-center">
-          <input
-            type="date"
-            value={startDate?.toISOString().split('T')[0] || ''}
-            onChange={(e) =>
-              onStartDateChange(e.target.value ? new Date(e.target.value) : null)
-            }
-            placeholder="From"
-            className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none"
-          />
-          <span className="text-slate-400">to</span>
-          <input
-            type="date"
-            value={endDate?.toISOString().split('T')[0] || ''}
-            onChange={(e) =>
-              onEndDateChange(e.target.value ? new Date(e.target.value) : null)
-            }
-            placeholder="To"
-            className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none"
-          />
-          {(startDate || endDate) && onClear && (
-            <button
-              onClick={onClear}
-              className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
-              title="Clear dates"
-            >
-              <X className="h-4 w-4 text-slate-400" />
-            </button>
-          )}
-        </div>
-        <div className="flex flex-wrap gap-1">
-          {quickRanges.map((r) => (
-            <button
-              key={r.value}
-              type="button"
-              onClick={() => handleQuickRange(r.value)}
-              className="px-2 py-1 text-xs rounded-md border border-slate-300 hover:bg-slate-100 transition-colors"
-            >
-              {r.label}
-            </button>
-          ))}
-        </div>
+      <div className="flex gap-2 items-center">
+        <input
+          type="date"
+          value={startDate?.toISOString().split('T')[0] || ''}
+          onChange={(e) =>
+            onStartDateChange(e.target.value ? new Date(e.target.value) : null)
+          }
+          placeholder="From"
+          className="flex-1 rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+        />
+        <span className="text-muted-foreground">to</span>
+        <input
+          type="date"
+          value={endDate?.toISOString().split('T')[0] || ''}
+          onChange={(e) =>
+            onEndDateChange(e.target.value ? new Date(e.target.value) : null)
+          }
+          placeholder="To"
+          className="flex-1 rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+        />
+        {(startDate || endDate) && onClear && (
+          <button
+            onClick={onClear}
+            className="p-2 hover:bg-muted rounded-lg transition-colors"
+            title="Clear dates"
+          >
+            <X className="h-4 w-4 text-muted-foreground" />
+          </button>
+        )}
+      </div>
+      <div className="flex flex-wrap gap-1">
+        {quickRanges.map((r) => (
+          <button
+            key={r.value}
+            type="button"
+            onClick={() => handleQuickRange(r.value)}
+            className="px-2 py-1 text-xs rounded-md border border-border hover:bg-muted transition-colors"
+          >
+            {r.label}
+          </button>
+        ))}
+      </div>
       </div>
     </div>
   )

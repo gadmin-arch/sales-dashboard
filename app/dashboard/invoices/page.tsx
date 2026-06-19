@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { ChevronDown, Filter, X, AlertCircle, CheckCircle, Clock, Calendar } from 'lucide-react'
+import { ChevronDown, Filter, X } from 'lucide-react'
+import type { Invoice } from '@/lib/types'
 import {
   useInvoices,
   usePaymentSummary,
@@ -13,9 +14,11 @@ import {
   useDSO,
   useCollectionRate,
 } from '@/lib/hooks'
-import { Invoice } from '@/lib/types'
 import { DateRangeFilter } from '@/components/date-range-filter'
 import { ChartPeriodToggle } from '@/components/chart-period-toggle'
+import { StatusBadge } from '@/components/status-badge'
+import { ProjectStatusBadge } from '@/components/project-status-badge'
+import { SummaryCard } from '@/components/summary-card'
 import {
   LineChart,
   Line,
@@ -31,96 +34,6 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts'
-
-function StatusBadge({ status }: { status: string }) {
-  const statusConfig = {
-    paid: {
-      bg: 'bg-green-50',
-      text: 'text-green-700',
-      icon: <CheckCircle className="h-4 w-4" />,
-      label: 'Paid',
-    },
-    due: {
-      bg: 'bg-blue-50',
-      text: 'text-blue-700',
-      icon: <Clock className="h-4 w-4" />,
-      label: 'Due',
-    },
-    overdue: {
-      bg: 'bg-red-50',
-      text: 'text-red-700',
-      icon: <AlertCircle className="h-4 w-4" />,
-      label: 'Overdue',
-    },
-  }
-
-  const config = statusConfig[status as keyof typeof statusConfig]
-
-  return (
-    <span
-      className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-semibold ${config.bg} ${config.text}`}
-    >
-      {config.icon}
-      {config.label}
-    </span>
-  )
-}
-
-function ProjectStatusBadge({ status }: { status: string }) {
-  const statusConfig = {
-    'in-progress': { bg: 'bg-blue-50', text: 'text-blue-700', label: 'In Progress' },
-    completed: { bg: 'bg-green-50', text: 'text-green-700', label: 'Completed' },
-    pending: { bg: 'bg-amber-50', text: 'text-amber-700', label: 'Pending' },
-  }
-
-  const config = statusConfig[status as keyof typeof statusConfig]
-
-  return (
-    <span
-      className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${config.bg} ${config.text}`}
-    >
-      {config.label}
-    </span>
-  )
-}
-
-function SummaryCard({
-  label,
-  value,
-  icon: Icon,
-  color = 'blue',
-}: {
-  label: string
-  value: string | number
-  icon: React.ReactNode
-  color?: 'blue' | 'green' | 'red' | 'amber'
-}) {
-  const colorClasses = {
-    blue: 'bg-blue-50 text-blue-700',
-    green: 'bg-green-50 text-green-700',
-    red: 'bg-red-50 text-red-700',
-    amber: 'bg-amber-50 text-amber-700',
-  }
-
-  return (
-    <div className="rounded-lg border border-slate-200 bg-white p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm text-slate-600">{label}</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">
-            {typeof value === 'number'
-              ? `Rp${(value / 1000000000).toLocaleString('id-ID', {
-                  minimumFractionDigits: 1,
-                  maximumFractionDigits: 1,
-                })}B`
-              : value}
-          </p>
-        </div>
-        <div className={`rounded-lg p-3 ${colorClasses[color]}`}>{Icon}</div>
-      </div>
-    </div>
-  )
-}
 
 export default function InvoicesDashboard() {
   const allInvoices = useInvoices()
@@ -174,25 +87,25 @@ export default function InvoicesDashboard() {
     dateRange[0] ||
     dateRange[1]
 
-  const formatCurrency = (amount: number) => {
-    return `Rp${(amount / 1000000).toLocaleString('id-ID')}`
-  }
+  function formatCurrency(amount: number | undefined): string {
+  const val = amount ?? 0
+  return `Rp${(val / 1000000).toLocaleString('id-ID')}`
+}
 
-  const formatDate = (date: Date) => {
-    return new Date(date).toLocaleDateString('id-ID', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    })
-  }
+function formatDate(date: Date): string {
+  return new Date(date).toLocaleDateString('id-ID', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  })
+}
 
-  const getDaysOverdue = (invoice: Invoice) => {
-    if (invoice.status !== 'overdue') return null
-    const today = new Date()
-    const dueDate = new Date(invoice.dueDate)
-    const daysOverdue = Math.floor((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24))
-    return daysOverdue
-  }
+function getDaysOverdue(invoice: Invoice): number | null {
+  if (invoice.status !== 'overdue') return null
+  const today = new Date()
+  const dueDate = new Date(invoice.dueDate)
+  return Math.floor((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24))
+}
 
   const COLORS = ['#ef4444', '#f97316', '#eab308', '#22c55e']
 
@@ -416,7 +329,7 @@ export default function InvoicesDashboard() {
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="month" />
               <YAxis />
-              <Tooltip formatter={(value) => formatCurrency(value)} />
+              <Tooltip formatter={(value) => formatCurrency(Number(value || 0))} />
               <Legend />
               <Line type="monotone" dataKey="Invoice" stroke="#3b82f6" strokeWidth={2} />
               <Line type="monotone" dataKey="Payment" stroke="#10b981" strokeWidth={2} />
@@ -435,7 +348,7 @@ export default function InvoicesDashboard() {
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="month" />
               <YAxis />
-              <Tooltip formatter={(value) => formatCurrency(value)} />
+              <Tooltip formatter={(value) => formatCurrency(Number(value || 0))} />
               <Legend />
               <Line type="monotone" dataKey="2024" stroke="#3b82f6" strokeWidth={2} />
               <Line type="monotone" dataKey="2025" stroke="#10b981" strokeWidth={2} />
@@ -451,7 +364,7 @@ export default function InvoicesDashboard() {
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="name" />
               <YAxis />
-              <Tooltip formatter={(value) => formatCurrency(value)} />
+              <Tooltip formatter={(value) => formatCurrency(Number(value || 0))} />
               <Bar dataKey="value" fill="#3b82f6" />
             </BarChart>
           </ResponsiveContainer>
@@ -467,7 +380,7 @@ export default function InvoicesDashboard() {
                   <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                 ))}
               </Pie>
-              <Tooltip formatter={(value) => formatCurrency(value)} />
+              <Tooltip formatter={(value) => formatCurrency(Number(value || 0))} />
               <Legend />
             </PieChart>
           </ResponsiveContainer>

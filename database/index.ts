@@ -6,6 +6,10 @@ export { getAllSalesUsers, getSalesUserById, getSalesUserName } from './repos/sa
 export { getAllOrders, getProjectOrders, getOrderTypeLabel, getFlagLabel, getProjectLogs, getBasts, getFinanceLogs, getAllOrderTypes, getOrdersSheetHeaders } from './repos/orders'
 export { getAllQuotations, getQuotationsByOwner, getQuotationStatuses, getStatusLabel, getQuotationTypeLabel } from './repos/quotations'
 export { getAllCompanies } from './repos/companies'
+export {
+  getAllSalesActivities, getAllActivityTypes, getAllActivityLevels, getAllActivityStatuses,
+  getActivityTypeLabel, getActivityLevelLabel, getActivityStatusLabel, loadRefMaps as loadActivityRefMaps,
+} from './repos/sales-activities'
 
 export type {
   AccessUser,
@@ -16,4 +20,6 @@ export type {
   FinanceLog, FinanceStatus,
   Quotation, QuotationStatus, QuotationType, QuotationLog,
   Company,
+  SalesActivity, SalesActivityType, SalesActivityLevel, SalesActivityStatus,
+  SalesActivityLog, SalesActivityEvidence,
 } from './types'

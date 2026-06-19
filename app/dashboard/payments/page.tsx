@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { ChevronDown, Filter, X, AlertCircle, CheckCircle, Clock } from 'lucide-react'
+import { ChevronDown, Filter, X } from 'lucide-react'
 import {
   useInvoices,
   usePaymentSummary,
@@ -11,6 +11,8 @@ import {
 } from '@/lib/hooks'
 import { DateRangeFilter } from '@/components/date-range-filter'
 import { ChartPeriodToggle } from '@/components/chart-period-toggle'
+import { StatusBadge } from '@/components/status-badge'
+import { SummaryCard } from '@/components/summary-card'
 import {
   LineChart,
   Line,
@@ -26,78 +28,6 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts'
-
-function StatusBadge({ status }: { status: string }) {
-  const statusConfig = {
-    paid: {
-      bg: 'bg-green-50',
-      text: 'text-green-700',
-      icon: <CheckCircle className="h-4 w-4" />,
-      label: 'Paid',
-    },
-    due: {
-      bg: 'bg-blue-50',
-      text: 'text-blue-700',
-      icon: <Clock className="h-4 w-4" />,
-      label: 'Due',
-    },
-    overdue: {
-      bg: 'bg-red-50',
-      text: 'text-red-700',
-      icon: <AlertCircle className="h-4 w-4" />,
-      label: 'Overdue',
-    },
-  }
-
-  const config = statusConfig[status as keyof typeof statusConfig]
-
-  return (
-    <span
-      className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-semibold ${config.bg} ${config.text}`}
-    >
-      {config.icon}
-      {config.label}
-    </span>
-  )
-}
-
-function SummaryCard({
-  label,
-  value,
-  icon: Icon,
-  color = 'blue',
-}: {
-  label: string
-  value: string | number
-  icon: React.ReactNode
-  color?: 'blue' | 'green' | 'red' | 'amber'
-}) {
-  const colorClasses = {
-    blue: 'bg-blue-50 text-blue-700',
-    green: 'bg-green-50 text-green-700',
-    red: 'bg-red-50 text-red-700',
-    amber: 'bg-amber-50 text-amber-700',
-  }
-
-  return (
-    <div className="rounded-lg border border-slate-200 bg-white p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm text-slate-600">{label}</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">
-            {typeof value === 'number'
-              ? `Rp${(value / 1000000000).toLocaleString('id-ID', {
-                  minimumFractionDigits: 1,
-                  maximumFractionDigits: 1,
-                })}B`
-              : value}
-          </p>
-        </div>
-        <div className={`rounded-lg p-3 ${colorClasses[color]}`}>{Icon}</div>
-      </div>
-    </div>
-  )
-}
 
 export default function PaymentsDashboard() {
   const allInvoices = useInvoices()
