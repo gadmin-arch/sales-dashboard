@@ -61,7 +61,7 @@ export default function SalesPage() {
   const [dateFrom, setDateFrom] = useState(getYTD().from), [dateTo, setDateTo] = useState(getYTD().to)
 const [su, setSu] = useState('all'), [cur, setCur] = useState('all'), [ot, setOt] = useState('all')
    const [lFrom, setLFrom] = useState(dateFrom), [lTo, setLTo] = useState(dateTo), [lSu, setLSu] = useState(su), [lCur, setLCur] = useState(cur), [lOt, setLOt] = useState(ot)
-   const [sortKey, setSortKey] = useState<SortKey>('prjId'), [sortDir, setSortDir] = useState<SortDir>('asc'), [page, setPage] = useState(1)
+   const [sortKey, setSortKey] = useState<SortKey>('total'), [sortDir, setSortDir] = useState<SortDir>('desc'), [page, setPage] = useState(1)
 
    const fmtRp = useCallback((v: number) => fmtCurrency(v, cur === 'all' ? 'IDR' : cur), [cur])
 
