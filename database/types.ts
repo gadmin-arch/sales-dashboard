@@ -253,3 +253,39 @@ export interface SalesActivityEvidence {
   updatedAt: string
   deletedAt?: string
 }
+
+// ── leads sheet ──
+export interface Lead {
+  leadId: string
+  name: string
+  company: string
+  contactPerson: string
+  phone: string
+  email: string
+  address: string
+  notes: string
+  status: string
+  source: string
+  assignedTo: string
+  createdAt: string
+  updatedAt: string
+  deletedAt?: string
+}
+
+// ── opportunities sheet ──
+export interface Opportunity {
+  oId: string
+  leadId: string
+  name: string
+  description: string
+  company: string
+  value: number
+  stage: string
+  probability: number
+  closeDate: string
+  assignedTo: string
+  status: string
+  createdAt: string
+  updatedAt: string
+  deletedAt?: string
+}

@@ -74,4 +74,20 @@ export const GOOGLE_CONFIG = {
       evidences: 'sa_evidences',
     },
   },
+
+  // Leads data
+  leads: {
+    spreadsheetId: '1ocSRpU9XU9qnxOrLTn_ZJ7NFYsMdkd20b_iHsmPRJFo',
+    sheets: {
+      leads: 'leads',
+    },
+  },
+
+  // Opportunities data
+  opportunities: {
+    spreadsheetId: '1s8vKx8i5EsaNxdLCh3qrvGsuaXfBpamSNyjG-ok9yaw',
+    sheets: {
+      opportunities: 'opportunities',
+    },
+  },
 } as const
