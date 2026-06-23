@@ -1,22 +1,97 @@
 import { fetchAllRows } from '../client'
 import { GOOGLE_CONFIG } from '../config'
-import { mapLead, mapOpportunity } from '../mappers/leads-opps'
-import type { Lead, Opportunity } from '../types'
+import { mapLead, mapOpportunity, mapLeadRating } from '../mappers/leads-opps'
+import type { Lead, Opportunity, LeadRating } from '../types'
+import { getAllCompanies, getAllPicCompanies } from './companies'
+import { loadRefMaps as loadQuotRefMaps, getQuotationTypeLabel } from './quotations'
 
-export async function getAllLeads(): Promise<Lead[]> {
+export async function getAllLeadRatings(): Promise<LeadRating[]> {
   const { rows } = await fetchAllRows(
     GOOGLE_CONFIG.leads.spreadsheetId,
-    GOOGLE_CONFIG.leads.sheets.leads
+    GOOGLE_CONFIG.leads.sheets.leadRatings
   )
-  return rows.filter((r) => r[0] && r[0] !== 'lead_id' && !r[13]).map(mapLead)
+  return rows.filter((r) => r[0] && r[0] !== 'lr_id').map(mapLeadRating)
+}
+
+export async function getAllLeads(): Promise<Lead[]> {
+  const [leadsRes, companies, picCompanies, ratings] = await Promise.all([
+    fetchAllRows(GOOGLE_CONFIG.leads.spreadsheetId, GOOGLE_CONFIG.leads.sheets.leads),
+    getAllCompanies(),
+    getAllPicCompanies(),
+    getAllLeadRatings(),
+  ])
+
+  const companyMap = new Map<string, string>()
+  for (const c of companies) {
+    if (c.companyId) companyMap.set(c.companyId, c.companyName)
+  }
+
+  const picMap = new Map<string, { name: string; contact: string; email: string }>()
+  for (const pic of picCompanies) {
+    if (pic.piccId) {
+      picMap.set(pic.piccId, {
+        name: pic.piccName,
+        contact: pic.piccContact,
+        email: pic.piccEmail,
+      })
+    }
+  }
+
+  const ratingMap = new Map<string, string>()
+  for (const r of ratings) {
+    if (r.lrId) ratingMap.set(r.lrId, r.lrDescription)
+  }
+
+  // Filter out header row and deleted rows (deleted_at is at index 13)
+  const activeRows = leadsRes.rows.filter((r) => r[0] && r[0] !== 'lead_id' && !r[13]?.trim())
+
+  return activeRows.map((row) => {
+    const cId = row[1] || ''
+    const picId = row[2] || ''
+    const ratingId = row[4] || ''
+    const compName = companyMap.get(cId) || cId
+    const picData = picMap.get(picId) || { name: picId, contact: '', email: '' }
+    const ratingLabel = ratingMap.get(ratingId) || ratingId
+    return mapLead(row, compName, picData, ratingLabel)
+  })
 }
 
 export async function getAllOpportunities(): Promise<Opportunity[]> {
-  const { rows } = await fetchAllRows(
-    GOOGLE_CONFIG.opportunities.spreadsheetId,
-    GOOGLE_CONFIG.opportunities.sheets.opportunities
-  )
-  return rows.filter((r) => r[0] && r[0] !== 'o_id' && !r[13]).map(mapOpportunity)
+  const [oppRes, companies, picCompanies] = await Promise.all([
+    fetchAllRows(GOOGLE_CONFIG.opportunities.spreadsheetId, GOOGLE_CONFIG.opportunities.sheets.opportunities),
+    getAllCompanies(),
+    getAllPicCompanies(),
+    loadQuotRefMaps(),
+  ])
+
+  const companyMap = new Map<string, string>()
+  for (const c of companies) {
+    if (c.companyId) companyMap.set(c.companyId, c.companyName)
+  }
+
+  const picMap = new Map<string, { name: string; contact: string; email: string }>()
+  for (const pic of picCompanies) {
+    if (pic.piccId) {
+      picMap.set(pic.piccId, {
+        name: pic.piccName,
+        contact: pic.piccContact,
+        email: pic.piccEmail,
+      })
+    }
+  }
+
+  // Filter out header row and deleted rows (deleted_at is at index 18)
+  const activeRows = oppRes.rows.filter((r) => r[0] && r[0] !== 'o_id' && !r[18]?.trim())
+
+  return activeRows.map((row) => {
+    const cId = row[3] || ''
+    const picId = row[4] || ''
+    const compName = companyMap.get(cId) || cId
+    const picData = picMap.get(picId) || { name: picId, contact: '', email: '' }
+    const typeId = row[8] || ''
+    const stageLabel = getQuotationTypeLabel(typeId)
+    return mapOpportunity(row, compName, stageLabel, picData)
+  })
 }
 
 // Get user names for leads/opportunities by fetching sales users and building a map

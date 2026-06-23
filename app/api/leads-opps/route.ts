@@ -36,12 +36,11 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    let leads = filterByDate(leadsRaw, 'createdAt')
+    let leads = filterByDate(leadsRaw, 'leadDate')
     let opportunities = filterByDate(opportunitiesRaw, 'createdAt')
 
     if (status) {
       leads = leads.filter((l: any) => l.status === status)
-      opportunities = opportunities.filter((o: any) => o.status === status)
     }
     if (assignedTo) {
       leads = leads.filter((l: any) => l.assignedTo === assignedTo)
@@ -61,7 +60,7 @@ export async function GET(request: NextRequest) {
     const leadsWithOpp = new Set(opportunities.map((o: any) => o.leadId).filter(Boolean))
     const conversionRate = totalLeads > 0 ? Math.round((leadsWithOpp.size / totalLeads) * 1000) / 10 : 0
 
-    // Leads by status
+    // Leads by status (rating)
     const leadStatusMap: Record<string, number> = {}
     for (const l of leads) {
       const label = l.status || '(Blank)'
@@ -69,7 +68,7 @@ export async function GET(request: NextRequest) {
     }
     const byLeadStatus = Object.entries(leadStatusMap).map(([name, value]) => ({ name, value }))
 
-    // Opportunities by stage
+    // Opportunities by stage (type)
     const oppStageMap: Record<string, number> = {}
     for (const o of opportunities) {
       const label = o.stage || '(Blank)'
@@ -77,7 +76,7 @@ export async function GET(request: NextRequest) {
     }
     const byOppStage = Object.entries(oppStageMap).map(([name, value]) => ({ name, value }))
 
-    // Opportunities by status
+    // Opportunities by status (stage)
     const oppStatusMap: Record<string, number> = {}
     for (const o of opportunities) {
       const label = o.status || '(Blank)'
@@ -85,17 +84,24 @@ export async function GET(request: NextRequest) {
     }
     const byOppStatus = Object.entries(oppStatusMap).map(([name, value]) => ({ name, value }))
 
-    // Lead trend by month
-    const leadTrendMap: Record<string, number> = {}
+    // Lead trend by month stacked by rating
+    const leadTrendMap: Record<string, Record<string, number>> = {}
     for (const l of leads) {
-      const d = parseDate(l.createdAt)
+      const d = parseDate(l.leadDate)
       if (!d) continue
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-      leadTrendMap[key] = (leadTrendMap[key] || 0) + 1
+      if (!leadTrendMap[key]) {
+        leadTrendMap[key] = {}
+      }
+      const rating = l.status || '(Blank)'
+      leadTrendMap[key][rating] = (leadTrendMap[key][rating] || 0) + 1
     }
     const leadTrend = Object.entries(leadTrendMap)
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([name, value]) => ({ name, value }))
+      .map(([name, ratingsCount]) => ({
+        name,
+        ...ratingsCount,
+      }))
 
     // Opportunity value trend by month
     const oppTrendMap: Record<string, number> = {}
@@ -153,6 +159,8 @@ export async function GET(request: NextRequest) {
         assignedTo: l.assignedTo,
         assignedName: resolveName(l.assignedTo),
         createdAt: l.createdAt,
+        leadDate: l.leadDate,
+        notes: l.notes,
       })),
       opportunities: opportunities.map((o: any) => ({
         oId: o.oId,
@@ -168,6 +176,9 @@ export async function GET(request: NextRequest) {
         assignedTo: o.assignedTo,
         assignedName: resolveName(o.assignedTo),
         createdAt: o.createdAt,
+        contactPerson: o.contactPerson,
+        phone: o.phone,
+        email: o.email,
       })),
       kpis: { totalLeads, totalOpportunities, totalOppValue, conversionRate },
       byLeadStatus,

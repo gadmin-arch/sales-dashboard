@@ -270,6 +270,7 @@ export interface Lead {
   createdAt: string
   updatedAt: string
   deletedAt?: string
+  leadDate: string
 }
 
 // ── opportunities sheet ──
@@ -288,4 +289,23 @@ export interface Opportunity {
   createdAt: string
   updatedAt: string
   deletedAt?: string
+  contactPerson?: string
+  phone?: string
+  email?: string
 }
+
+export interface PicCompany {
+  piccId: string
+  piccCompanyId: string
+  piccName: string
+  piccContact: string
+  piccEmail: string
+  piccOccupation: string
+}
+
+export interface LeadRating {
+  lrId: string
+  lrDescription: string
+}
+
+

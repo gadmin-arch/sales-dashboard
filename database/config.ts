@@ -59,6 +59,7 @@ export const GOOGLE_CONFIG = {
     spreadsheetId: '13qHO4SAo1f4Qv7RRLMeaw4An7GxGX7zaQxsj-mYZsn8',
     sheets: {
       companies: 'companies',
+      picCompanies: 'pic_companies',
     },
   },
 
@@ -80,6 +81,7 @@ export const GOOGLE_CONFIG = {
     spreadsheetId: '1ocSRpU9XU9qnxOrLTn_ZJ7NFYsMdkd20b_iHsmPRJFo',
     sheets: {
       leads: 'leads',
+      leadRatings: 'lead_ratings',
     },
   },
 
