@@ -1,5 +1,5 @@
 // Date utilities - shared across components
-export function parseDate(str: string): Date | null {
+export function parseDate(str: string | null | undefined): Date | null {
   if (!str) return null
   const slashMatch = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
   if (slashMatch) {
@@ -22,13 +22,30 @@ export function formatMonth(dateStr: string): string | null {
   return `${months[d.getMonth()]} ${d.getFullYear()}`
 }
 
-export function formatWeek(dateStr: string): string | null {
+export function formatWeek(dateStr: string | null | undefined): string {
   const d = parseDate(dateStr)
-  if (!d) return null
-  const startOfYear = new Date(d.getFullYear(), 0, 1)
-  const days = Math.floor((d.getTime() - startOfYear.getTime()) / (24 * 60 * 60 * 1000))
-  const weekNum = Math.ceil((days + startOfYear.getDay() + 1) / 7)
-  return `W${weekNum} ${d.getFullYear()}`
+  if (!d) return ''
+  const jan1 = new Date(d.getFullYear(), 0, 1)
+  const days = Math.floor((d.getTime() - jan1.getTime()) / (24 * 60 * 60 * 1000))
+  const weekNumber = Math.ceil((d.getDay() + 1 + days) / 7)
+  return `W${weekNumber} ${d.getFullYear()}`
+}
+
+export function filterDataByDateRange<T>(
+  items: T[],
+  dateExtractor: (item: T) => string | null | undefined,
+  from: string,
+  to: string
+): T[] {
+  if (!from && !to) return items
+  return items.filter((item) => {
+    const dStr = dateExtractor(item)
+    const d = parseDate(dStr)
+    if (!d) return true
+    if (from && d < new Date(from)) return false
+    if (to && d > new Date(to + 'T23:59:59')) return false
+    return true
+  })
 }
 
 export function sortByPeriod<T>(data: Record<string, T>, period: 'monthly' | 'weekly'): [string, T][] {

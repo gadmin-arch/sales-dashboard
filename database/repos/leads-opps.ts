@@ -106,17 +106,6 @@ export async function getSalesUserNamesForLeadsOpps(
   for (const o of opportunities) {
     if (o.assignedTo) uniqueUserIds.add(o.assignedTo)
   }
-  const { getAllSalesUsers } = await import('./sales-users')
-  const users = await getAllSalesUsers()
-  const map = new Map<string, string>()
-  for (const u of users) {
-    if (u.userId && uniqueUserIds.has(u.userId)) {
-      map.set(u.userId, u.name)
-    }
-  }
-  // Fallback: if user not found, use the ID as name
-  for (const id of uniqueUserIds) {
-    if (!map.has(id)) map.set(id, id)
-  }
-  return map
+  const { getSalesUserNamesMap } = await import('./sales-users')
+  return getSalesUserNamesMap(uniqueUserIds)
 }

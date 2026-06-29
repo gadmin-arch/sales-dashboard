@@ -17,6 +17,7 @@ interface DonutChartProps {
   formatValue?: (value: number, name: string) => string
   donut?: boolean
   currency?: string
+  onSliceClick?: (name: string) => void
 }
 
 // Custom tooltip: name on top, color + formatted value below
@@ -42,7 +43,7 @@ function DonutTooltip({ active, payload, total, currency }: any) {
   )
 }
 
-export function DonutChart({ data, height = 260, total, formatValue, donut = true, currency }: DonutChartProps) {
+export function DonutChart({ data, height = 260, total, formatValue, donut = true, currency, onSliceClick }: DonutChartProps) {
   // Replace empty names with "Blank" and filter out zero values
   const cleanData = data
     .filter(d => d.value > 0)
@@ -65,6 +66,12 @@ export function DonutChart({ data, height = 260, total, formatValue, donut = tru
           dataKey="value"
           stroke="none"
           nameKey="name"
+          onClick={(_, index) => {
+            if (onSliceClick && cleanData[index]) {
+              onSliceClick(cleanData[index].name)
+            }
+          }}
+          style={onSliceClick ? { cursor: 'pointer' } : undefined}
         >
           {cleanData.map((_, i) => (
             <Cell key={i} fill={COLORS[i % COLORS.length]} />

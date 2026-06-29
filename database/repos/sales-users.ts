@@ -38,6 +38,20 @@ async function loadCache() {
   }
 }
 
+export async function getSalesUserNamesMap(userIds: Set<string>): Promise<Map<string, string>> {
+  const users = await getAllSalesUsers()
+  const map = new Map<string, string>()
+  for (const u of users) {
+    if (u.userId && userIds.has(u.userId)) {
+      map.set(u.userId, u.name)
+    }
+  }
+  for (const id of userIds) {
+    if (!map.has(id)) map.set(id, id)
+  }
+  return map
+}
+
 export async function getAllSalesUsers(): Promise<SalesUser[]> {
   await loadCache()
   return Array.from(userCache!.values())

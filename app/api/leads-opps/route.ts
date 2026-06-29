@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAllLeads, getAllOpportunities, getSalesUserNamesForLeadsOpps } from '@/database/repos/leads-opps'
-import { parseMulti } from '@/lib/utils-date-currency'
+import { parseMulti, filterDataByDateRange } from '@/lib/utils-date-currency'
 import { clearSheetCache } from '@/database/client'
 
 export async function GET(request: NextRequest) {
@@ -28,19 +28,8 @@ export async function GET(request: NextRequest) {
       return isNaN(p.getTime()) ? null : p
     }
 
-    const filterByDate = (items: any[], dateField: string) => {
-      if (!dateFrom && !dateTo) return items
-      return items.filter((item: any) => {
-        const d = parseDate(item[dateField])
-        if (!d) return true
-        if (dateFrom && d < new Date(dateFrom)) return false
-        if (dateTo && d > new Date(dateTo + 'T23:59:59')) return false
-        return true
-      })
-    }
-
-    let leads = filterByDate(leadsRaw, 'leadDate')
-    let opportunities = filterByDate(opportunitiesRaw, 'createdAt')
+    let leads = filterDataByDateRange(leadsRaw, (l) => l.leadDate, dateFrom, dateTo)
+    let opportunities = filterDataByDateRange(opportunitiesRaw, (o) => o.createdAt, dateFrom, dateTo)
 
     if (status.length) {
       leads = leads.filter((l: any) => status.includes(l.status))
@@ -54,6 +43,30 @@ export async function GET(request: NextRequest) {
     }
     if (stage.length) {
       opportunities = opportunities.filter((o: any) => stage.includes(o.stage))
+    }
+
+    const cType = searchParams.get('cType')
+    const cVal = searchParams.get('cVal')
+    if (cType && cVal) {
+      if (cType === 'leadStatus') leads = leads.filter((l: any) => l.status === cVal)
+      if (cType === 'oppStage') opportunities = opportunities.filter((o: any) => o.stage === cVal)
+      if (cType === 'oppStatus') opportunities = opportunities.filter((o: any) => o.status === cVal)
+      if (cType === 'leadMonth') {
+        leads = leads.filter((l: any) => {
+          const d = parseDate(l.leadDate)
+          if (!d) return false
+          const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+          return key === cVal
+        })
+      }
+      if (cType === 'oppMonth') {
+        opportunities = opportunities.filter((o: any) => {
+          const d = parseDate(o.createdAt)
+          if (!d) return false
+          const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+          return key === cVal
+        })
+      }
     }
 
     // KPIs

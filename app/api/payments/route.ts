@@ -1,17 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getInvoicingData } from '@/database/repos/invoicing'
 import { getCompanyNameMap } from '@/database/repos/companies'
-import { parseDate, formatMonth, sortByPeriod, parseMulti } from '@/lib/utils-date-currency'
+import { parseDate, formatMonth, sortByPeriod, parseMulti, filterDataByDateRange } from '@/lib/utils-date-currency'
 import { clearSheetCache } from '@/database/client'
 
-function inRange(dateStr: string, from: string, to: string): boolean {
-  if (!from && !to) return true
-  const d = parseDate(dateStr)
-  if (!d) return true
-  if (from && d < new Date(from)) return false
-  if (to && d > new Date(to + 'T23:59:59')) return false
-  return true
-}
+
 
 export async function GET(request: NextRequest) {
   try {
@@ -39,8 +32,15 @@ export async function GET(request: NextRequest) {
     }
     const joinOr = (s?: Set<string>) => (s && s.size ? [...s].join(', ') : '-')
 
-    let filtered = payments.filter((p) => inRange(p.payDate, dateFrom, dateTo))
+    let filtered = filterDataByDateRange(payments, (p) => p.payDate, dateFrom, dateTo)
     if (customer.length) filtered = filtered.filter((p) => customer.includes(p.payCompanyId))
+
+    const cType = searchParams.get('cType')
+    const cVal = searchParams.get('cVal')
+    if (cType && cVal) {
+      if (cType === 'month') filtered = filtered.filter(p => formatMonth(p.payDate) === cVal)
+      if (cType === 'customer') filtered = filtered.filter(p => nameOf(p.payCompanyId) === cVal)
+    }
 
     const amountOf = (p: { payTotalAmount: number; payAmount: number }) => p.payTotalAmount || p.payAmount
 

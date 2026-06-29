@@ -4,7 +4,7 @@ import {
   loadRefMaps as loadActivityRefMaps, getActivityTypeLabel, getActivityLevelLabel, getActivityStatusLabel,
   getSalesUserNamesForActivities,
 } from '@/database/repos/sales-activities'
-import { parseMulti } from '@/lib/utils-date-currency'
+import { parseMulti, parseDate, formatMonth, formatWeek, filterDataByDateRange } from '@/lib/utils-date-currency'
 import { clearSheetCache } from '@/database/client'
 
 export async function GET(request: NextRequest) {
@@ -33,49 +33,8 @@ export async function GET(request: NextRequest) {
     // Get user names only for users who have activities (efficient - no full user fetch)
     const userNameMap = await getSalesUserNamesForActivities(activities)
 
-    const parseDate = (str: string): Date | null => {
-      if (!str) return null
-      const slashMatch = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
-      if (slashMatch) {
-        const [, m, d, y] = slashMatch
-        return new Date(parseInt(y), parseInt(m) - 1, parseInt(d))
-      }
-      const dashMatch = str.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/)
-      if (dashMatch) {
-        const [, d, m, y] = dashMatch
-        return new Date(parseInt(y), parseInt(m) - 1, parseInt(d))
-      }
-      const iso = new Date(str)
-      return isNaN(iso.getTime()) ? null : iso
-    }
+    let filtered = filterDataByDateRange(activities, (a) => a.saDate, dateFrom, dateTo)
 
-    const formatMonth = (dateStr: string): string | null => {
-      const d = parseDate(dateStr)
-      if (!d) return null
-      const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-      return months[d.getMonth()] + ' ' + d.getFullYear()
-    }
-
-    const formatWeek = (dateStr: string): string | null => {
-      const d = parseDate(dateStr)
-      if (!d) return null
-      const startOfYear = new Date(d.getFullYear(), 0, 1)
-      const days = Math.floor((d.getTime() - startOfYear.getTime()) / (24 * 60 * 60 * 1000))
-      const weekNum = Math.ceil((days + startOfYear.getDay() + 1) / 7)
-      return 'W' + weekNum + ' ' + d.getFullYear()
-    }
-
-    let filtered = activities
-    if (dateFrom || dateTo) {
-      filtered = filtered.filter((a) => {
-        if (!a.saDate) return false
-        const d = parseDate(a.saDate)
-        if (!d) return true
-        if (dateFrom && d < new Date(dateFrom)) return false
-        if (dateTo && d > new Date(dateTo + 'T23:59:59')) return false
-        return true
-      })
-    }
     if (salesUser.length) {
       filtered = filtered.filter((a) => salesUser.includes(a.saUserId))
     }
@@ -87,6 +46,21 @@ export async function GET(request: NextRequest) {
     }
     if (status.length) {
       filtered = filtered.filter((a) => status.includes(getActivityStatusLabel(a.saStatus)))
+    }
+
+    const cType = searchParams.get('cType')
+    const cVal = searchParams.get('cVal')
+    if (cType && cVal) {
+      if (cType === 'type') filtered = filtered.filter(a => getActivityTypeLabel(a.saType) === cVal)
+      if (cType === 'status') filtered = filtered.filter(a => getActivityStatusLabel(a.saStatus) === cVal)
+      if (cType === 'level') filtered = filtered.filter(a => getActivityLevelLabel(a.saLevel) === cVal)
+      if (cType === 'actMonth') {
+        filtered = filtered.filter(a => {
+          if (!a.saDate) return false
+          const key = period === 'weekly' ? formatWeek(a.saDate) : formatMonth(a.saDate)
+          return key === cVal
+        })
+      }
     }
 
     const totalActivities = filtered.length

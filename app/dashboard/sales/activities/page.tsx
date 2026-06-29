@@ -18,7 +18,8 @@ import { MultiSelect } from '@/components/multi-select'
 import { DateRangeRow } from '@/components/date-range-row'
 import { LoadMore, useLoadMore } from '@/components/load-more'
 import { useSort, SortHead } from '@/components/sortable'
-import { buildQuery, sameSet } from '@/lib/sales-helpers'
+import { buildQuery, sameSet, getYTD, fmtCurrency } from '@/lib/sales-helpers'
+import { useChartFilter } from '@/hooks/use-chart-filter'
 
 interface ActivityData {
   kpis: { totalActivities: number; completionRate: number; activitiesThisWeek: number; highPriorityCount: number; doneCount: number; todoCount: number; holdCount: number; cancelCount: number }
@@ -70,12 +71,12 @@ export default function SalesActivitiesPage() {
   const [error, setError] = useState<string | null>(null)
   const [chartPeriod, setChartPeriod] = useState<'monthly' | 'weekly'>('monthly')
   const [search, setSearch] = useState('')
+  const { chartFilter, setChartFilter, handleChartClick } = useChartFilter('activities-list')
   const [view, setView] = useState<ViewMode>('calendar')
   const [calMonth, setCalMonth] = useState(() => { const n = new Date(); return { y: n.getFullYear(), m: n.getMonth() } })
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [weekStart, setWeekStart] = useState(() => { const n = new Date(); return new Date(n.setDate(n.getDate() - n.getDay())) })
 
-  const getYTD = () => { const n = new Date(); return { from: new Date(n.getFullYear(), 0, 1).toLocaleDateString('en-CA'), to: new Date(n.getFullYear(), n.getMonth(), n.getDate()).toLocaleDateString('en-CA') } }
   const [dateFrom, setDateFrom] = useState(getYTD().from), [dateTo, setDateTo] = useState(getYTD().to)
   // Applied filters (multi-select)
   const [su, setSu] = useState<string[]>([]), [at, setAt] = useState<string[]>([]), [lv, setLv] = useState<string[]>([]), [st, setSt] = useState<string[]>([])
@@ -94,10 +95,17 @@ export default function SalesActivitiesPage() {
   }, [])
 
   const firstLoad = useRef(true)
-  useEffect(() => { const fresh = firstLoad.current; firstLoad.current = false; doFetch({ dateFrom, dateTo, salesUser: su, activityType: at, level: lv, status: st, period: chartPeriod, ...(fresh ? { fresh: '1' } : {}) }) }, [doFetch, dateFrom, dateTo, su, at, lv, st, chartPeriod])
-  const onPeriod = (p: 'monthly' | 'weekly') => { setChartPeriod(p); doFetch({ dateFrom, dateTo, salesUser: su, activityType: at, level: lv, status: st, period: p }) }
+  useEffect(() => {
+    const fresh = firstLoad.current; firstLoad.current = false;
+    doFetch({
+      dateFrom, dateTo, salesUser: su, activityType: at, level: lv, status: st, period: chartPeriod,
+      ...(chartFilter ? { cType: chartFilter.type, cVal: chartFilter.value } : {}),
+      ...(fresh ? { fresh: '1' } : {})
+    })
+  }, [doFetch, dateFrom, dateTo, su, at, lv, st, chartPeriod, chartFilter])
+  const onPeriod = (p: 'monthly' | 'weekly') => { setChartPeriod(p) }
   const onApply = () => { setDateFrom(lFrom); setDateTo(lTo); setSu(lSu); setAt(lAt); setLv(lLv); setSt(lSt) }
-  const onClear = () => { const d = getYTD(); setLFrom(d.from); setLTo(d.to); setLSu([]); setLAt([]); setLLv([]); setLSt([]); setDateFrom(d.from); setDateTo(d.to); setSu([]); setAt([]); setLv([]); setSt([]) }
+  const onClear = () => { const d = getYTD(); setLFrom(d.from); setLTo(d.to); setLSu([]); setLAt([]); setLLv([]); setLSt([]); setDateFrom(d.from); setDateTo(d.to); setSu([]); setAt([]); setLv([]); setSt([]); setChartFilter(null) }
 
   const parseDate = (d: string): Date | null => {
     if (!d) return null
@@ -162,13 +170,23 @@ export default function SalesActivitiesPage() {
   const byStatusConfig = Object.fromEntries(['Done', 'To Do', 'Hold', 'Cancel'].map((label, i) => [`s${i}`, { label, color: PIE_COLORS[i % 5] }]))
   const byLevelConfig = Object.fromEntries(['High', 'Medium', 'Low'].map((label, i) => [`l${i}`, { label, color: PIE_COLORS[i % 5] }]))
 
+  const thClass = "text-xs font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors"
+
   return (
     <SalesPageShell>
       <div className="bg-background text-foreground min-h-screen space-y-6">
 
         {/* Header */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div><h1 className="text-2xl font-bold tracking-tight">Sales Activities</h1><p className="text-sm text-muted-foreground">PT. Multi Daya Mitra</p></div>
+          <div className="flex flex-wrap items-center gap-4">
+            <div><h1 className="text-2xl font-bold tracking-tight">Sales Activities</h1><p className="text-sm text-muted-foreground">PT. Multi Daya Mitra</p></div>
+            {chartFilter && (
+              <div className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary border border-primary/20">
+                <span className="text-muted-foreground">Filtered by:</span> {chartFilter.label}
+                <button onClick={() => setChartFilter(null)} className="ml-1 hover:bg-primary/20 rounded-full p-0.5"><div className="h-4 w-4 flex items-center justify-center">✕</div></button>
+              </div>
+            )}
+          </div>
           <ThemeToggle />
         </div>
 
@@ -232,7 +250,7 @@ export default function SalesActivitiesPage() {
                   <XAxis dataKey="name" stroke="var(--muted-foreground)" tickLine={false} axisLine={{ stroke: 'var(--border)' }} className="text-xs" />
                   <YAxis stroke="var(--muted-foreground)" tickLine={false} axisLine={false} className="text-xs" allowDecimals={false} />
                   <ChartTooltip content={<ChartTooltipContent />} />
-                  <Area type="monotone" dataKey="value" stroke="var(--color-activities)" fillOpacity={1} fill="url(#gAct)" />
+                  <Area type="monotone" dataKey="value" stroke="var(--color-activities)" fillOpacity={1} fill="url(#gAct)" onClick={(d: any) => handleChartClick('actMonth', d.name, `Month = ${d.name}`)} style={{ cursor: 'pointer' }} />
                 </AreaChart>
               </ChartContainer>
             </CardContent>
@@ -240,13 +258,13 @@ export default function SalesActivitiesPage() {
           <Card>
             <CardHeader><CardTitle className="text-sm font-semibold">By Type</CardTitle></CardHeader>
             <CardContent>
-              <DonutChart data={data.byType} height={260} />
+              <DonutChart data={data.byType} height={260} onSliceClick={(name) => handleChartClick('type', name, `Type = ${name}`)} />
             </CardContent>
           </Card>
           <Card>
             <CardHeader><CardTitle className="text-sm font-semibold">By Status</CardTitle></CardHeader>
             <CardContent>
-              <DonutChart data={data.byStatus} height={260} />
+              <DonutChart data={data.byStatus} height={260} onSliceClick={(name) => handleChartClick('status', name, `Status = ${name}`)} />
             </CardContent>
           </Card>
         </div>
@@ -258,7 +276,7 @@ export default function SalesActivitiesPage() {
               <BarChart data={data.byLevel} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" /><XAxis dataKey="name" stroke="var(--muted-foreground)" tickLine={false} axisLine={{ stroke: 'var(--border)' }} className="text-xs" /><YAxis stroke="var(--muted-foreground)" tickLine={false} axisLine={false} className="text-xs" allowDecimals={false} />
                 <ChartTooltip content={<ChartTooltipContent />} /><ChartLegend content={<ChartLegendContent />} />
-                <Bar dataKey="value" fill="var(--primary)" radius={[4, 4, 0, 0]} name="Count" />
+                <Bar dataKey="value" fill="var(--primary)" radius={[4, 4, 0, 0]} name="Count" onClick={(d: any) => handleChartClick('level', d.name, `Level = ${d.name}`)} style={{ cursor: 'pointer' }} />
               </BarChart>
             </ChartContainer>
           </CardContent></Card>
@@ -277,7 +295,7 @@ export default function SalesActivitiesPage() {
         </div>
 
         {/* View Toggle */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between" id="activities-list">
           <h2 className="text-lg font-semibold">Activities {search && <span className="text-sm font-normal text-muted-foreground">({filtered.length} results)</span>}</h2>
           <div className="flex items-center gap-2">
             <div className="relative w-48"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" /><input type="text" placeholder="Search activities..." value={search} onChange={e => setSearch(e.target.value)} className="w-full rounded-lg border border-input bg-background pl-8 pr-3 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary" /></div>

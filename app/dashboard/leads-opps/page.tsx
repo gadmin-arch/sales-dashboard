@@ -9,11 +9,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { DonutChart } from '@/components/donut-chart'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts'
 import { ChartContainer, ChartLegend, ChartLegendContent } from '@/components/ui/chart'
-import { fmtCurrency, SortIcon, buildQuery, sameSet } from '@/lib/sales-helpers'
+import { fmtCurrency, SortIcon, buildQuery, sameSet, getYTD } from '@/lib/sales-helpers'
 import { MultiSelect } from '@/components/multi-select'
 import { DateRangeRow } from '@/components/date-range-row'
 import { LoadMore, useLoadMore } from '@/components/load-more'
 import { ThemeToggle, SalesPageShell } from '@/components/theme-toggle'
+import { useChartFilter } from '@/hooks/use-chart-filter'
 import { DollarSign, TrendingUp, Users, Target, Loader2, Search } from 'lucide-react'
 
 interface LeadData {
@@ -113,15 +114,20 @@ export default function LeadsOppsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [tab, setTab] = useState<'leads' | 'opportunities'>('leads')
-  const [search, setSearch] = useState('')
+  const [tabSearch, setTabSearch] = useState('')
+  const { chartFilter, setChartFilter, handleChartClick: baseHandleChartClick } = useChartFilter('leads-opps-table')
 
-  const getYTD = () => { const n = new Date(); return { from: new Date(n.getFullYear(), 0, 1).toLocaleDateString('en-CA'), to: new Date(n.getFullYear(), n.getMonth(), n.getDate()).toLocaleDateString('en-CA') } }
+  const handleChartClick = (targetTab: 'leads' | 'opportunities', type: string, value: string, label: string) => {
+    setTab(targetTab)
+    baseHandleChartClick(type, value, label)
+  }
+
   const [dateFrom, setDateFrom] = useState(getYTD().from), [dateTo, setDateTo] = useState(getYTD().to)
   // Applied filters (multi-select)
   const [status, setStatus] = useState<string[]>([]), [assignedTo, setAssignedTo] = useState<string[]>([]), [source, setSource] = useState<string[]>([]), [stage, setStage] = useState<string[]>([])
   // Draft (unapplied) filters
   const [lFrom, setLFrom] = useState(dateFrom), [lTo, setLTo] = useState(dateTo)
-  const [lStatus, setLStatus] = useState<string[]>([]), [lAssigned, setLAssigned] = useState<string[]>([]), [lSource, setLSource] = useState<string[]>([]), [lStage, setLStage] = useState<string[]>([])
+  const [lStatus, setLStatus] = useState<string[]>([]), [lAssignedTo, setLAssignedTo] = useState<string[]>([]), [lSource, setLSource] = useState<string[]>([]), [lStage, setLStage] = useState<string[]>([])
 
   const [leadSortKey, setLeadSortKey] = useState<string>('leadId')
   const [leadSortDir, setLeadSortDir] = useState<'asc' | 'desc'>('asc')
@@ -133,10 +139,10 @@ export default function LeadsOppsPage() {
     return lFrom !== dateFrom ||
            lTo !== dateTo ||
            !sameSet(lStatus, status) ||
-           !sameSet(lAssigned, assignedTo) ||
+           !sameSet(lAssignedTo, assignedTo) ||
            !sameSet(lSource, source) ||
            !sameSet(lStage, stage);
-  }, [lFrom, dateFrom, lTo, dateTo, lStatus, status, lAssigned, assignedTo, lSource, source, lStage, stage])
+  }, [lFrom, dateFrom, lTo, dateTo, lStatus, status, lAssignedTo, assignedTo, lSource, source, lStage, stage])
 
   const doFetch = useCallback(async (p: Record<string, string | string[]>) => {
     setLoading(true); setError(null)
@@ -148,14 +154,22 @@ export default function LeadsOppsPage() {
   }, [])
 
   const firstLoad = useRef(true)
-  useEffect(() => { const fresh = firstLoad.current; firstLoad.current = false; doFetch({ dateFrom, dateTo, status, assignedTo, source, stage, ...(fresh ? { fresh: '1' } : {}) }) }, [doFetch, dateFrom, dateTo, status, assignedTo, source, stage])
+  useEffect(() => {
+    const fresh = firstLoad.current; firstLoad.current = false;
+    doFetch({
+      dateFrom, dateTo,
+      status, assignedTo, source, stage,
+      ...(chartFilter ? { cType: chartFilter.type, cVal: chartFilter.value } : {}),
+      ...(fresh ? { fresh: '1' } : {})
+    })
+  }, [doFetch, dateFrom, dateTo, status, assignedTo, source, stage, chartFilter])
 
-  const onApply = () => { setDateFrom(lFrom); setDateTo(lTo); setStatus(lStatus); setAssignedTo(lAssigned); setSource(lSource); setStage(lStage) }
+  const onApply = () => { setDateFrom(lFrom); setDateTo(lTo); setStatus(lStatus); setAssignedTo(lAssignedTo); setSource(lSource); setStage(lStage) }
 
   const onClear = () => {
     const d = getYTD()
-    setLFrom(d.from); setLTo(d.to); setLStatus([]); setLAssigned([]); setLSource([]); setLStage([])
-    setDateFrom(d.from); setDateTo(d.to); setStatus([]); setAssignedTo([]); setSource([]); setStage([])
+    setLFrom(d.from); setLTo(d.to); setLStatus([]); setLAssignedTo([]); setLSource([]); setLStage([])
+    setDateFrom(d.from); setDateTo(d.to); setStatus([]); setAssignedTo([]); setSource([]); setStage([]); setChartFilter(null)
   }
 
   const handleLeadSort = (key: string) => {
@@ -178,17 +192,17 @@ export default function LeadsOppsPage() {
 
   const filteredLeads = useMemo(() => {
     if (!data) return []
-    let items = data.leads
-    if (search) { const q = search.toLowerCase(); items = items.filter(l => [l.name, l.company, l.contactPerson, l.email, l.assignedName, l.status, l.notes].some(s => s?.toLowerCase().includes(q))) }
-    return items
-  }, [data, search])
+    let rows = data.leads
+    if (tabSearch) { const q = tabSearch.toLowerCase(); rows = rows.filter(r => [r.name, r.company, r.assignedName].some(s => s?.toLowerCase().includes(q))) }
+    return rows
+  }, [data, tabSearch])
 
   const filteredOpps = useMemo(() => {
     if (!data) return []
-    let items = data.opportunities
-    if (search) { const q = search.toLowerCase(); items = items.filter(o => [o.name, o.company, o.description, o.assignedName, o.stage, o.contactPerson].some(s => s?.toLowerCase().includes(q))) }
-    return items
-  }, [data, search])
+    let rows = data.opportunities
+    if (tabSearch) { const q = tabSearch.toLowerCase(); rows = rows.filter(r => [r.name, r.company, r.assignedName].some(s => s?.toLowerCase().includes(q))) }
+    return rows
+  }, [data, tabSearch])
 
   const sortedLeads = useMemo(() => {
     const items = [...filteredLeads]
@@ -248,7 +262,15 @@ export default function LeadsOppsPage() {
     <SalesPageShell>
       <div className="bg-background text-foreground min-h-screen space-y-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div><h1 className="text-2xl font-bold tracking-tight">Leads & Opportunities</h1><p className="text-sm text-muted-foreground">PT. Multi Daya Mitra</p></div>
+          <div className="flex flex-wrap items-center gap-4">
+            <div><h1 className="text-2xl font-bold tracking-tight">Leads & Opportunities</h1><p className="text-sm text-muted-foreground">PT. Multi Daya Mitra</p></div>
+            {chartFilter && (
+              <div className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary border border-primary/20">
+                <span className="text-muted-foreground">Filtered by:</span> {chartFilter.label}
+                <button onClick={() => setChartFilter(null)} className="ml-1 hover:bg-primary/20 rounded-full p-0.5"><div className="h-4 w-4 flex items-center justify-center">✕</div></button>
+              </div>
+            )}
+          </div>
           <ThemeToggle />
         </div>
 
@@ -260,7 +282,7 @@ export default function LeadsOppsPage() {
                 options={data.filterOptions.leadStatuses.map(s => ({ value: s, label: s }))} />
             </div>
             <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Sales Owner</label>
-              <MultiSelect allLabel="All Sales Owners" selected={lAssigned} onChange={setLAssigned}
+              <MultiSelect allLabel="All Sales Owners" selected={lAssignedTo} onChange={setLAssignedTo}
                 options={data.salesUserList.map(u => ({ value: u.id, label: u.name }))} />
             </div>
             <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Source</label>
@@ -287,7 +309,6 @@ export default function LeadsOppsPage() {
               )}
             </Button>
           </div>
-          {loading && data && <div className="w-full h-1 bg-border overflow-hidden rounded-full mt-3"><div className="h-1/3 bg-primary rounded-full loading-bar-inner" /></div>}
         </CardContent></Card>
 
         {/* KPIs */}
@@ -297,9 +318,9 @@ export default function LeadsOppsPage() {
 
         {/* Charts Row 1 */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          <Card><CardHeader><CardTitle className="text-sm font-semibold">Leads by Rating</CardTitle></CardHeader><CardContent><DonutChart data={data.byLeadStatus} height={260} /></CardContent></Card>
-          <Card><CardHeader><CardTitle className="text-sm font-semibold">Opportunities by Type</CardTitle></CardHeader><CardContent><DonutChart data={data.byOppStage} height={260} /></CardContent></Card>
-          <Card><CardHeader><CardTitle className="text-sm font-semibold">Opportunities by Stage</CardTitle></CardHeader><CardContent><DonutChart data={data.byOppStatus} height={260} /></CardContent></Card>
+          <Card><CardHeader><CardTitle className="text-sm font-semibold">Leads by Rating</CardTitle></CardHeader><CardContent><DonutChart data={data.byLeadStatus} height={260} onSliceClick={(name) => handleChartClick('leads', 'leadStatus', name, `Rating = ${name}`)} /></CardContent></Card>
+          <Card><CardHeader><CardTitle className="text-sm font-semibold">Opportunities by Type</CardTitle></CardHeader><CardContent><DonutChart data={data.byOppStage} height={260} onSliceClick={(name) => handleChartClick('opportunities', 'oppStage', name, `Type = ${name}`)} /></CardContent></Card>
+          <Card><CardHeader><CardTitle className="text-sm font-semibold">Opportunities by Stage</CardTitle></CardHeader><CardContent><DonutChart data={data.byOppStatus} height={260} onSliceClick={(name) => handleChartClick('opportunities', 'oppStatus', name, `Stage = ${name}`)} /></CardContent></Card>
         </div>
 
         {/* Charts Row 2 */}
@@ -313,7 +334,7 @@ export default function LeadsOppsPage() {
                 <Tooltip content={<LeadTrendTooltip />} />
                 <ChartLegend content={<ChartLegendContent />} />
                 {data.filterOptions.leadStatuses.map((s, idx) => (
-                  <Bar key={s} dataKey={s} stackId="a" fill={colors[idx % colors.length]} name={s} />
+                  <Bar key={s} dataKey={s} stackId="a" fill={colors[idx % colors.length]} name={s} onClick={(d: any) => handleChartClick('leads', 'leadMonth', d.name, `Lead Month = ${d.name}`)} style={{ cursor: 'pointer' }} />
                 ))}
               </BarChart>
             </ChartContainer>
@@ -326,21 +347,23 @@ export default function LeadsOppsPage() {
                 <XAxis dataKey="name" stroke="var(--muted-foreground)" tickFormatter={fmtMonthYear} tickLine={false} axisLine={{ stroke: 'var(--border)' }} className="text-xs" />
                 <YAxis stroke="var(--muted-foreground)" tickFormatter={v => fmtRp(Number(v))} tickLine={false} axisLine={false} className="text-xs" />
                 <Tooltip content={<OppValueTrendTooltip />} />
-                <Bar dataKey="value" fill="var(--chart-2)" radius={[4, 4, 0, 0]} name="Price" />
+                <Bar dataKey="value" fill="var(--chart-2)" radius={[4, 4, 0, 0]} name="Price" onClick={(d: any) => handleChartClick('opportunities', 'oppMonth', d.name, `Opp Month = ${d.name}`)} style={{ cursor: 'pointer' }} />
               </BarChart>
             </ChartContainer>
           </CardContent></Card>
         </div>
 
         {/* Table */}
-        <Card className="overflow-hidden">
+        <Card className="overflow-hidden" id="leads-opps-table">
           <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-1 rounded-lg border border-border p-0.5">
-              {(['leads', 'opportunities'] as const).map(t => (
-                <button key={t} onClick={() => { setTab(t); setSearch('') }} className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${tab === t ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}>{t === 'leads' ? 'Leads' : 'Opportunities'}</button>
-              ))}
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-1 rounded-lg border border-border p-0.5">
+                {(['leads', 'opportunities'] as const).map(t => (
+                  <button key={t} onClick={() => { setTab(t); setTabSearch('') }} className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${tab === t ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}>{t === 'leads' ? 'Leads' : 'Opportunities'}</button>
+                ))}
+              </div>
             </div>
-            <div className="relative w-56"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" /><input type="text" placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)} className="w-full rounded-lg border border-input bg-background pl-8 pr-3 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary" /></div>
+            <div className="relative w-64"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" /><input type="text" placeholder="Search name/company..." value={tabSearch} onChange={e => setTabSearch(e.target.value)} className="w-full rounded-lg border border-input bg-background pl-8 pr-3 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary" /></div>
           </CardHeader>
           <CardContent className="p-0">
             <Table>

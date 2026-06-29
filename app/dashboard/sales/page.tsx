@@ -18,13 +18,14 @@ import {
   onSel,
   Progress,
   SortIcon,
-  getYTD,
   buildQuery,
   sameSet,
+  getYTD
 } from '@/lib/sales-helpers'
 import { MultiSelect } from '@/components/multi-select'
 import { DateRangeRow } from '@/components/date-range-row'
 import { LoadMore, useLoadMore } from '@/components/load-more'
+import { useChartFilter } from '@/hooks/use-chart-filter'
 
 /* ── Types ── */
 interface SalesData {
@@ -60,9 +61,9 @@ export default function SalesPage() {
   const [error, setError] = useState<string | null>(null)
   const [chartPeriod, setChartPeriod] = useState<'monthly' | 'weekly'>('monthly')
   const [tableSearch, setTableSearch] = useState('')
+  const { chartFilter, setChartFilter, handleChartClick } = useChartFilter('sales-projects-table')
   const [tCust, setTCust] = useState('all'), [tOwner, setTOwner] = useState('all'), [tType, setTType] = useState('all')
 
-  const getYTD = () => { const n = new Date(); return { from: new Date(n.getFullYear(), 0, 1).toLocaleDateString('en-CA'), to: new Date(n.getFullYear(), n.getMonth(), n.getDate()).toLocaleDateString('en-CA') } }
   const [dateFrom, setDateFrom] = useState(getYTD().from), [dateTo, setDateTo] = useState(getYTD().to)
   // Applied filters (currency stays single — it drives money formatting; the rest are multi-select)
   const [cur, setCur] = useState('all')
@@ -128,10 +129,18 @@ export default function SalesPage() {
   }, [])
 
   const firstLoad = useRef(true)
-  useEffect(() => { const fresh = firstLoad.current; firstLoad.current = false; doFetch({ dateFrom, dateTo, salesUser: su, currency: cur, orderType: ot, projectStatus: ps, invoiceStatus: inv, period: chartPeriod, ...(fresh ? { fresh: '1' } : {}) }) }, [doFetch, dateFrom, dateTo, su, cur, ot, ps, inv, chartPeriod])
-  const onPeriod = (p: 'monthly' | 'weekly') => { setChartPeriod(p); doFetch({ dateFrom, dateTo, salesUser: su, currency: cur, orderType: ot, projectStatus: ps, invoiceStatus: inv, period: p }) }
+  useEffect(() => {
+    const fresh = firstLoad.current; firstLoad.current = false;
+    doFetch({
+      dateFrom, dateTo, salesUser: su, currency: cur, orderType: ot, projectStatus: ps, invoiceStatus: inv, period: chartPeriod,
+      ...(chartFilter ? { cType: chartFilter.type, cVal: chartFilter.value } : {}),
+      ...(fresh ? { fresh: '1' } : {})
+    })
+  }, [doFetch, dateFrom, dateTo, su, cur, ot, ps, inv, chartPeriod, chartFilter])
+
+  const onPeriod = (p: 'monthly' | 'weekly') => { setChartPeriod(p) }
   const onApply = () => { setDateFrom(lFrom); setDateTo(lTo); setSu(lSu); setCur(lCur); setOt(lOt); setPs(lPs); setInv(lInv) }
-  const onClear = () => { const d = getYTD(); setLFrom(d.from); setLTo(d.to); setLSu([]); setLCur('all'); setLOt([]); setLPs([]); setLInv([]); setDateFrom(d.from); setDateTo(d.to); setSu([]); setCur('all'); setOt([]); setPs([]); setInv([]) }
+  const onClear = () => { const d = getYTD(); setLFrom(d.from); setLTo(d.to); setLSu([]); setLCur('all'); setLOt([]); setLPs([]); setLInv([]); setDateFrom(d.from); setDateTo(d.to); setSu([]); setCur('all'); setOt([]); setPs([]); setInv([]); setChartFilter(null) }
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -175,7 +184,15 @@ export default function SalesPage() {
 
         {/* Header */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div><h1 className="text-2xl font-bold tracking-tight">Sales Performance Dashboard</h1><p className="text-sm text-muted-foreground">PT. Multi Daya Mitra</p></div>
+          <div className="flex flex-wrap items-center gap-4">
+            <div><h1 className="text-2xl font-bold tracking-tight">Sales Performance Dashboard</h1><p className="text-sm text-muted-foreground">PT. Multi Daya Mitra</p></div>
+            {chartFilter && (
+              <div className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary border border-primary/20">
+                <span className="text-muted-foreground">Filtered by:</span> {chartFilter.label}
+                <button onClick={() => setChartFilter(null)} className="ml-1 hover:bg-primary/20 rounded-full p-0.5"><div className="h-4 w-4 flex items-center justify-center">✕</div></button>
+              </div>
+            )}
+          </div>
           <div className="flex items-center gap-2">
             <ThemeToggle />
             <a href="/dashboard/sales/activities" className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"><ListTodo className="h-4 w-4" /> Sales Activities <ExternalLink className="h-3 w-3" /></a>
@@ -242,8 +259,8 @@ export default function SalesPage() {
                   <YAxis stroke="var(--muted-foreground)" tickFormatter={fmtRp} tickLine={false} axisLine={false} className="text-xs" />
                   <Tooltip content={<RevenueTooltip />} />
                   <ChartLegend content={<ChartLegendContent />} />
-                  <Bar dataKey="material" stackId="a" fill="var(--color-material)" name="Material" />
-                  <Bar dataKey="service" stackId="a" fill="var(--color-service)" name="Service" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="material" stackId="a" fill="var(--color-material)" name="Material" onClick={(d: any) => handleChartClick('revenueMonth', d.name, `Month = ${d.name}`)} style={{ cursor: 'pointer' }} />
+                  <Bar dataKey="service" stackId="a" fill="var(--color-service)" name="Service" radius={[4, 4, 0, 0]} onClick={(d: any) => handleChartClick('revenueMonth', d.name, `Month = ${d.name}`)} style={{ cursor: 'pointer' }} />
                 </BarChart>
               </ChartContainer>
             </CardContent>
@@ -257,6 +274,7 @@ export default function SalesPage() {
                 total={sByTypeTotal}
                 currency={cur === 'all' ? 'IDR' : cur}
                 formatValue={(v, n) => { const pct = sByTypeTotal > 0 ? (v / sByTypeTotal * 100).toFixed(1) : '0.0'; return `${fmtRp(v)} (${pct}%)` }}
+                onSliceClick={(name) => handleChartClick('salesType', name, `Type = ${name}`)}
               />
             </CardContent>
           </Card>
@@ -269,6 +287,7 @@ export default function SalesPage() {
                 total={poTotal}
                 currency={cur === 'all' ? 'IDR' : cur}
                 formatValue={(v, n) => { const pct = poTotal > 0 ? (v / poTotal * 100).toFixed(1) : '0.0'; return `${fmtRp(v)} (${pct}%)` }}
+                onSliceClick={(name) => handleChartClick('poType', name, `PO Type = ${name}`)}
               />
             </CardContent>
           </Card>
@@ -284,8 +303,8 @@ export default function SalesPage() {
                 <YAxis domain={[0, 100]} stroke="var(--muted-foreground)" tickFormatter={v => `${v}%`} tickLine={false} axisLine={false} className="text-xs" />
                 <Tooltip content={<PriceTooltip />} />
                 <ChartLegend content={<ChartLegendContent />} />
-                <Bar dataKey="material" stackId="a" fill="var(--color-material)" radius={[0, 0, 4, 4]} name="Material" />
-                <Bar dataKey="service" stackId="a" fill="var(--color-service)" radius={[4, 4, 0, 0]} name="Service" />
+                <Bar dataKey="material" stackId="a" fill="var(--color-material)" radius={[0, 0, 4, 4]} name="Material" onClick={(d: any) => handleChartClick('priceCompMonth', d.name, `Month = ${d.name}`)} style={{ cursor: 'pointer' }} />
+                <Bar dataKey="service" stackId="a" fill="var(--color-service)" radius={[4, 4, 0, 0]} name="Service" onClick={(d: any) => handleChartClick('priceCompMonth', d.name, `Month = ${d.name}`)} style={{ cursor: 'pointer' }} />
               </BarChart>
             </ChartContainer>
           </CardContent></Card>
@@ -296,6 +315,7 @@ export default function SalesPage() {
                 data={Object.entries(data.quotStatusBreakdown).map(([name, value]) => ({ name, value }))}
                 height={260}
                 donut={false}
+                onSliceClick={(name) => handleChartClick('quotStatus', name, `Quotation Status = ${name}`)}
               />
             </CardContent>
           </Card>
@@ -303,9 +323,11 @@ export default function SalesPage() {
 
         {/* Top Projects + Top Sales Persons */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          <Card className="lg:col-span-2 overflow-hidden">
+          <Card className="lg:col-span-2 overflow-hidden" id="sales-projects-table">
             <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <CardTitle className="text-sm font-semibold">Top Projects</CardTitle>
+              <div className="flex items-center gap-4">
+                <CardTitle className="text-sm font-semibold">Top Projects</CardTitle>
+              </div>
               <div className="flex flex-wrap items-center gap-2">
                 <div className="relative w-40"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" /><input type="text" placeholder="Search..." value={tableSearch} onChange={e => setTableSearch(e.target.value)} className="w-full rounded-lg border border-input bg-background pl-8 pr-3 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary" /></div>
                 <Select value={tCust} onValueChange={onSel(setTCust)}>

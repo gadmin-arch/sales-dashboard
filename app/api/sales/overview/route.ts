@@ -4,7 +4,7 @@ import { getProjectOrders, getOrderTypeLabelSync, getPeStatusLabelSync, getFinan
 import { getAllQuotations, getStatusLabel, loadRefMaps as loadQuotRefMaps, getAllQuotationTypes } from '@/database/repos/quotations'
 import { getAllSalesUsers } from '@/database/repos/sales-users'
 import { getAllCompanies } from '@/database/repos/companies'
-import { formatMonth, formatWeek, sortByPeriod, parseDate, parseMulti } from '@/lib/utils-date-currency'
+import { parseDate, formatMonth, formatWeek, sortByPeriod, filterDataByDateRange, parseMulti } from '@/lib/utils-date-currency'
 import type { Order, Quotation, SalesUser, Company } from '@/database'
 
 export async function GET(request: NextRequest) {
@@ -63,9 +63,9 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Apply filters
-    let filteredOrders = filterByDateRange(orders, dateFrom, dateTo)
-    let filteredQuotations = filterQuotationsByDate(quotations, dateFrom, dateTo)
+    // Filter orders and quotations by date
+    let filteredOrders = filterDataByDateRange(orders, (o) => o.prjPoDate, dateFrom, dateTo)
+    let filteredQuotations = filterDataByDateRange(quotations, (q) => q.qDate, dateFrom, dateTo)
 
     if (salesUser.length) {
       filteredOrders = filteredOrders.filter((o) =>
@@ -87,6 +87,34 @@ export async function GET(request: NextRequest) {
     }
     if (invoiceStatus.length) {
       filteredOrders = filteredOrders.filter((o) => invoiceStatus.includes(o.prjFStatus))
+    }
+
+    const cType = searchParams.get('cType')
+    const cVal = searchParams.get('cVal')
+    if (cType && cVal) {
+      if (cType === 'salesType') {
+        filteredOrders = filteredOrders.filter(o => getOrderTypeLabelSync(o.prjOtId) === cVal)
+        filteredQuotations = filteredQuotations.filter(q => getOrderTypeLabelSync(q.qType) === cVal)
+      }
+      if (cType === 'poType') {
+        if (cVal === 'PO Material') filteredOrders = filteredOrders.filter(o => o.prjPoMaterial > 0)
+        if (cVal === 'PO Service') filteredOrders = filteredOrders.filter(o => o.prjPoService > 0)
+      }
+      if (cType === 'revenueMonth') {
+        filteredOrders = filteredOrders.filter(o => {
+          const key = period === 'weekly' ? formatWeek(o.prjPoDate) : formatMonth(o.prjPoDate)
+          return key === cVal
+        })
+      }
+      if (cType === 'priceCompMonth') {
+        filteredOrders = filteredOrders.filter(o => {
+          const key = period === 'weekly' ? formatWeek(o.prjPoDate) : formatMonth(o.prjPoDate)
+          return key === cVal
+        })
+      }
+      if (cType === 'quotStatus') {
+        filteredQuotations = filteredQuotations.filter(q => getStatusLabel(q.qStatus) === cVal)
+      }
     }
 
     // ── KPIs ──
@@ -317,28 +345,4 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// ── helpers (using shared utils) ──
-
-function filterByDateRange(items: any[], from: string, to: string) {
-  if (!from && !to) return items
-  return items.filter((o: any) => {
-    if (!o.prjPoDate) return false
-    const d = parseDate(o.prjPoDate)
-    if (!d) return true
-    if (from && d < new Date(from)) return false
-    if (to && d > new Date(to + 'T23:59:59')) return false
-    return true
-  })
-}
-
-function filterQuotationsByDate(quots: any[], from: string, to: string) {
-  if (!from && !to) return quots
-  return quots.filter((q: any) => {
-    if (!q.qDate) return false
-    const d = parseDate(q.qDate)
-    if (!d) return true
-    if (from && d < new Date(from)) return false
-    if (to && d > new Date(to + 'T23:59:59')) return false
-    return true
-  })
-}
+// ──

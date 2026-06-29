@@ -1,0 +1,21 @@
+
+> my-project@0.1.0 dev
+> next dev
+
+▲ Next.js 16.2.6 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.100.61:3000
+- Environments: .env
+✓ Ready in 123ms
+⚠ Warning: Next.js inferred your workspace root, but it may not be correct.
+ We detected multiple lockfiles and selected the directory of /Users/irfanzuhdiabdillah/package-lock.json as the root directory.
+ To silence this warning, set `turbopack.root` in your Next.js config, or consider removing one of the lockfiles if it's not needed.
+   See https://nextjs.org/docs/app/api-reference/config/next-config-js/turbopack#root-directory for more information.
+ Detected additional lockfiles: 
+   * /Users/irfanzuhdiabdillah/Code/2026/sales-dashboard/pnpm-workspace.yaml
+
+
+ GET /dashboard/sales 200 in 395ms (next.js: 231ms, application-code: 165ms)
+ GET /api/sales/overview?dateFrom=2026-01-01&dateTo=2026-06-29&period=monthly&fresh=1 200 in 2.7s (next.js: 337ms, application-code: 2.3s)
+ GET /api/sales/overview 200 in 778ms (next.js: 4ms, application-code: 774ms)
+[?25h

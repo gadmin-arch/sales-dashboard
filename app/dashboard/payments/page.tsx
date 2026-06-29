@@ -14,6 +14,7 @@ import { DateRangeRow } from '@/components/date-range-row'
 import { LoadMore, useLoadMore } from '@/components/load-more'
 import { useSort, SortHead } from '@/components/sortable'
 import { fmtCurrency, buildQuery, sameSet, getYTD, Progress } from '@/lib/sales-helpers'
+import { useChartFilter } from '@/hooks/use-chart-filter'
 
 interface PaymentRow { payId: string; invNumber: string; prj: string; customer: string; date: string; currency: string; amount: number; remarks: string }
 interface PaymentData {
@@ -37,6 +38,7 @@ export default function PaymentsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
+  const { chartFilter, setChartFilter, handleChartClick } = useChartFilter('payments-table-section')
 
   const [dateFrom, setDateFrom] = useState(getYTD().from), [dateTo, setDateTo] = useState(getYTD().to)
   const [cust, setCust] = useState<string[]>([])
@@ -54,15 +56,23 @@ export default function PaymentsPage() {
   }, [])
 
   const firstLoad = useRef(true)
-  useEffect(() => { const fresh = firstLoad.current; firstLoad.current = false; doFetch({ dateFrom, dateTo, customer: cust, ...(fresh ? { fresh: '1' } : {}) }) }, [doFetch, dateFrom, dateTo, cust])
+  useEffect(() => { 
+    const fresh = firstLoad.current; firstLoad.current = false; 
+    doFetch({ 
+      dateFrom, dateTo, customer: cust, 
+      ...(chartFilter ? { cType: chartFilter.type, cVal: chartFilter.value } : {}),
+      ...(fresh ? { fresh: '1' } : {}) 
+    }) 
+  }, [doFetch, dateFrom, dateTo, cust, chartFilter])
   const onApply = () => { setDateFrom(lFrom); setDateTo(lTo); setCust(lCust) }
-  const onClear = () => { const d = getYTD(); setLFrom(d.from); setLTo(d.to); setLCust([]); setDateFrom(d.from); setDateTo(d.to); setCust([]) }
+  const onClear = () => { const d = getYTD(); setLFrom(d.from); setLTo(d.to); setLCust([]); setDateFrom(d.from); setDateTo(d.to); setCust([]); setChartFilter(null) }
 
   const tableRows = useMemo(() => {
     if (!data) return []
-    if (!search) return data.payments
+    let rows = data.payments
+    if (!search) return rows
     const q = search.toLowerCase()
-    return data.payments.filter(r => [r.invNumber, r.prj, r.customer, r.remarks].some(s => s?.toLowerCase().includes(q)))
+    return rows.filter(r => [r.invNumber, r.prj, r.customer, r.remarks].some(s => s?.toLowerCase().includes(q)))
   }, [data, search])
   const paySort = useSort(tableRows, 'date', 'desc')
   const payPage = useLoadMore(paySort.sorted)
@@ -79,7 +89,15 @@ export default function PaymentsPage() {
     <SalesPageShell>
       <div className="bg-background text-foreground min-h-screen space-y-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div><h1 className="text-2xl font-bold tracking-tight">Payment Dashboard</h1><p className="text-sm text-muted-foreground">PT. Multi Daya Mitra</p></div>
+          <div className="flex flex-wrap items-center gap-4">
+            <div><h1 className="text-2xl font-bold tracking-tight">Payment Dashboard</h1><p className="text-sm text-muted-foreground">PT. Multi Daya Mitra</p></div>
+            {chartFilter && (
+              <div className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary border border-primary/20">
+                <span className="text-muted-foreground">Filtered by:</span> {chartFilter.label}
+                <button onClick={() => setChartFilter(null)} className="ml-1 hover:bg-primary/20 rounded-full p-0.5"><div className="h-4 w-4 flex items-center justify-center">✕</div></button>
+              </div>
+            )}
+          </div>
           <ThemeToggle />
         </div>
 
@@ -123,7 +141,7 @@ export default function PaymentsPage() {
                   <XAxis dataKey="name" stroke="var(--muted-foreground)" tickLine={false} axisLine={{ stroke: 'var(--border)' }} className="text-xs" />
                   <YAxis stroke="var(--muted-foreground)" tickFormatter={fmtRp} tickLine={false} axisLine={false} className="text-xs" />
                   <Tooltip formatter={(v: any) => fmtRp(Number(v))} contentStyle={{ background: 'var(--background)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }} />
-                  <Bar dataKey="value" fill="var(--chart-2)" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="value" fill="var(--chart-2)" radius={[4, 4, 0, 0]} onClick={(data) => handleChartClick('month', String(data.name ?? ''), `Month = ${data.name}`)} style={{ cursor: 'pointer' }} />
                 </BarChart>
               </ChartContainer>
             </CardContent>
@@ -131,24 +149,26 @@ export default function PaymentsPage() {
           <Card>
             <CardHeader><CardTitle className="text-sm font-semibold">Top Customers</CardTitle></CardHeader>
             <CardContent className="space-y-3">
-              {data.byCustomer.length === 0 ? <p className="text-center text-muted-foreground py-8">No data</p> : data.byCustomer.slice(0, 8).map((c, i) => (
-                <div key={c.customer} className="flex items-center gap-3">
+              {data.byCustomer.length === 0 ? <p className="text-center text-muted-foreground py-8">No data</p> : data.byCustomer.slice(0, 8).map((c, i) => {
+                const isActive = chartFilter?.type === 'customer' && chartFilter.value === c.customer
+                return (
+                <div key={c.customer} className={`flex items-center gap-3 cursor-pointer p-2 rounded-lg -mx-2 transition-colors ${isActive ? 'bg-primary/10 ring-1 ring-primary/20' : 'hover:bg-muted/50'}`} onClick={() => handleChartClick('customer', c.customer, `Customer = ${c.customer}`)}>
                   <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-primary text-[10px] font-bold shrink-0">{i + 1}</div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold truncate">{c.customer}</p>
+                    <p className={`text-sm font-semibold truncate ${isActive ? 'text-primary' : ''}`}>{c.customer}</p>
                     <Progress value={(c.value / maxCust) * 100} className="mt-1" />
                   </div>
                   <div className="text-sm font-bold shrink-0">{fmtRp(c.value)}</div>
                 </div>
-              ))}
+              )})}
             </CardContent>
           </Card>
         </div>
 
         {/* Payments table */}
-        <Card className="overflow-hidden">
+        <Card className="overflow-hidden" id="payments-table-section">
           <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <CardTitle className="text-sm font-semibold">Payments <span className="font-normal text-muted-foreground">({data.totalRows.toLocaleString('id-ID')})</span></CardTitle>
+            <CardTitle className="text-sm font-semibold">Payments <span className="font-normal text-muted-foreground">({tableRows.length.toLocaleString('id-ID')}{tableRows.length !== data.totalRows ? ` of ${data.totalRows.toLocaleString('id-ID')}` : ''})</span></CardTitle>
             <div className="relative w-48"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" /><input type="text" placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)} className="w-full rounded-lg border border-input bg-background pl-8 pr-3 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary" /></div>
           </CardHeader>
           <CardContent className="p-0">
