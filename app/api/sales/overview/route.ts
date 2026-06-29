@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getProjectOrders, getOrderTypeLabelSync, loadRefMaps as loadOrderRefMaps, getAllOrderTypes } from '@/database/repos/orders'
+import { clearSheetCache } from '@/database/client'
+import { getProjectOrders, getOrderTypeLabelSync, getPeStatusLabelSync, getFinanceStatusLabelSync, loadRefMaps as loadOrderRefMaps, getAllOrderTypes, getAllPeStatuses, getAllFinanceStatuses } from '@/database/repos/orders'
 import { getAllQuotations, getStatusLabel, loadRefMaps as loadQuotRefMaps, getAllQuotationTypes } from '@/database/repos/quotations'
 import { getAllSalesUsers } from '@/database/repos/sales-users'
 import { getAllCompanies } from '@/database/repos/companies'
-import { formatMonth, formatWeek, sortByPeriod, parseDate } from '@/lib/utils-date-currency'
+import { formatMonth, formatWeek, sortByPeriod, parseDate, parseMulti } from '@/lib/utils-date-currency'
 import type { Order, Quotation, SalesUser, Company } from '@/database'
 
 export async function GET(request: NextRequest) {
@@ -12,11 +13,14 @@ export async function GET(request: NextRequest) {
 
   try {
     const { searchParams } = new URL(request.url)
+    if (searchParams.get('fresh') === '1') clearSheetCache()
     const dateFrom = searchParams.get('dateFrom') || ''
     const dateTo = searchParams.get('dateTo') || ''
-    const salesUser = searchParams.get('salesUser') || ''
+    const salesUser = parseMulti(searchParams, 'salesUser')
     const currency = searchParams.get('currency') || ''
-    const orderType = searchParams.get('orderType') || ''
+    const orderType = parseMulti(searchParams, 'orderType')
+    const projectStatus = parseMulti(searchParams, 'projectStatus')
+    const invoiceStatus = parseMulti(searchParams, 'invoiceStatus')
     const period = (searchParams.get('period') as 'monthly' | 'weekly') || 'monthly'
 
     await Promise.all([loadOrderRefMaps(), loadQuotRefMaps()])
@@ -63,19 +67,26 @@ export async function GET(request: NextRequest) {
     let filteredOrders = filterByDateRange(orders, dateFrom, dateTo)
     let filteredQuotations = filterQuotationsByDate(quotations, dateFrom, dateTo)
 
-    if (salesUser) {
-      filteredOrders = filteredOrders.filter((o) => {
-        return o.prjOwner === salesUser || orderToSalesOwner.get(o.prjId) === salesUser
-      })
-      filteredQuotations = filteredQuotations.filter((q) => q.qOwner === salesUser || q.createdBy === salesUser)
+    if (salesUser.length) {
+      filteredOrders = filteredOrders.filter((o) =>
+        salesUser.includes(o.prjOwner) || salesUser.includes(orderToSalesOwner.get(o.prjId) || '')
+      )
+      filteredQuotations = filteredQuotations.filter((q) => salesUser.includes(q.qOwner) || salesUser.includes(q.createdBy))
     }
     if (currency) {
       filteredOrders = filteredOrders.filter((o) => o.poCurrency === currency)
       filteredQuotations = filteredQuotations.filter((q) => q.qCurrency === currency)
     }
-    if (orderType) {
-      filteredOrders = filteredOrders.filter((o) => o.prjOtId === orderType)
-      filteredQuotations = filteredQuotations.filter((q) => q.qType === orderType)
+    if (orderType.length) {
+      filteredOrders = filteredOrders.filter((o) => orderType.includes(o.prjOtId))
+      filteredQuotations = filteredQuotations.filter((q) => orderType.includes(q.qType))
+    }
+    // Project status and invoice status are project-level attributes (orders only)
+    if (projectStatus.length) {
+      filteredOrders = filteredOrders.filter((o) => projectStatus.includes(o.prjPeStatus))
+    }
+    if (invoiceStatus.length) {
+      filteredOrders = filteredOrders.filter((o) => invoiceStatus.includes(o.prjFStatus))
     }
 
     // ── KPIs ──
@@ -146,6 +157,8 @@ export async function GET(request: NextRequest) {
           salesOwner: userMap.get(salesOwnerId || '')?.name || salesOwnerId || '-',
           customer: companyMap.get(customerId) || customerId || '-',
           type: getOrderTypeLabelSync(o.prjOtId),
+          projectStatus: getPeStatusLabelSync(o.prjPeStatus),
+          invoiceStatus: getFinanceStatusLabelSync(o.prjFStatus),
           currency: o.poCurrency,
           total: o.prjPoTotal,
           material: o.prjPoMaterial,
@@ -266,8 +279,10 @@ export async function GET(request: NextRequest) {
     for (const q of filteredQuotations) { if (q.qCurrency) currencySet.add(q.qCurrency) }
     const currencyList = Array.from(currencySet).sort()
 
-    // ── Order types for dropdown ──
+    // ── Order types / status lists for dropdowns ──
     const orderTypeList = await getAllOrderTypes()
+    const projectStatusList = await getAllPeStatuses()
+    const invoiceStatusList = await getAllFinanceStatuses()
 
     const result: any = {
       kpis: { totalProjects, totalSales, totalQuotations, totalQuotationValue },
@@ -283,6 +298,8 @@ export async function GET(request: NextRequest) {
       salesUserList,
       currencyList,
       orderTypeList,
+      projectStatusList,
+      invoiceStatusList,
     }
 
     // Debug: include raw data samples

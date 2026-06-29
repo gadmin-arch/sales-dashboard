@@ -92,4 +92,15 @@ export const GOOGLE_CONFIG = {
       opportunities: 'opportunities',
     },
   },
+
+  // Invoicing & payments data
+  invoicing: {
+    spreadsheetId: '1Ej9Ir2RB7hJ6OL1EP-XByHeke-V_iB0nvTbLlTCnUY8',
+    sheets: {
+      invoices: 'invoices',
+      invoiceDetails: 'invoice_details',
+      payments: 'payments',
+      paymentDetails: 'payment_details',
+    },
+  },
 } as const

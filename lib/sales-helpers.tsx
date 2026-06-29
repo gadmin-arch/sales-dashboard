@@ -48,8 +48,19 @@ export function getYTD() {
   }
 }
 
-// Quick date range presets
-export function getQuickDateRange(range: 'thisMonth' | 'last30' | '6month' | '1year' | 'lastYear' | 'YTD') {
+// Quick date range presets — single source of truth for keys + readable labels
+export type QuickRangeKey = 'thisMonth' | 'last30' | '6month' | '1year' | 'lastYear' | 'YTD'
+
+export const QUICK_RANGES: { key: QuickRangeKey; label: string }[] = [
+  { key: 'thisMonth', label: 'This Month' },
+  { key: 'last30', label: 'Last 30 Days' },
+  { key: '6month', label: '6 Months' },
+  { key: '1year', label: '1 Year' },
+  { key: 'lastYear', label: 'Last Year' },
+  { key: 'YTD', label: 'YTD' },
+]
+
+export function getQuickDateRange(range: QuickRangeKey) {
   const t = new Date()
   let f = ''
   let to = t.toLocaleDateString('en-CA')
@@ -75,4 +86,26 @@ export function getQuickDateRange(range: 'thisMonth' | 'last30' | '6month' | '1y
     to = `${ly}-12-31`
   }
   return { from: f, to }
+}
+
+// Order-insensitive equality for multi-select value arrays.
+export function sameSet(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false
+  const s = new Set(a)
+  return b.every((v) => s.has(v))
+}
+
+// Build a query string from filter params.
+// - string[]  → CSV, omitted when empty (multi-select: empty = "all")
+// - string    → omitted when falsy or 'all' (single-select / dates)
+export function buildQuery(params: Record<string, string | string[]>): string {
+  const q = new URLSearchParams()
+  for (const [k, v] of Object.entries(params)) {
+    if (Array.isArray(v)) {
+      if (v.length) q.set(k, v.join(','))
+    } else if (v && v !== 'all') {
+      q.set(k, v)
+    }
+  }
+  return q.toString()
 }

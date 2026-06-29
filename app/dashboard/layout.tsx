@@ -4,7 +4,7 @@ import { useAuth } from '@/lib/auth-context'
 import { useRouter, usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { BarChart3, FileText, CreditCard, FolderOpen, LogOut, Menu, X, ListTodo, Users } from 'lucide-react'
+import { BarChart3, FileText, CreditCard, FolderOpen, LogOut, Menu, X, ListTodo, Users, Lock } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface NavItem {
@@ -43,6 +43,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const visibleNavItems = user
     ? navItems.filter((item) => user.roles[item.role as keyof typeof user.roles])
     : navItems
+
+  // Route guard: match the current path to its nav item (most specific first)
+  // and block access if the logged-in user lacks the required role. This stops
+  // direct URL access to pages that are hidden from the menu.
+  const currentItem = [...navItems]
+    .sort((a, b) => b.href.length - a.href.length)
+    .find((item) => pathname === item.href || pathname.startsWith(item.href + '/'))
+  const accessDenied = Boolean(
+    user && currentItem && !user.roles[currentItem.role as keyof typeof user.roles]
+  )
+  const firstAllowed = visibleNavItems[0]?.href
 
   // Auth bypassed for development
   // if (!mounted || (!isLoading && !user && !localStorage.getItem('user'))) {
@@ -158,7 +169,27 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Main content — scrollable */}
       <main className="flex-1 overflow-y-auto pt-16 lg:pt-0">
         <div className="p-6 lg:p-8">
-          {children}
+          {accessDenied ? (
+            <div className="flex min-h-[70vh] flex-col items-center justify-center text-center">
+              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+                <Lock className="h-6 w-6" />
+              </div>
+              <h2 className="text-xl font-semibold text-foreground">Access Restricted</h2>
+              <p className="mt-2 max-w-sm text-sm text-muted-foreground">
+                You don&apos;t have permission to view this page. Please contact your administrator if you believe this is a mistake.
+              </p>
+              {firstAllowed && (
+                <Link
+                  href={firstAllowed}
+                  className="mt-6 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+                >
+                  Go to my dashboard
+                </Link>
+              )}
+            </div>
+          ) : (
+            children
+          )}
         </div>
       </main>
     </div>

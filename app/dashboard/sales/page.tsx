@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { cn } from '@/lib/utils'
 import { KPICard } from '@/components/kpi-card'
 import { ChartPeriodToggle } from '@/components/chart-period-toggle'
@@ -19,9 +19,12 @@ import {
   Progress,
   SortIcon,
   getYTD,
-  getQuickDateRange,
+  buildQuery,
+  sameSet,
 } from '@/lib/sales-helpers'
-import type { SortDir } from '@/lib/sales-helpers'
+import { MultiSelect } from '@/components/multi-select'
+import { DateRangeRow } from '@/components/date-range-row'
+import { LoadMore, useLoadMore } from '@/components/load-more'
 
 /* ── Types ── */
 interface SalesData {
@@ -31,13 +34,15 @@ interface SalesData {
   revenueTrend: { name: string; value: number; material: number; service: number }[]
   priceComposition: { name: string; material: number; service: number }[]
   poComposition: { name: string; value: number }[]
-  topProjects: { prjId: string; name: string; salesOwner: string; customer: string; type: string; currency: string; total: number; material: number; service: number; poDate: string }[]
+  topProjects: { prjId: string; name: string; salesOwner: string; customer: string; type: string; projectStatus: string; invoiceStatus: string; currency: string; total: number; material: number; service: number; poDate: string }[]
   topSalesPersons: { name: string; totalPrice: number; projectCount: number; quotationCount: number }[]
   summary: { type: string; quotationCount: number; projectCount: number; totalPrice: number; material: number; service: number }[]
   quotationSummary: { qType: string; totalQuotation: number; totalQuotationWon: number; wonPercentage: number; totalQuotationWonFinalPrice: number; totalQuotationValue: number; totalOrderPriceFromQuotation: number; orderToWonPricePercentage: number }[]
   salesUserList: { id: string; name: string; email: string }[]
   currencyList: string[]
   orderTypeList: { otId: string; otDescription: string }[]
+  projectStatusList: { pesId: string; pesDescription: string; pesLevel: number }[]
+  invoiceStatusList: { fsId: string; fsDescription: string }[]
 }
 
 type SortKey = 'prjId' | 'name' | 'customer' | 'salesOwner' | 'type' | 'total'
@@ -59,9 +64,13 @@ export default function SalesPage() {
 
   const getYTD = () => { const n = new Date(); return { from: new Date(n.getFullYear(), 0, 1).toLocaleDateString('en-CA'), to: new Date(n.getFullYear(), n.getMonth(), n.getDate()).toLocaleDateString('en-CA') } }
   const [dateFrom, setDateFrom] = useState(getYTD().from), [dateTo, setDateTo] = useState(getYTD().to)
-const [su, setSu] = useState('all'), [cur, setCur] = useState('all'), [ot, setOt] = useState('all')
-   const [lFrom, setLFrom] = useState(dateFrom), [lTo, setLTo] = useState(dateTo), [lSu, setLSu] = useState(su), [lCur, setLCur] = useState(cur), [lOt, setLOt] = useState(ot)
-   const [sortKey, setSortKey] = useState<SortKey>('total'), [sortDir, setSortDir] = useState<SortDir>('desc'), [page, setPage] = useState(1)
+  // Applied filters (currency stays single — it drives money formatting; the rest are multi-select)
+  const [cur, setCur] = useState('all')
+  const [su, setSu] = useState<string[]>([]), [ot, setOt] = useState<string[]>([]), [ps, setPs] = useState<string[]>([]), [inv, setInv] = useState<string[]>([])
+  // Draft (unapplied) filters
+  const [lFrom, setLFrom] = useState(dateFrom), [lTo, setLTo] = useState(dateTo), [lCur, setLCur] = useState(cur)
+  const [lSu, setLSu] = useState<string[]>([]), [lOt, setLOt] = useState<string[]>([]), [lPs, setLPs] = useState<string[]>([]), [lInv, setLInv] = useState<string[]>([])
+   const [sortKey, setSortKey] = useState<SortKey>('total'), [sortDir, setSortDir] = useState<SortDir>('desc')
 
    const fmtRp = useCallback((v: number) => fmtCurrency(v, cur === 'all' ? 'IDR' : cur), [cur])
 
@@ -110,34 +119,23 @@ const [su, setSu] = useState('all'), [cur, setCur] = useState('all'), [ot, setOt
     )
   }
 
-  const doFetch = useCallback(async (p: Record<string, string>) => {
+  const doFetch = useCallback(async (p: Record<string, string | string[]>) => {
     setLoading(true); setError(null)
     try {
-      const q = new URLSearchParams(); Object.entries(p).forEach(([k, v]) => { if (v && v !== 'all') q.set(k, v) })
-      const res = await fetch('/api/sales/overview?' + q.toString())
+      const res = await fetch('/api/sales/overview?' + buildQuery(p))
       if (!res.ok) throw new Error('Failed'); setData(await res.json())
     } catch (e) { setError(e instanceof Error ? e.message : 'Failed') } finally { setLoading(false) }
   }, [])
 
-  useEffect(() => { doFetch({ dateFrom, dateTo, salesUser: su, currency: cur, orderType: ot, period: chartPeriod }) }, [doFetch, dateFrom, dateTo, su, cur, ot, chartPeriod])
-  const onPeriod = (p: 'monthly' | 'weekly') => { setChartPeriod(p); doFetch({ dateFrom, dateTo, salesUser: su, currency: cur, orderType: ot, period: p }) }
-  const onApply = () => { setDateFrom(lFrom); setDateTo(lTo); setSu(lSu); setCur(lCur); setOt(lOt) }
-  const onClear = () => { const d = getYTD(); setLFrom(d.from); setLTo(d.to); setLSu('all'); setLCur('all'); setLOt('all'); setDateFrom(d.from); setDateTo(d.to); setSu('all'); setCur('all'); setOt('all') }
-  const setQuick = (r: 'thisMonth' | 'last30' | '6month' | '1year' | 'lastYear' | 'YTD') => {
-    const t = new Date(); let f = ''; let to = t.toLocaleDateString('en-CA')
-    if (r === 'YTD') f = `${t.getFullYear()}-01-01`
-    else if (r === 'thisMonth') f = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-01`
-    else if (r === 'last30') { const p = new Date(); p.setDate(t.getDate() - 30); f = p.toLocaleDateString('en-CA') }
-    else if (r === '6month') { const p = new Date(); p.setMonth(t.getMonth() - 6); f = p.toLocaleDateString('en-CA') }
-    else if (r === '1year') { const p = new Date(); p.setFullYear(t.getFullYear() - 1); f = p.toLocaleDateString('en-CA') }
-    else if (r === 'lastYear') { const ly = t.getFullYear() - 1; f = `${ly}-01-01`; to = `${ly}-12-31` }
-    setLFrom(f); setLTo(to)
-  }
+  const firstLoad = useRef(true)
+  useEffect(() => { const fresh = firstLoad.current; firstLoad.current = false; doFetch({ dateFrom, dateTo, salesUser: su, currency: cur, orderType: ot, projectStatus: ps, invoiceStatus: inv, period: chartPeriod, ...(fresh ? { fresh: '1' } : {}) }) }, [doFetch, dateFrom, dateTo, su, cur, ot, ps, inv, chartPeriod])
+  const onPeriod = (p: 'monthly' | 'weekly') => { setChartPeriod(p); doFetch({ dateFrom, dateTo, salesUser: su, currency: cur, orderType: ot, projectStatus: ps, invoiceStatus: inv, period: p }) }
+  const onApply = () => { setDateFrom(lFrom); setDateTo(lTo); setSu(lSu); setCur(lCur); setOt(lOt); setPs(lPs); setInv(lInv) }
+  const onClear = () => { const d = getYTD(); setLFrom(d.from); setLTo(d.to); setLSu([]); setLCur('all'); setLOt([]); setLPs([]); setLInv([]); setDateFrom(d.from); setDateTo(d.to); setSu([]); setCur('all'); setOt([]); setPs([]); setInv([]) }
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
     else { setSortKey(key); setSortDir('desc') }
-    setPage(1)
   }
 
   const filtered = useMemo(() => {
@@ -147,13 +145,14 @@ const [su, setSu] = useState('all'), [cur, setCur] = useState('all'), [ot, setOt
     if (tCust !== 'all') p = p.filter(x => x.customer === tCust)
     if (tOwner !== 'all') p = p.filter(x => x.salesOwner === tOwner)
     if (tType !== 'all') p = p.filter(x => x.type === tType)
-    p = p.sort((a, b) => {
+    p = [...p].sort((a, b) => {
       const aVal = a[sortKey], bVal = b[sortKey]
       if (typeof aVal === 'string' && typeof bVal === 'string') return sortDir === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal)
       return sortDir === 'asc' ? (aVal > bVal ? 1 : -1) : (bVal > aVal ? 1 : -1)
     })
-    return p.slice((page - 1) * 10, page * 10)
-  }, [data, tableSearch, tCust, tOwner, tType, sortKey, sortDir, page])
+    return p
+  }, [data, tableSearch, tCust, tOwner, tType, sortKey, sortDir])
+  const projPage = useLoadMore(filtered)
 
   const custs = useMemo(() => !data ? [] : [...new Set(data.topProjects.map(p => p.customer).filter(Boolean))].sort(), [data])
   const owners = useMemo(() => !data ? [] : [...new Set(data.topProjects.map(p => p.salesOwner).filter(Boolean))].sort(), [data])
@@ -186,40 +185,38 @@ const [su, setSu] = useState('all'), [cur, setCur] = useState('all'), [ot, setOt
 
         {/* Filters */}
         <Card><CardContent className="pt-5">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3 lg:grid-cols-5 items-start">
-            <div className="space-y-1.5 md:col-span-2 lg:col-span-1">
-              <label className="text-xs font-medium text-muted-foreground">Date Range</label>
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                <input type="date" value={lFrom} onChange={e => setLFrom(e.target.value)} className="w-[120px] rounded-lg border border-input bg-background px-2 py-1.5 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary" />
-                <span className="text-xs text-muted-foreground">—</span>
-                <input type="date" value={lTo} onChange={e => setLTo(e.target.value)} className="w-[120px] rounded-lg border border-input bg-background px-2 py-1.5 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary" />
-              </div>
-              <div className="flex flex-wrap gap-1">{(['thisMonth', 'last30', '6month', '1year', 'lastYear', 'YTD'] as const).map(r => <Button key={r} variant="outline" size="xs" onClick={() => setQuick(r)}>{r === 'last30' ? '30d' : r === '6month' ? '6mo' : r === '1year' ? '1yr' : r === 'lastYear' ? 'LY' : r === 'thisMonth' ? 'MTD' : 'YTD'}</Button>)}</div>
-            </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5 items-start">
             <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Sales Owner</label>
-              <Select value={lSu} onValueChange={onSel(setLSu)}>
-                <SelectTrigger><SelectValue>{lSu === 'all' ? 'All Sales Owners' : data.salesUserList.find(u => u.id === lSu)?.name ?? lSu}</SelectValue></SelectTrigger>
-                <SelectContent><SelectItem value="all">All Sales Owners</SelectItem>{data.salesUserList.map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}</SelectContent>
-              </Select>
+              <MultiSelect allLabel="All Sales Owners" selected={lSu} onChange={setLSu}
+                options={data.salesUserList.map(u => ({ value: u.id, label: u.name }))} />
             </div>
             <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Currency</label>
               <Select value={lCur} onValueChange={onSel(setLCur)}>
-                <SelectTrigger><SelectValue>{lCur === 'all' ? 'All Currencies' : lCur}</SelectValue></SelectTrigger>
+                <SelectTrigger className="w-full"><SelectValue>{lCur === 'all' ? 'All Currencies' : lCur}</SelectValue></SelectTrigger>
                 <SelectContent><SelectItem value="all">All Currencies</SelectItem>{data.currencyList.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Order Type</label>
-              <Select value={lOt} onValueChange={onSel(setLOt)}>
-                <SelectTrigger><SelectValue>{lOt === 'all' ? 'All Order Types' : data.orderTypeList.find(o => o.otId === lOt)?.otDescription ?? lOt}</SelectValue></SelectTrigger>
-                <SelectContent><SelectItem value="all">All Order Types</SelectItem>{data.orderTypeList.map(o => <SelectItem key={o.otId} value={o.otId}>{o.otDescription}</SelectItem>)}</SelectContent>
-              </Select>
+              <MultiSelect allLabel="All Order Types" selected={lOt} onChange={setLOt}
+                options={data.orderTypeList.map(o => ({ value: o.otId, label: o.otDescription }))} />
             </div>
+            <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Project Status</label>
+              <MultiSelect allLabel="All Project Statuses" selected={lPs} onChange={setLPs}
+                options={data.projectStatusList.map(p => ({ value: p.pesId, label: p.pesDescription }))} />
+            </div>
+            <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Invoice Status</label>
+              <MultiSelect allLabel="All Invoice Statuses" selected={lInv} onChange={setLInv}
+                options={data.invoiceStatusList.map(f => ({ value: f.fsId, label: f.fsDescription }))} />
+            </div>
+          </div>
+          <div className="mt-4 border-t border-border pt-4">
+            <DateRangeRow from={lFrom} to={lTo} onChange={(f, t) => { setLFrom(f); setLTo(t) }} />
           </div>
           <div className="mt-4 flex justify-end gap-2 border-t border-border pt-3">
             <Button variant="outline" size="sm" onClick={onClear}>Clear</Button>
             <Button size="sm" onClick={onApply} className="relative">
               Apply Filters
-              {(lFrom !== dateFrom || lTo !== dateTo || lSu !== su || lCur !== cur || lOt !== ot) && <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-orange-500 border-2 border-background" />}
+              {(lFrom !== dateFrom || lTo !== dateTo || lCur !== cur || !sameSet(lSu, su) || !sameSet(lOt, ot) || !sameSet(lPs, ps) || !sameSet(lInv, inv)) && <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-orange-500 border-2 border-background" />}
             </Button>
           </div>
           {loading && data && <div className="w-full h-1 bg-border overflow-hidden rounded-full mt-3"><div className="h-1/3 bg-primary rounded-full loading-bar-inner" /></div>}
@@ -310,16 +307,16 @@ const [su, setSu] = useState('all'), [cur, setCur] = useState('all'), [ot, setOt
             <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <CardTitle className="text-sm font-semibold">Top Projects</CardTitle>
               <div className="flex flex-wrap items-center gap-2">
-                <div className="relative w-40"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" /><input type="text" placeholder="Search..." value={tableSearch} onChange={e => { setTableSearch(e.target.value); setPage(1) }} className="w-full rounded-lg border border-input bg-background pl-8 pr-3 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary" /></div>
-                <Select value={tCust} onValueChange={v => { onSel(setTCust)(v, {} as any); setPage(1) }}>
+                <div className="relative w-40"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" /><input type="text" placeholder="Search..." value={tableSearch} onChange={e => setTableSearch(e.target.value)} className="w-full rounded-lg border border-input bg-background pl-8 pr-3 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary" /></div>
+                <Select value={tCust} onValueChange={onSel(setTCust)}>
                   <SelectTrigger className="w-28 h-7 text-xs"><SelectValue>{tCust === 'all' ? 'All Customers' : tCust}</SelectValue></SelectTrigger>
                   <SelectContent><SelectItem value="all">All Customers</SelectItem>{custs.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
                 </Select>
-                <Select value={tOwner} onValueChange={v => { onSel(setTOwner)(v, {} as any); setPage(1) }}>
+                <Select value={tOwner} onValueChange={onSel(setTOwner)}>
                   <SelectTrigger className="w-28 h-7 text-xs"><SelectValue>{tOwner === 'all' ? 'All Owners' : tOwner}</SelectValue></SelectTrigger>
                   <SelectContent><SelectItem value="all">All Owners</SelectItem>{owners.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
                 </Select>
-                <Select value={tType} onValueChange={v => { onSel(setTType)(v, {} as any); setPage(1) }}>
+                <Select value={tType} onValueChange={onSel(setTType)}>
                   <SelectTrigger className="w-24 h-7 text-xs"><SelectValue>{tType === 'all' ? 'All Types' : tType}</SelectValue></SelectTrigger>
                   <SelectContent><SelectItem value="all">All Types</SelectItem>{types.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
                 </Select>
@@ -336,7 +333,7 @@ const [su, setSu] = useState('all'), [cur, setCur] = useState('all'), [ot, setOt
                   <TableHead className={thClass} onClick={() => handleSort('total')}>Total <SortIcon column="total" sortKey={sortKey} sortDir={sortDir} /></TableHead>
                 </TableRow></TableHeader>
                 <TableBody>
-                  {filtered.length === 0 ? <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No projects found</TableCell></TableRow> : filtered.map(p => (
+                  {filtered.length === 0 ? <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No projects found</TableCell></TableRow> : projPage.visible.map(p => (
                     <TableRow key={p.prjId}>
                       <TableCell className="text-xs font-semibold text-primary">{p.prjId}</TableCell>
                       <TableCell className="max-w-[140px] truncate" title={p.name}>{p.name}</TableCell>
@@ -348,6 +345,7 @@ const [su, setSu] = useState('all'), [cur, setCur] = useState('all'), [ot, setOt
                   ))}
                 </TableBody>
               </Table>
+              <LoadMore hasMore={projPage.hasMore} shown={projPage.shown} total={projPage.total} onClick={projPage.loadMore} onLoadAll={projPage.loadAll} onCollapse={projPage.collapse} />
             </CardContent>
           </Card>
 

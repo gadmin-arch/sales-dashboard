@@ -46,6 +46,14 @@ export function sortByPeriod<T>(data: Record<string, T>, period: 'monthly' | 'we
   return Object.entries(data).sort(([a], [b]) => period === 'weekly' ? parseWeekKey(a) - parseWeekKey(b) : parseMonthKey(a) - parseMonthKey(b))
 }
 
+// Parse a (possibly multi-value) query param into a string[].
+// Accepts CSV ("a,b,c") and repeated params (?k=a&k=b). Empty → [].
+export function parseMulti(searchParams: URLSearchParams, key: string): string[] {
+  const all = searchParams.getAll(key)
+  const raw = all.length > 1 ? all : (all[0]?.split(',') ?? [])
+  return raw.map((s) => s.trim()).filter(Boolean)
+}
+
 // Currency utilities
 export function formatCurrency(value: number, currency = 'IDR'): string {
   const prefix = currency === 'USD' ? '$ ' : currency === 'EUR' ? '€ ' : currency === 'SGD' ? 'SGD ' : 'IDR '

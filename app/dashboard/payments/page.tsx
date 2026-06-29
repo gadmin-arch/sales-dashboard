@@ -1,430 +1,187 @@
 'use client'
 
-import { useState, useMemo } from 'react'
-import { ChevronDown, Filter, X } from 'lucide-react'
-import {
-  useInvoices,
-  usePaymentSummary,
-  useInvoiceVsPaymentTrend,
-  useDSO,
-  useCollectionRate,
-} from '@/lib/hooks'
-import { DateRangeFilter } from '@/components/date-range-filter'
-import { ChartPeriodToggle } from '@/components/chart-period-toggle'
-import { StatusBadge } from '@/components/status-badge'
-import { SummaryCard } from '@/components/summary-card'
-import {
-  LineChart,
-  Line,
-  BarChart,
-  Bar,
-  PieChart,
-  Pie,
-  Cell,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from 'recharts'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { KPICard } from '@/components/kpi-card'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { ChartContainer } from '@/components/ui/chart'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts'
+import { DollarSign, Wallet, Hash, Calendar, Loader2, Search } from 'lucide-react'
+import { ThemeToggle, SalesPageShell } from '@/components/theme-toggle'
+import { MultiSelect } from '@/components/multi-select'
+import { DateRangeRow } from '@/components/date-range-row'
+import { LoadMore, useLoadMore } from '@/components/load-more'
+import { useSort, SortHead } from '@/components/sortable'
+import { fmtCurrency, buildQuery, sameSet, getYTD, Progress } from '@/lib/sales-helpers'
 
-export default function PaymentsDashboard() {
-  const allInvoices = useInvoices()
-  const paymentSummary = usePaymentSummary(allInvoices)
-  const trendData = useInvoiceVsPaymentTrend(allInvoices)
-  const dso = useDSO(allInvoices)
-  const collectionRate = useCollectionRate(allInvoices)
+interface PaymentRow { payId: string; invNumber: string; prj: string; customer: string; date: string; currency: string; amount: number; remarks: string }
+interface PaymentData {
+  kpis: { totalCollected: number; paymentsThisMonth: number; paymentCount: number; avgPayment: number }
+  trend: { name: string; value: number }[]
+  byCustomer: { customer: string; value: number }[]
+  payments: PaymentRow[]
+  totalRows: number
+  filterOptions: { customerList: { value: string; label: string }[] }
+}
 
-  const getYTDDateRange = () => {
-    const now = new Date()
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-    const start = new Date(now.getFullYear(), 0, 1)
-    return [start, today] as [Date, Date]
-  }
+function fmtDate(d: string): string {
+  if (!d) return '-'
+  const m = d.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+  const date = m ? new Date(+m[3], +m[1] - 1, +m[2]) : new Date(d)
+  return isNaN(date.getTime()) ? d : date.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })
+}
 
-  // Filter states
-  const [statusFilter, setStatusFilter] = useState<string>('all')
-  const [customerFilter, setCustomerFilter] = useState<string>('all')
-  const [dateRange, setDateRange] = useState<[Date | null, Date | null]>(getYTDDateRange())
-  const [showFilters, setShowFilters] = useState(false)
-  const [chartPeriod, setChartPeriod] = useState<'monthly' | 'weekly'>('monthly')
+export default function PaymentsPage() {
+  const [data, setData] = useState<PaymentData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
 
-  const customers = useMemo(
-    () => Array.from(new Map(allInvoices.map((inv) => [inv.customerId, inv.customer])).values()),
-    [allInvoices]
-  )
+  const [dateFrom, setDateFrom] = useState(getYTD().from), [dateTo, setDateTo] = useState(getYTD().to)
+  const [cust, setCust] = useState<string[]>([])
+  const [lFrom, setLFrom] = useState(dateFrom), [lTo, setLTo] = useState(dateTo), [lCust, setLCust] = useState<string[]>([])
 
-  // Filter invoices with payments
-  const filteredPayments = useMemo(() => {
-    return allInvoices.filter((invoice) => {
-      if (statusFilter !== 'all' && invoice.status !== statusFilter) return false
-      if (customerFilter !== 'all' && invoice.customerId !== customerFilter) return false
+  const fmtRp = useCallback((v: number) => fmtCurrency(v, 'IDR'), [])
 
-      if (dateRange[0] || dateRange[1]) {
-        if (!invoice.paymentDate) return false
-        const payDate = new Date(invoice.paymentDate)
-        if (dateRange[0] && payDate < dateRange[0]) return false
-        if (dateRange[1] && payDate > dateRange[1]) return false
-      }
+  const doFetch = useCallback(async (p: Record<string, string | string[]>) => {
+    setLoading(true); setError(null)
+    try {
+      const res = await fetch('/api/payments?' + buildQuery(p))
+      if (!res.ok) throw new Error('Failed to load data')
+      setData(await res.json())
+    } catch (e) { setError(e instanceof Error ? e.message : 'Failed to load data') } finally { setLoading(false) }
+  }, [])
 
-      return true
-    })
-  }, [allInvoices, statusFilter, customerFilter, dateRange])
+  const firstLoad = useRef(true)
+  useEffect(() => { const fresh = firstLoad.current; firstLoad.current = false; doFetch({ dateFrom, dateTo, customer: cust, ...(fresh ? { fresh: '1' } : {}) }) }, [doFetch, dateFrom, dateTo, cust])
+  const onApply = () => { setDateFrom(lFrom); setDateTo(lTo); setCust(lCust) }
+  const onClear = () => { const d = getYTD(); setLFrom(d.from); setLTo(d.to); setLCust([]); setDateFrom(d.from); setDateTo(d.to); setCust([]) }
 
-  // Payment method distribution
-  const paymentMethodDistribution = useMemo(() => {
-    const methods: Record<string, number> = {}
-    allInvoices
-      .filter((inv) => inv.paymentDate)
-      .forEach((invoice) => {
-        const method = invoice.paymentMethod || 'Unknown'
-        methods[method] = (methods[method] || 0) + invoice.amount
-      })
+  const tableRows = useMemo(() => {
+    if (!data) return []
+    if (!search) return data.payments
+    const q = search.toLowerCase()
+    return data.payments.filter(r => [r.invNumber, r.prj, r.customer, r.remarks].some(s => s?.toLowerCase().includes(q)))
+  }, [data, search])
+  const paySort = useSort(tableRows, 'date', 'desc')
+  const payPage = useLoadMore(paySort.sorted)
 
-    return Object.entries(methods).map(([name, value]) => ({
-      name,
-      value,
-    }))
-  }, [allInvoices])
+  const hasUnapplied = lFrom !== dateFrom || lTo !== dateTo || !sameSet(lCust, cust)
 
-  const formatCurrency = (amount: number) => {
-    return `Rp${(amount / 1000000).toLocaleString('id-ID')}`
-  }
+  if (loading && !data) return <div className="flex items-center justify-center min-h-[80vh]"><Loader2 className="animate-spin h-8 w-8 text-primary" /></div>
+  if (error && !data) return <div className="flex flex-col items-center justify-center min-h-[80vh] space-y-4"><p className="text-destructive">{error}</p><Button onClick={onClear}>Retry</Button></div>
+  if (!data) return null
 
-  const formatDate = (date: Date) => {
-    return new Date(date).toLocaleDateString('id-ID', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    })
-  }
-
-  const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
-
-  const hasActiveFilters =
-    statusFilter !== 'all' ||
-    customerFilter !== 'all' ||
-    dateRange[0] ||
-    dateRange[1]
+  const maxCust = data.byCustomer[0]?.value || 1
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-slate-900">Payment Dashboard</h1>
-        <p className="mt-2 text-slate-600">Track payment collection, methods, and cash flow</p>
-      </div>
+    <SalesPageShell>
+      <div className="bg-background text-foreground min-h-screen space-y-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div><h1 className="text-2xl font-bold tracking-tight">Payment Dashboard</h1><p className="text-sm text-muted-foreground">PT. Multi Daya Mitra</p></div>
+          <ThemeToggle />
+        </div>
 
-      {/* Filters Section - Top */}
-      <div className="rounded-lg border border-slate-200 bg-white p-4">
-        <button
-          onClick={() => setShowFilters(!showFilters)}
-          className="flex w-full items-center justify-between lg:hidden"
-        >
-          <div className="flex items-center gap-2">
-            <Filter className="h-5 w-5 text-slate-600" />
-            <span className="font-semibold text-slate-900">Filters</span>
+        {/* Filters */}
+        <Card><CardContent className="pt-5">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 items-start">
+            <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Customer</label>
+              <MultiSelect allLabel="All Customers" selected={lCust} onChange={setLCust}
+                options={data.filterOptions.customerList} />
+            </div>
           </div>
-          <ChevronDown
-            className={`h-5 w-5 text-slate-600 transition-transform ${
-              showFilters ? 'rotate-180' : ''
-            }`}
-          />
-        </button>
-
-        <div className={`space-y-4 pt-4 lg:flex lg:space-y-0 lg:gap-4 lg:pt-0 ${
-          !showFilters && 'hidden lg:flex'
-        }`}>
-          {/* Status Filter */}
-          <div className="flex-1">
-            <label className="block text-sm font-semibold text-slate-700">Payment Status</label>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-4 py-2 text-slate-900 outline-none"
-            >
-              <option value="all">All Status</option>
-              <option value="paid">Paid</option>
-              <option value="due">Due</option>
-              <option value="overdue">Overdue</option>
-            </select>
+          <div className="mt-4 border-t border-border pt-4">
+            <DateRangeRow from={lFrom} to={lTo} onChange={(f, t) => { setLFrom(f); setLTo(t) }} />
           </div>
+          <div className="mt-4 flex justify-end gap-2 border-t border-border pt-3">
+            <Button variant="outline" size="sm" onClick={onClear}>Clear</Button>
+            <Button size="sm" onClick={onApply} className="relative">
+              Apply Filters
+              {hasUnapplied && <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-orange-500 border-2 border-background" />}
+            </Button>
+          </div>
+          {loading && data && <div className="w-full h-1 bg-border overflow-hidden rounded-full mt-3"><div className="h-1/3 bg-primary rounded-full loading-bar-inner" /></div>}
+        </CardContent></Card>
 
-          {/* Customer Filter */}
-          <div className="flex-1">
-            <label className="block text-sm font-semibold text-slate-700">Customer</label>
-            <select
-              value={customerFilter}
-              onChange={(e) => setCustomerFilter(e.target.value)}
-              className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-4 py-2 text-slate-900 outline-none"
-            >
-              <option value="all">All Customers</option>
-              {customers.map((customer) => (
-                <option key={customer.id} value={customer.id}>
-                  {customer.name}
-                </option>
+        {/* KPIs */}
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <KPICard title="Total Collected" value={fmtRp(data.kpis.totalCollected)} icon={<Wallet className="h-4 w-4" />} />
+          <KPICard title="Collected This Month" value={fmtRp(data.kpis.paymentsThisMonth)} icon={<Calendar className="h-4 w-4" />} />
+          <KPICard title="Payments" value={data.kpis.paymentCount.toLocaleString('id-ID')} icon={<Hash className="h-4 w-4" />} />
+          <KPICard title="Avg Payment" value={fmtRp(data.kpis.avgPayment)} icon={<DollarSign className="h-4 w-4" />} />
+        </div>
+
+        {/* Charts */}
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <Card className="lg:col-span-2">
+            <CardHeader><CardTitle className="text-sm font-semibold">Collection Trend</CardTitle></CardHeader>
+            <CardContent>
+              <ChartContainer config={{}} className="h-[280px] w-full">
+                <BarChart data={data.trend} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                  <XAxis dataKey="name" stroke="var(--muted-foreground)" tickLine={false} axisLine={{ stroke: 'var(--border)' }} className="text-xs" />
+                  <YAxis stroke="var(--muted-foreground)" tickFormatter={fmtRp} tickLine={false} axisLine={false} className="text-xs" />
+                  <Tooltip formatter={(v: any) => fmtRp(Number(v))} contentStyle={{ background: 'var(--background)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }} />
+                  <Bar dataKey="value" fill="var(--chart-2)" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ChartContainer>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader><CardTitle className="text-sm font-semibold">Top Customers</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              {data.byCustomer.length === 0 ? <p className="text-center text-muted-foreground py-8">No data</p> : data.byCustomer.slice(0, 8).map((c, i) => (
+                <div key={c.customer} className="flex items-center gap-3">
+                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-primary text-[10px] font-bold shrink-0">{i + 1}</div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold truncate">{c.customer}</p>
+                    <Progress value={(c.value / maxCust) * 100} className="mt-1" />
+                  </div>
+                  <div className="text-sm font-bold shrink-0">{fmtRp(c.value)}</div>
+                </div>
               ))}
-            </select>
-          </div>
+            </CardContent>
+          </Card>
         </div>
 
-        {/* Date Range Filter - Full Width */}
-        <div className={`mt-4 pt-4 border-t border-slate-200 ${!showFilters && 'hidden lg:block'}`}>
-          <DateRangeFilter
-            label="Payment Date Range"
-            startDate={dateRange[0]}
-            endDate={dateRange[1]}
-            onStartDateChange={(date) => setDateRange([date, dateRange[1]])}
-            onEndDateChange={(date) => setDateRange([dateRange[0], date])}
-            onClear={() => setDateRange([null, null])}
-          />
-        </div>
-
-        {/* Reset Button */}
-        {hasActiveFilters && (
-          <div className="mt-4">
-            <button
-              onClick={() => {
-                setStatusFilter('all')
-                setCustomerFilter('all')
-                setDateRange(getYTDDateRange())
-              }}
-              className="flex items-center gap-2 rounded-lg bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200"
-            >
-              <X className="h-4 w-4" />
-              Reset Filters
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-5">
-        <SummaryCard
-          label="Total Paid"
-          value={paymentSummary.totalPaid}
-          icon={
-            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          }
-          color="green"
-        />
-        <SummaryCard
-          label="Pending Payments"
-          value={paymentSummary.totalOutstanding}
-          icon={
-            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          }
-          color="amber"
-        />
-        <SummaryCard
-          label="Collection Rate"
-          value={`${collectionRate}%`}
-          icon={
-            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4a1 1 0 011-1h16a1 1 0 011 1v2.757a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.757a1 1 0 00-.293-.707L3.293 7.464A1 1 0 013 6.757V4z" />
-            </svg>
-          }
-          color="blue"
-        />
-        <SummaryCard
-          label="DSO (Days)"
-          value={dso}
-          icon={
-            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-          }
-          color="blue"
-        />
-        <SummaryCard
-          label="Total Outstanding"
-          value={paymentSummary.overdueCount}
-          icon={
-            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4v.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          }
-          color="red"
-        />
-      </div>
-
-      {/* Charts Section */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* Invoice vs Payment Trend */}
-        <div className="rounded-lg border border-slate-200 bg-white p-6">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-slate-900">Invoice vs Payment Monthly Trend</h2>
-            <ChartPeriodToggle period={chartPeriod} onPeriodChange={setChartPeriod} />
-          </div>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={trendData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="month" />
-              <YAxis />
-              <Tooltip formatter={(value) => formatCurrency(value)} />
-              <Legend />
-              <Bar dataKey="Invoice" fill="#3b82f6" />
-              <Bar dataKey="Payment" fill="#10b981" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Payment Method Distribution */}
-        <div className="rounded-lg border border-slate-200 bg-white p-6">
-          <h2 className="mb-4 text-lg font-semibold text-slate-900">Payment Methods</h2>
-          <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
-              <Pie
-                data={paymentMethodDistribution}
-                dataKey="value"
-                nameKey="name"
-                cx="50%"
-                cy="50%"
-                outerRadius={100}
-              >
-                {paymentMethodDistribution.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip formatter={(value) => formatCurrency(value)} />
-              <Legend />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Payment Status Distribution */}
-        <div className="rounded-lg border border-slate-200 bg-white p-6">
-          <h2 className="mb-4 text-lg font-semibold text-slate-900">Payment Status Distribution</h2>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart
-              data={[
-                {
-                  status: 'Paid',
-                  amount: allInvoices.filter((inv) => inv.status === 'paid').reduce((sum, inv) => sum + inv.amount, 0),
-                  count: allInvoices.filter((inv) => inv.status === 'paid').length,
-                },
-                {
-                  status: 'Due',
-                  amount: allInvoices.filter((inv) => inv.status === 'due').reduce((sum, inv) => sum + inv.amount, 0),
-                  count: allInvoices.filter((inv) => inv.status === 'due').length,
-                },
-                {
-                  status: 'Overdue',
-                  amount: allInvoices.filter((inv) => inv.status === 'overdue').reduce((sum, inv) => sum + inv.amount, 0),
-                  count: allInvoices.filter((inv) => inv.status === 'overdue').length,
-                },
-              ]}
-            >
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="status" />
-              <YAxis />
-              <Tooltip formatter={(value) => formatCurrency(value)} />
-              <Legend />
-              <Bar dataKey="amount" fill="#3b82f6" name="Amount" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Collection Efficiency */}
-        <div className="rounded-lg border border-slate-200 bg-white p-6">
-          <h2 className="mb-4 text-lg font-semibold text-slate-900">Collection Summary</h2>
-          <div className="space-y-4">
-            <div>
-              <div className="flex justify-between mb-2">
-                <span className="text-sm font-semibold text-slate-700">Collection Rate</span>
-                <span className="text-sm font-bold text-slate-900">{collectionRate}%</span>
-              </div>
-              <div className="h-3 w-full rounded-full bg-slate-200 overflow-hidden">
-                <div
-                  className="h-full bg-green-500 rounded-full"
-                  style={{ width: `${collectionRate}%` }}
-                />
-              </div>
+        {/* Payments table */}
+        <Card className="overflow-hidden">
+          <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <CardTitle className="text-sm font-semibold">Payments <span className="font-normal text-muted-foreground">({data.totalRows.toLocaleString('id-ID')})</span></CardTitle>
+            <div className="relative w-48"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" /><input type="text" placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)} className="w-full rounded-lg border border-input bg-background pl-8 pr-3 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary" /></div>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader><TableRow>
+                  <SortHead label="Invoice #" column="invNumber" sortKey={paySort.sortKey} sortDir={paySort.sortDir} onSort={paySort.toggle} />
+                  <SortHead label="Order #" column="prj" sortKey={paySort.sortKey} sortDir={paySort.sortDir} onSort={paySort.toggle} />
+                  <SortHead label="Customer" column="customer" sortKey={paySort.sortKey} sortDir={paySort.sortDir} onSort={paySort.toggle} />
+                  <SortHead label="Date" column="date" sortKey={paySort.sortKey} sortDir={paySort.sortDir} onSort={paySort.toggle} />
+                  <SortHead label="Currency" column="currency" sortKey={paySort.sortKey} sortDir={paySort.sortDir} onSort={paySort.toggle} />
+                  <SortHead label="Amount" column="amount" sortKey={paySort.sortKey} sortDir={paySort.sortDir} onSort={paySort.toggle} className="text-right" />
+                  <TableHead className="text-xs font-medium text-muted-foreground">Remarks</TableHead>
+                </TableRow></TableHeader>
+                <TableBody>
+                  {tableRows.length === 0 ? <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">No payments found</TableCell></TableRow> : payPage.visible.map(r => (
+                    <TableRow key={r.payId}>
+                      <TableCell className="max-w-[170px] whitespace-normal break-words align-top text-xs font-semibold text-primary">{r.invNumber}</TableCell>
+                      <TableCell className="max-w-[130px] whitespace-normal break-words align-top text-xs text-muted-foreground">{r.prj}</TableCell>
+                      <TableCell className="max-w-[160px] whitespace-normal break-words align-top font-medium">{r.customer}</TableCell>
+                      <TableCell className="text-muted-foreground">{fmtDate(r.date)}</TableCell>
+                      <TableCell className="text-muted-foreground">{r.currency}</TableCell>
+                      <TableCell className="text-right font-medium chart-2">{fmtRp(r.amount)}</TableCell>
+                      <TableCell className="max-w-[280px] truncate text-xs text-muted-foreground" title={r.remarks}>{r.remarks || '-'}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </div>
-            <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-200">
-              <div>
-                <p className="text-xs text-slate-600">Total Invoiced</p>
-                <p className="mt-1 text-lg font-bold text-slate-900">
-                  {formatCurrency(paymentSummary.totalInvoiced)}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-slate-600">Total Collected</p>
-                <p className="mt-1 text-lg font-bold text-green-600">
-                  {formatCurrency(paymentSummary.totalPaid)}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
+            <LoadMore hasMore={payPage.hasMore} shown={payPage.shown} total={payPage.total} onClick={payPage.loadMore} onLoadAll={payPage.loadAll} onCollapse={payPage.collapse} />
+          </CardContent>
+        </Card>
       </div>
-
-      {/* Payments Table */}
-      <div className="rounded-lg border border-slate-200 bg-white overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50">
-              <tr>
-                <th className="px-6 py-4 text-left font-semibold text-slate-700">Invoice #</th>
-                <th className="px-6 py-4 text-left font-semibold text-slate-700">Customer</th>
-                <th className="px-6 py-4 text-left font-semibold text-slate-700">Invoice Date</th>
-                <th className="px-6 py-4 text-left font-semibold text-slate-700">Due Date</th>
-                <th className="px-6 py-4 text-right font-semibold text-slate-700">Amount</th>
-                <th className="px-6 py-4 text-left font-semibold text-slate-700">Status</th>
-                <th className="px-6 py-4 text-left font-semibold text-slate-700">Payment Date</th>
-                <th className="px-6 py-4 text-left font-semibold text-slate-700">Payment Method</th>
-                <th className="px-6 py-4 text-left font-semibold text-slate-700">Notes</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredPayments.length > 0 ? (
-                filteredPayments.map((invoice) => (
-                  <tr key={invoice.id} className="border-b border-slate-100 hover:bg-slate-50">
-                    <td className="px-6 py-4 font-medium text-slate-900">
-                      {invoice.invoiceNumber}
-                    </td>
-                    <td className="px-6 py-4 text-slate-900">{invoice.customer.name}</td>
-                    <td className="px-6 py-4 text-slate-600">
-                      {formatDate(invoice.invoiceDate)}
-                    </td>
-                    <td className="px-6 py-4 text-slate-600">
-                      {formatDate(invoice.dueDate)}
-                    </td>
-                    <td className="px-6 py-4 text-right font-semibold text-slate-900">
-                      {formatCurrency(invoice.amount)}
-                    </td>
-                    <td className="px-6 py-4">
-                      <StatusBadge status={invoice.status} />
-                    </td>
-                    <td className="px-6 py-4 text-slate-600">
-                      {invoice.paymentDate ? formatDate(invoice.paymentDate) : '-'}
-                    </td>
-                    <td className="px-6 py-4 text-slate-600">
-                      {invoice.paymentMethod || '-'}
-                    </td>
-                    <td className="px-6 py-4 text-xs text-slate-600">
-                      <div className="max-w-xs truncate" title={invoice.notes || ''}>
-                        {invoice.notes || '-'}
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={9} className="px-6 py-8 text-center text-slate-500">
-                    No payments found matching the selected filters.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
+    </SalesPageShell>
   )
 }

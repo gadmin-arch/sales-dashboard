@@ -1,15 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAllLeads, getAllOpportunities, getSalesUserNamesForLeadsOpps } from '@/database/repos/leads-opps'
+import { parseMulti } from '@/lib/utils-date-currency'
+import { clearSheetCache } from '@/database/client'
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
+    if (searchParams.get('fresh') === '1') clearSheetCache()
     const dateFrom = searchParams.get('dateFrom') || ''
     const dateTo = searchParams.get('dateTo') || ''
-    const status = searchParams.get('status') || ''
-    const assignedTo = searchParams.get('assignedTo') || ''
-    const source = searchParams.get('source') || ''
-    const stage = searchParams.get('stage') || ''
+    const status = parseMulti(searchParams, 'status')
+    const assignedTo = parseMulti(searchParams, 'assignedTo')
+    const source = parseMulti(searchParams, 'source')
+    const stage = parseMulti(searchParams, 'stage')
 
     const [leadsRaw, opportunitiesRaw] = await Promise.all([
       getAllLeads(),
@@ -39,18 +42,18 @@ export async function GET(request: NextRequest) {
     let leads = filterByDate(leadsRaw, 'leadDate')
     let opportunities = filterByDate(opportunitiesRaw, 'createdAt')
 
-    if (status) {
-      leads = leads.filter((l: any) => l.status === status)
+    if (status.length) {
+      leads = leads.filter((l: any) => status.includes(l.status))
     }
-    if (assignedTo) {
-      leads = leads.filter((l: any) => l.assignedTo === assignedTo)
-      opportunities = opportunities.filter((o: any) => o.assignedTo === assignedTo)
+    if (assignedTo.length) {
+      leads = leads.filter((l: any) => assignedTo.includes(l.assignedTo))
+      opportunities = opportunities.filter((o: any) => assignedTo.includes(o.assignedTo))
     }
-    if (source) {
-      leads = leads.filter((l: any) => l.source === source)
+    if (source.length) {
+      leads = leads.filter((l: any) => source.includes(l.source))
     }
-    if (stage) {
-      opportunities = opportunities.filter((o: any) => o.stage === stage)
+    if (stage.length) {
+      opportunities = opportunities.filter((o: any) => stage.includes(o.stage))
     }
 
     // KPIs

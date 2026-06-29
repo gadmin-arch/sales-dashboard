@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { KPICard } from '@/components/kpi-card'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -9,7 +9,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { DonutChart } from '@/components/donut-chart'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts'
 import { ChartContainer, ChartLegend, ChartLegendContent } from '@/components/ui/chart'
-import { fmtCurrency, SortIcon } from '@/lib/sales-helpers'
+import { fmtCurrency, SortIcon, buildQuery, sameSet } from '@/lib/sales-helpers'
+import { MultiSelect } from '@/components/multi-select'
+import { DateRangeRow } from '@/components/date-range-row'
+import { LoadMore, useLoadMore } from '@/components/load-more'
 import { ThemeToggle, SalesPageShell } from '@/components/theme-toggle'
 import { DollarSign, TrendingUp, Users, Target, Loader2, Search } from 'lucide-react'
 
@@ -25,10 +28,6 @@ interface LeadData {
   opportunities: { oId: string; leadId: string; name: string; description: string; company: string; value: number; stage: string; probability: number; closeDate: string; status: string; assignedName: string; createdAt: string; contactPerson: string; phone: string; email: string }[]
   salesUserList: { id: string; name: string }[]
   filterOptions: { leadStatuses: string[]; oppStages: string[]; oppStatuses: string[]; sources: string[] }
-}
-
-function onSel(setter: (v: string) => void) {
-  return (v: string | null) => { setter(v ?? 'all') }
 }
 
 function fmtRp(v: number): string {
@@ -118,9 +117,11 @@ export default function LeadsOppsPage() {
 
   const getYTD = () => { const n = new Date(); return { from: new Date(n.getFullYear(), 0, 1).toLocaleDateString('en-CA'), to: new Date(n.getFullYear(), n.getMonth(), n.getDate()).toLocaleDateString('en-CA') } }
   const [dateFrom, setDateFrom] = useState(getYTD().from), [dateTo, setDateTo] = useState(getYTD().to)
-  const [status, setStatus] = useState('all'), [assignedTo, setAssignedTo] = useState('all'), [source, setSource] = useState('all'), [stage, setStage] = useState('all')
-
-  const [lFrom, setLFrom] = useState(dateFrom), [lTo, setLTo] = useState(dateTo), [lStatus, setLStatus] = useState(status), [lAssigned, setLAssigned] = useState(assignedTo), [lSource, setLSource] = useState(source), [lStage, setLStage] = useState(stage)
+  // Applied filters (multi-select)
+  const [status, setStatus] = useState<string[]>([]), [assignedTo, setAssignedTo] = useState<string[]>([]), [source, setSource] = useState<string[]>([]), [stage, setStage] = useState<string[]>([])
+  // Draft (unapplied) filters
+  const [lFrom, setLFrom] = useState(dateFrom), [lTo, setLTo] = useState(dateTo)
+  const [lStatus, setLStatus] = useState<string[]>([]), [lAssigned, setLAssigned] = useState<string[]>([]), [lSource, setLSource] = useState<string[]>([]), [lStage, setLStage] = useState<string[]>([])
 
   const [leadSortKey, setLeadSortKey] = useState<string>('leadId')
   const [leadSortDir, setLeadSortDir] = useState<'asc' | 'desc'>('asc')
@@ -131,31 +132,30 @@ export default function LeadsOppsPage() {
   const hasUnappliedFilters = useMemo(() => {
     return lFrom !== dateFrom ||
            lTo !== dateTo ||
-           lStatus !== status ||
-           lAssigned !== assignedTo ||
-           lSource !== source ||
-           lStage !== stage;
+           !sameSet(lStatus, status) ||
+           !sameSet(lAssigned, assignedTo) ||
+           !sameSet(lSource, source) ||
+           !sameSet(lStage, stage);
   }, [lFrom, dateFrom, lTo, dateTo, lStatus, status, lAssigned, assignedTo, lSource, source, lStage, stage])
 
-  const doFetch = useCallback(async (p: Record<string, string>) => {
+  const doFetch = useCallback(async (p: Record<string, string | string[]>) => {
     setLoading(true); setError(null)
     try {
-      const q = new URLSearchParams()
-      Object.entries(p).forEach(([k, v]) => { if (v && v !== 'all') q.set(k, v) })
-      const res = await fetch('/api/leads-opps?' + q.toString())
+      const res = await fetch('/api/leads-opps?' + buildQuery(p))
       if (!res.ok) throw new Error('Failed to load data')
       setData(await res.json())
     } catch (e) { setError(e instanceof Error ? e.message : 'Failed to load data') } finally { setLoading(false) }
   }, [])
 
-  useEffect(() => { doFetch({ dateFrom, dateTo, status, assignedTo, source, stage }) }, [doFetch, dateFrom, dateTo, status, assignedTo, source, stage])
-  
+  const firstLoad = useRef(true)
+  useEffect(() => { const fresh = firstLoad.current; firstLoad.current = false; doFetch({ dateFrom, dateTo, status, assignedTo, source, stage, ...(fresh ? { fresh: '1' } : {}) }) }, [doFetch, dateFrom, dateTo, status, assignedTo, source, stage])
+
   const onApply = () => { setDateFrom(lFrom); setDateTo(lTo); setStatus(lStatus); setAssignedTo(lAssigned); setSource(lSource); setStage(lStage) }
-  
+
   const onClear = () => {
     const d = getYTD()
-    setLFrom(d.from); setLTo(d.to); setLStatus('all'); setLAssigned('all'); setLSource('all'); setLStage('all')
-    setDateFrom(d.from); setDateTo(d.to); setStatus('all'); setAssignedTo('all'); setSource('all'); setStage('all')
+    setLFrom(d.from); setLTo(d.to); setLStatus([]); setLAssigned([]); setLSource([]); setLStage([])
+    setDateFrom(d.from); setDateTo(d.to); setStatus([]); setAssignedTo([]); setSource([]); setStage([])
   }
 
   const handleLeadSort = (key: string) => {
@@ -228,6 +228,9 @@ export default function LeadsOppsPage() {
     return items
   }, [filteredOpps, oppSortKey, oppSortDir])
 
+  const leadPage = useLoadMore(sortedLeads)
+  const oppPage = useLoadMore(sortedOpps)
+
   if (loading && !data) return <div className="flex items-center justify-center min-h-[80vh]"><Loader2 className="animate-spin h-8 w-8 text-primary" /></div>
   if (error && !data) return <div className="flex flex-col items-center justify-center min-h-[80vh]"><p className="text-destructive mb-4">{error}</p><Button onClick={onClear}>Retry</Button></div>
   if (!data) return null
@@ -251,38 +254,26 @@ export default function LeadsOppsPage() {
 
         {/* Filters */}
         <Card><CardContent className="pt-5">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3 lg:grid-cols-6">
-            <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Date Range</label>
-              <div className="flex items-center gap-1">
-                <input type="date" value={lFrom} onChange={e => setLFrom(e.target.value)} className="w-[110px] rounded-lg border border-input bg-background px-2 py-1.5 text-xs outline-none focus:border-primary" />
-                <span className="text-xs">—</span>
-                <input type="date" value={lTo} onChange={e => setLTo(e.target.value)} className="w-[110px] rounded-lg border border-input bg-background px-2 py-1.5 text-xs outline-none focus:border-primary" />
-              </div>
-            </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Rating</label>
-              <Select value={lStatus} onValueChange={onSel(setLStatus)}>
-                <SelectTrigger><SelectValue>{lStatus === 'all' ? 'All Ratings' : lStatus}</SelectValue></SelectTrigger>
-                <SelectContent><SelectItem value="all">All Ratings</SelectItem>{data.filterOptions.leadStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-              </Select>
+              <MultiSelect allLabel="All Ratings" selected={lStatus} onChange={setLStatus}
+                options={data.filterOptions.leadStatuses.map(s => ({ value: s, label: s }))} />
             </div>
             <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Sales Owner</label>
-              <Select value={lAssigned} onValueChange={onSel(setLAssigned)}>
-                <SelectTrigger><SelectValue>{lAssigned === 'all' ? 'All Sales Owners' : data.salesUserList.find(u => u.id === lAssigned)?.name ?? lAssigned}</SelectValue></SelectTrigger>
-                <SelectContent><SelectItem value="all">All Sales Owners</SelectItem>{data.salesUserList.map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}</SelectContent>
-              </Select>
+              <MultiSelect allLabel="All Sales Owners" selected={lAssigned} onChange={setLAssigned}
+                options={data.salesUserList.map(u => ({ value: u.id, label: u.name }))} />
             </div>
             <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Source</label>
-              <Select value={lSource} onValueChange={onSel(setLSource)}>
-                <SelectTrigger><SelectValue>{lSource === 'all' ? 'All Sources' : lSource}</SelectValue></SelectTrigger>
-                <SelectContent><SelectItem value="all">All Sources</SelectItem>{data.filterOptions.sources.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-              </Select>
+              <MultiSelect allLabel="All Sources" selected={lSource} onChange={setLSource}
+                options={data.filterOptions.sources.map(s => ({ value: s, label: s }))} />
             </div>
             <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Type</label>
-              <Select value={lStage} onValueChange={onSel(setLStage)}>
-                <SelectTrigger><SelectValue>{lStage === 'all' ? 'All Types' : lStage}</SelectValue></SelectTrigger>
-                <SelectContent><SelectItem value="all">All Types</SelectItem>{data.filterOptions.oppStages.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-              </Select>
+              <MultiSelect allLabel="All Types" selected={lStage} onChange={setLStage}
+                options={data.filterOptions.oppStages.map(s => ({ value: s, label: s }))} />
             </div>
+          </div>
+          <div className="mt-4 border-t border-border pt-4">
+            <DateRangeRow from={lFrom} to={lTo} onChange={(f, t) => { setLFrom(f); setLTo(t) }} />
           </div>
           <div className="mt-4 flex justify-end gap-2 border-t border-border pt-3">
             <Button variant="outline" size="sm" onClick={onClear}>Clear</Button>
@@ -382,7 +373,7 @@ export default function LeadsOppsPage() {
                     </TableHead>
                   </TableRow></TableHeader>
                   <TableBody>
-                    {sortedLeads.length === 0 ? <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">No leads found</TableCell></TableRow> : sortedLeads.map(l => (
+                    {sortedLeads.length === 0 ? <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">No leads found</TableCell></TableRow> : leadPage.visible.map(l => (
                       <TableRow key={l.leadId}>
                         <TableCell className="text-xs font-semibold text-primary">{l.leadId}</TableCell>
                         <TableCell className="text-xs whitespace-nowrap">{l.leadDate}</TableCell>
@@ -441,7 +432,7 @@ export default function LeadsOppsPage() {
                     </TableHead>
                   </TableRow></TableHeader>
                   <TableBody>
-                    {sortedOpps.length === 0 ? <TableRow><TableCell colSpan={11} className="text-center text-muted-foreground py-8">No opportunities found</TableCell></TableRow> : sortedOpps.map(o => (
+                    {sortedOpps.length === 0 ? <TableRow><TableCell colSpan={11} className="text-center text-muted-foreground py-8">No opportunities found</TableCell></TableRow> : oppPage.visible.map(o => (
                       <TableRow key={o.oId}>
                         <TableCell className="text-xs font-semibold text-primary">{o.oId}</TableCell>
                         <TableCell className="text-xs font-medium text-muted-foreground">{o.leadId || '-'}</TableCell>
@@ -467,6 +458,9 @@ export default function LeadsOppsPage() {
                 </>
               )}
             </Table>
+            {tab === 'leads'
+              ? <LoadMore hasMore={leadPage.hasMore} shown={leadPage.shown} total={leadPage.total} onClick={leadPage.loadMore} onLoadAll={leadPage.loadAll} onCollapse={leadPage.collapse} />
+              : <LoadMore hasMore={oppPage.hasMore} shown={oppPage.shown} total={oppPage.total} onClick={oppPage.loadMore} onLoadAll={oppPage.loadAll} onCollapse={oppPage.collapse} />}
           </CardContent>
         </Card>
       </div>

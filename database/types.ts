@@ -66,6 +66,8 @@ export interface Order {
   prjDueDatePlan: string
   prjStartDateActual: string
   prjEndDateActual: string
+  prjPeStatus: string
+  prjFStatus: string
   prjOwner: string
   createdBy: string
   createdAt: string
@@ -301,6 +303,35 @@ export interface PicCompany {
   piccContact: string
   piccEmail: string
   piccOccupation: string
+}
+
+// ── invoicing spreadsheet ──
+export interface Invoice {
+  invId: string
+  invNumber: string
+  invDate: string
+  invEstPaymentDate: string
+  invCompanyId: string
+  invCurrency: string
+  invTotal: number
+  invNet: number
+  invAmount: number
+  invPaymentAmount: number
+  invPaymentPercentage: number
+  invRefName: string
+  invRefDescription: string
+  invRemarks: string
+}
+
+export interface Payment {
+  payId: string
+  payCompanyId: string
+  payDate: string
+  payCurrency: string
+  payAmount: number
+  payTotalAmount: number
+  payRemarks: string
+  deletedAt: string
 }
 
 export interface LeadRating {

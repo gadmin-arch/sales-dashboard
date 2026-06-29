@@ -1,20 +1,25 @@
 import { fetchAllRows, getSheetHeaders } from '../client'
 import { GOOGLE_CONFIG } from '../config'
 import { mapOrder, parseNum } from '../mappers/orders'
-import { mapOrderType } from '../mappers/reference'
-import type { Order, OrderType, ProjectLog, Bast, BastLog, FinanceLog } from '../types'
+import { mapOrderType, mapPeStatus, mapFinanceStatus } from '../mappers/reference'
+import { parseDate } from '../../lib/utils-date-currency'
+import type { Order, OrderType, PeStatus, FinanceStatus, ProjectLog, Bast, BastLog, FinanceLog } from '../types'
 
 let orderTypeMap: Map<string, string> | null = null
 let flagMap: Map<string, string> | null = null
+let peStatusMap: Map<string, string> | null = null
+let financeStatusMap: Map<string, string> | null = null
 
 export async function loadRefMaps() {
   if (orderTypeMap) return
   const ssId = GOOGLE_CONFIG.orders.spreadsheetId
   const s = GOOGLE_CONFIG.orders.sheets
 
-  const [otRows, flagRows] = await Promise.all([
+  const [otRows, flagRows, peRows, fsRows] = await Promise.all([
     fetchAllRows(ssId, s.orderTypes),
     fetchAllRows(ssId, s.flags),
+    fetchAllRows(ssId, s.peStatuses),
+    fetchAllRows(ssId, s.financeStatuses),
   ])
 
   orderTypeMap = new Map()
@@ -30,6 +35,20 @@ export async function loadRefMaps() {
     const v = row[1] || ''
     if (k) flagMap.set(k, v)
   }
+
+  peStatusMap = new Map()
+  for (const row of peRows.rows) {
+    const k = row[0] || ''
+    const v = row[1] || ''
+    if (k) peStatusMap.set(k, v)
+  }
+
+  financeStatusMap = new Map()
+  for (const row of fsRows.rows) {
+    const k = row[0] || ''
+    const v = row[1] || ''
+    if (k) financeStatusMap.set(k, v)
+  }
 }
 
 export async function getAllOrderTypes(): Promise<OrderType[]> {
@@ -38,6 +57,22 @@ export async function getAllOrderTypes(): Promise<OrderType[]> {
     GOOGLE_CONFIG.orders.sheets.orderTypes
   )
   return rows.filter((r) => r[0]).map(mapOrderType)
+}
+
+export async function getAllPeStatuses(): Promise<PeStatus[]> {
+  const { rows } = await fetchAllRows(
+    GOOGLE_CONFIG.orders.spreadsheetId,
+    GOOGLE_CONFIG.orders.sheets.peStatuses
+  )
+  return rows.filter((r) => r[0]).map(mapPeStatus)
+}
+
+export async function getAllFinanceStatuses(): Promise<FinanceStatus[]> {
+  const { rows } = await fetchAllRows(
+    GOOGLE_CONFIG.orders.spreadsheetId,
+    GOOGLE_CONFIG.orders.sheets.financeStatuses
+  )
+  return rows.filter((r) => r[0]).map(mapFinanceStatus)
 }
 
 export async function getAllOrders(): Promise<Order[]> {
@@ -80,6 +115,34 @@ export function getOrderTypeLabelSync(otId: string): string {
 
 export function getFlagLabel(flagId: string): string {
   return flagMap?.get(flagId) || flagId
+}
+
+export function getPeStatusLabelSync(pesId: string): string {
+  return peStatusMap?.get(pesId) || pesId
+}
+
+export function getFinanceStatusLabelSync(fsId: string): string {
+  return financeStatusMap?.get(fsId) || fsId
+}
+
+// Map: project id -> earliest date the project status changed to 'C' (Completed).
+// Built fresh each call from one project_log read (the client layer falls back
+// to the last downloaded copy if the fetch fails).
+export async function getProjectCompletionDates(): Promise<Map<string, string>> {
+  const { rows } = await fetchAllRows(GOOGLE_CONFIG.orders.spreadsheetId, GOOGLE_CONFIG.orders.sheets.projectLog)
+  const map = new Map<string, string>()
+  for (const r of rows) {
+    const prj = r[1]
+    if (!prj || prj === 'pl_prj_id' || r[3] !== 'C') continue
+    const date = r[5] || ''
+    const existing = map.get(prj)
+    // keep the earliest completion date
+    if (!existing) { map.set(prj, date); continue }
+    const a = parseDate(date)?.getTime() ?? Infinity
+    const b = parseDate(existing)?.getTime() ?? Infinity
+    if (a < b) map.set(prj, date)
+  }
+  return map
 }
 
 export async function getProjectLogs(prjId: string): Promise<ProjectLog[]> {

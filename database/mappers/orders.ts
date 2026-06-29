@@ -41,6 +41,8 @@ export function mapOrder(row: string[]): Order {
     prjDueDatePlan: row[24] || '',
     prjStartDateActual: row[25] || '',
     prjEndDateActual: row[26] || '',
+    prjPeStatus: row[31] || '',
+    prjFStatus: row[33] || '',
     prjOwner: row[41] || '',
     createdBy: row[42] || '',
     createdAt: row[43] || '',

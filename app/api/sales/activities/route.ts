@@ -4,16 +4,19 @@ import {
   loadRefMaps as loadActivityRefMaps, getActivityTypeLabel, getActivityLevelLabel, getActivityStatusLabel,
   getSalesUserNamesForActivities,
 } from '@/database/repos/sales-activities'
+import { parseMulti } from '@/lib/utils-date-currency'
+import { clearSheetCache } from '@/database/client'
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
+    if (searchParams.get('fresh') === '1') clearSheetCache()
     const dateFrom = searchParams.get('dateFrom') || ''
     const dateTo = searchParams.get('dateTo') || ''
-    const salesUser = searchParams.get('salesUser') || ''
-    const activityType = searchParams.get('activityType') || ''
-    const level = searchParams.get('level') || ''
-    const status = searchParams.get('status') || ''
+    const salesUser = parseMulti(searchParams, 'salesUser')
+    const activityType = parseMulti(searchParams, 'activityType')
+    const level = parseMulti(searchParams, 'level')
+    const status = parseMulti(searchParams, 'status')
     const period = (searchParams.get('period') as 'monthly' | 'weekly') || 'monthly'
 
     await loadActivityRefMaps()
@@ -73,17 +76,17 @@ export async function GET(request: NextRequest) {
         return true
       })
     }
-    if (salesUser) {
-      filtered = filtered.filter((a) => a.saUserId === salesUser)
+    if (salesUser.length) {
+      filtered = filtered.filter((a) => salesUser.includes(a.saUserId))
     }
-    if (activityType) {
-      filtered = filtered.filter((a) => getActivityTypeLabel(a.saType) === activityType)
+    if (activityType.length) {
+      filtered = filtered.filter((a) => activityType.includes(getActivityTypeLabel(a.saType)))
     }
-    if (level) {
-      filtered = filtered.filter((a) => getActivityLevelLabel(a.saLevel) === level)
+    if (level.length) {
+      filtered = filtered.filter((a) => level.includes(getActivityLevelLabel(a.saLevel)))
     }
-    if (status) {
-      filtered = filtered.filter((a) => getActivityStatusLabel(a.saStatus) === status)
+    if (status.length) {
+      filtered = filtered.filter((a) => status.includes(getActivityStatusLabel(a.saStatus)))
     }
 
     const totalActivities = filtered.length

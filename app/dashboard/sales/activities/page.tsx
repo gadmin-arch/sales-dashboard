@@ -1,11 +1,10 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { KPICard } from '@/components/kpi-card'
 import { ChartPeriodToggle } from '@/components/chart-period-toggle'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import {
   ChartContainer, ChartTooltip, ChartTooltipContent,
@@ -15,7 +14,11 @@ import { DonutChart } from '@/components/donut-chart'
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts'
 import { Activity, CheckCircle2, Clock, AlertTriangle, Loader2, Search, ListTodo, CalendarDays, ChevronLeft, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react'
 import { ThemeToggle, SalesPageShell } from '@/components/theme-toggle'
-import { type SelectRootChangeEventDetails } from '@base-ui/react/select'
+import { MultiSelect } from '@/components/multi-select'
+import { DateRangeRow } from '@/components/date-range-row'
+import { LoadMore, useLoadMore } from '@/components/load-more'
+import { useSort, SortHead } from '@/components/sortable'
+import { buildQuery, sameSet } from '@/lib/sales-helpers'
 
 interface ActivityData {
   kpis: { totalActivities: number; completionRate: number; activitiesThisWeek: number; highPriorityCount: number; doneCount: number; todoCount: number; holdCount: number; cancelCount: number }
@@ -49,7 +52,6 @@ function fmtDate(d: string) {
   if (m) return new Date(+m[3], +m[1] - 1, +m[2]).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })
   const p = new Date(d); return isNaN(p.getTime()) ? d : p.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })
 }
-function onSel(setter: (v: string) => void) { return (v: string | null, _d: SelectRootChangeEventDetails) => { setter(v ?? 'all') } }
 
 type ViewMode = 'calendar' | 'week' | 'list'
 const PIE_COLORS = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)', 'var(--chart-5)']
@@ -75,35 +77,27 @@ export default function SalesActivitiesPage() {
 
   const getYTD = () => { const n = new Date(); return { from: new Date(n.getFullYear(), 0, 1).toLocaleDateString('en-CA'), to: new Date(n.getFullYear(), n.getMonth(), n.getDate()).toLocaleDateString('en-CA') } }
   const [dateFrom, setDateFrom] = useState(getYTD().from), [dateTo, setDateTo] = useState(getYTD().to)
-  const [su, setSu] = useState('all'), [at, setAt] = useState('all'), [lv, setLv] = useState('all'), [st, setSt] = useState('all')
-  const [lFrom, setLFrom] = useState(dateFrom), [lTo, setLTo] = useState(dateTo), [lSu, setLSu] = useState(su), [lAt, setLAt] = useState(at), [lLv, setLLv] = useState(lv), [lSt, setLSt] = useState(st)
+  // Applied filters (multi-select)
+  const [su, setSu] = useState<string[]>([]), [at, setAt] = useState<string[]>([]), [lv, setLv] = useState<string[]>([]), [st, setSt] = useState<string[]>([])
+  // Draft (unapplied) filters
+  const [lFrom, setLFrom] = useState(dateFrom), [lTo, setLTo] = useState(dateTo)
+  const [lSu, setLSu] = useState<string[]>([]), [lAt, setLAt] = useState<string[]>([]), [lLv, setLLv] = useState<string[]>([]), [lSt, setLSt] = useState<string[]>([])
 
-  const doFetch = useCallback(async (p: Record<string, string>) => {
+  const doFetch = useCallback(async (p: Record<string, string | string[]>) => {
     setLoading(true); setError(null)
     try {
-      const q = new URLSearchParams()
-      for (const [k, v] of Object.entries(p)) { if (v && v !== 'all') q.set(k, v) }
-      const res = await globalThis.fetch('/api/sales/activities?' + q.toString())
+      const res = await globalThis.fetch('/api/sales/activities?' + buildQuery(p))
       if (!res.ok) throw new Error('Failed to load data')
       setData(await res.json())
     } catch (e) { setError(e instanceof Error ? e.message : 'Failed to load data') }
     finally { setLoading(false) }
   }, [])
 
-  useEffect(() => { doFetch({ dateFrom, dateTo, salesUser: su, activityType: at, level: lv, status: st, period: chartPeriod }) }, [doFetch, dateFrom, dateTo, su, at, lv, st, chartPeriod])
+  const firstLoad = useRef(true)
+  useEffect(() => { const fresh = firstLoad.current; firstLoad.current = false; doFetch({ dateFrom, dateTo, salesUser: su, activityType: at, level: lv, status: st, period: chartPeriod, ...(fresh ? { fresh: '1' } : {}) }) }, [doFetch, dateFrom, dateTo, su, at, lv, st, chartPeriod])
   const onPeriod = (p: 'monthly' | 'weekly') => { setChartPeriod(p); doFetch({ dateFrom, dateTo, salesUser: su, activityType: at, level: lv, status: st, period: p }) }
   const onApply = () => { setDateFrom(lFrom); setDateTo(lTo); setSu(lSu); setAt(lAt); setLv(lLv); setSt(lSt) }
-  const onClear = () => { const d = getYTD(); setLFrom(d.from); setLTo(d.to); setLSu('all'); setLAt('all'); setLLv('all'); setLSt('all'); setDateFrom(d.from); setDateTo(d.to); setSu('all'); setAt('all'); setLv('all'); setSt('all') }
-  const setQuick = (r: 'thisMonth' | 'last30' | '6month' | '1year' | 'lastYear' | 'YTD') => {
-    const t = new Date(); let f = ''; let to = t.toLocaleDateString('en-CA')
-    if (r === 'YTD') f = `${t.getFullYear()}-01-01`
-    else if (r === 'thisMonth') f = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-01`
-    else if (r === 'last30') { const p = new Date(); p.setDate(t.getDate() - 30); f = p.toLocaleDateString('en-CA') }
-    else if (r === '6month') { const p = new Date(); p.setMonth(t.getMonth() - 6); f = p.toLocaleDateString('en-CA') }
-    else if (r === '1year') { const p = new Date(); p.setFullYear(t.getFullYear() - 1); f = p.toLocaleDateString('en-CA') }
-    else if (r === 'lastYear') { const ly = t.getFullYear() - 1; f = `${ly}-01-01`; to = `${ly}-12-31` }
-    setLFrom(f); setLTo(to)
-  }
+  const onClear = () => { const d = getYTD(); setLFrom(d.from); setLTo(d.to); setLSu([]); setLAt([]); setLLv([]); setLSt([]); setDateFrom(d.from); setDateTo(d.to); setSu([]); setAt([]); setLv([]); setSt([]) }
 
   const parseDate = (d: string): Date | null => {
     if (!d) return null
@@ -117,6 +111,9 @@ export default function SalesActivitiesPage() {
     if (search) { const q = search.toLowerCase(); a = a.filter(x => x.description.toLowerCase().includes(q) || x.type.toLowerCase().includes(q) || x.userName.toLowerCase().includes(q) || x.status.toLowerCase().includes(q)) }
     return a
   }, [data, search])
+
+  const actSort = useSort(filtered, 'date', 'desc')
+  const actPage = useLoadMore(actSort.sorted)
 
   const byDate = useMemo(() => {
     const m = new Map<string, typeof filtered>()
@@ -177,48 +174,32 @@ export default function SalesActivitiesPage() {
 
         {/* Filters */}
         <Card><CardContent className="pt-5">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3 lg:grid-cols-5 items-start">
-            <div className="space-y-1.5 md:col-span-2 lg:col-span-1">
-              <label className="text-xs font-medium text-muted-foreground">Date Range</label>
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                <input type="date" value={lFrom} onChange={e => setLFrom(e.target.value)} className="w-[120px] rounded-lg border border-input bg-background px-2 py-1.5 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary" />
-                <span className="text-xs text-muted-foreground">—</span>
-                <input type="date" value={lTo} onChange={e => setLTo(e.target.value)} className="w-[120px] rounded-lg border border-input bg-background px-2 py-1.5 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary" />
-              </div>
-              <div className="flex flex-wrap gap-1">
-                {(['thisMonth', 'last30', '6month', '1year', 'lastYear', 'YTD'] as const).map(r => <Button key={r} variant="outline" size="xs" onClick={() => setQuick(r)}>{r === 'last30' ? '30d' : r === '6month' ? '6mo' : r === '1year' ? '1yr' : r === 'lastYear' ? 'LY' : r === 'thisMonth' ? 'MTD' : 'YTD'}</Button>)}
-              </div>
-            </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 items-start">
             <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Sales Person</label>
-              <Select value={lSu} onValueChange={onSel(setLSu)}>
-                <SelectTrigger><SelectValue>{lSu === 'all' ? 'All Sales Persons' : data.salesUserList.find(u => u.id === lSu)?.name ?? lSu}</SelectValue></SelectTrigger>
-                <SelectContent><SelectItem value="all">All Sales Persons</SelectItem>{data.salesUserList.map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}</SelectContent>
-              </Select>
+              <MultiSelect allLabel="All Sales Persons" selected={lSu} onChange={setLSu}
+                options={data.salesUserList.map(u => ({ value: u.id, label: u.name }))} />
             </div>
             <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Activity Type</label>
-              <Select value={lAt} onValueChange={onSel(setLAt)}>
-                <SelectTrigger><SelectValue>{lAt === 'all' ? 'All Types' : data.filterOptions.types.find(t => t.label === lAt)?.label ?? lAt}</SelectValue></SelectTrigger>
-                <SelectContent><SelectItem value="all">All Types</SelectItem>{data.filterOptions.types.map(t => <SelectItem key={t.id} value={t.label}>{t.label}</SelectItem>)}</SelectContent>
-              </Select>
+              <MultiSelect allLabel="All Types" selected={lAt} onChange={setLAt}
+                options={data.filterOptions.types.map(t => ({ value: t.label, label: t.label }))} />
             </div>
-            <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Level & Status</label>
-              <div className="flex gap-2">
-                <Select value={lLv} onValueChange={onSel(setLLv)}>
-                  <SelectTrigger className="flex-1"><SelectValue>{lLv === 'all' ? 'All Levels' : data.filterOptions.levels.find(l => l.label === lLv)?.label ?? lLv}</SelectValue></SelectTrigger>
-                  <SelectContent><SelectItem value="all">All Levels</SelectItem>{data.filterOptions.levels.map(l => <SelectItem key={l.id} value={l.label}>{l.label}</SelectItem>)}</SelectContent>
-                </Select>
-                <Select value={lSt} onValueChange={onSel(setLSt)}>
-                  <SelectTrigger className="flex-1"><SelectValue>{lSt === 'all' ? 'All Statuses' : data.filterOptions.statuses.find(s => s.label === lSt)?.label ?? lSt}</SelectValue></SelectTrigger>
-                  <SelectContent><SelectItem value="all">All Statuses</SelectItem>{data.filterOptions.statuses.map(s => <SelectItem key={s.id} value={s.label}>{s.label}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
+            <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Level</label>
+              <MultiSelect allLabel="All Levels" selected={lLv} onChange={setLLv}
+                options={data.filterOptions.levels.map(l => ({ value: l.label, label: l.label }))} />
             </div>
+            <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Status</label>
+              <MultiSelect allLabel="All Statuses" selected={lSt} onChange={setLSt}
+                options={data.filterOptions.statuses.map(s => ({ value: s.label, label: s.label }))} />
+            </div>
+          </div>
+          <div className="mt-4 border-t border-border pt-4">
+            <DateRangeRow from={lFrom} to={lTo} onChange={(f, t) => { setLFrom(f); setLTo(t) }} />
           </div>
           <div className="mt-4 flex justify-end gap-2 border-t border-border pt-3">
             <Button variant="outline" size="sm" onClick={onClear}>Clear</Button>
             <Button size="sm" onClick={onApply} className="relative">
               Apply Filters
-              {(lFrom !== dateFrom || lTo !== dateTo || lSu !== su || lAt !== at || lLv !== lv || lSt !== st) && <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-orange-500 border-2 border-background" />}
+              {(lFrom !== dateFrom || lTo !== dateTo || !sameSet(lSu, su) || !sameSet(lAt, at) || !sameSet(lLv, lv) || !sameSet(lSt, st)) && <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-orange-500 border-2 border-background" />}
             </Button>
           </div>
           {loading && data && <div className="w-full h-1 bg-border overflow-hidden rounded-full mt-3"><div className="h-1/3 bg-primary rounded-full loading-bar-inner" /></div>}
@@ -373,9 +354,16 @@ export default function SalesActivitiesPage() {
         {view === 'list' && (
           <Card className="overflow-hidden"><CardContent className="p-0">
             <Table>
-              <TableHeader><TableRow><TableHead className="text-xs font-medium text-muted-foreground">Date</TableHead><TableHead className="text-xs font-medium text-muted-foreground">Description</TableHead><TableHead className="text-xs font-medium text-muted-foreground">Type</TableHead><TableHead className="text-xs font-medium text-muted-foreground">Level</TableHead><TableHead className="text-xs font-medium text-muted-foreground">Status</TableHead><TableHead className="text-xs font-medium text-muted-foreground">Sales Person</TableHead></TableRow></TableHeader>
+              <TableHeader><TableRow>
+                <SortHead label="Date" column="date" sortKey={actSort.sortKey} sortDir={actSort.sortDir} onSort={actSort.toggle} />
+                <SortHead label="Description" column="description" sortKey={actSort.sortKey} sortDir={actSort.sortDir} onSort={actSort.toggle} />
+                <SortHead label="Type" column="type" sortKey={actSort.sortKey} sortDir={actSort.sortDir} onSort={actSort.toggle} />
+                <SortHead label="Level" column="level" sortKey={actSort.sortKey} sortDir={actSort.sortDir} onSort={actSort.toggle} />
+                <SortHead label="Status" column="status" sortKey={actSort.sortKey} sortDir={actSort.sortDir} onSort={actSort.toggle} />
+                <SortHead label="Sales Person" column="userName" sortKey={actSort.sortKey} sortDir={actSort.sortDir} onSort={actSort.toggle} />
+              </TableRow></TableHeader>
               <TableBody>
-                {filtered.length === 0 ? <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No activities found</TableCell></TableRow> : filtered.map(a => (
+                {filtered.length === 0 ? <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No activities found</TableCell></TableRow> : actPage.visible.map(a => (
                   <TableRow key={a.saId}>
                     <TableCell className="text-muted-foreground whitespace-nowrap text-xs">{fmtDate(a.date)}</TableCell>
                     <TableCell className="max-w-[250px] truncate" title={a.description}><span className="flex items-center gap-1.5">{a.description}{a.hasLinkage && <span className="inline-block h-1.5 w-1.5 rounded-full bg-primary shrink-0" />}</span></TableCell>
@@ -387,6 +375,7 @@ export default function SalesActivitiesPage() {
                 ))}
               </TableBody>
             </Table>
+            <LoadMore hasMore={actPage.hasMore} shown={actPage.shown} total={actPage.total} onClick={actPage.loadMore} onLoadAll={actPage.loadAll} onCollapse={actPage.collapse} />
           </CardContent></Card>
         )}
       </div>
