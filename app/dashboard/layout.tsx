@@ -4,7 +4,7 @@ import { useAuth } from '@/lib/auth-context'
 import { useRouter, usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { BarChart3, FileText, CreditCard, FolderOpen, LogOut, Menu, X, ListTodo, Users, Lock } from 'lucide-react'
+import { BarChart3, FileText, CreditCard, FolderOpen, LogOut, Menu, X, ListTodo, Users, Lock, ClipboardList, ShoppingCart, Store } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface NavItem {
@@ -20,7 +20,11 @@ const navItems: NavItem[] = [
   { href: '/dashboard/leads-opps', label: 'Leads & Opportunities', icon: <Users className="h-4 w-4" />, role: 'sales' },
   { href: '/dashboard/invoices', label: 'Invoices & Receivables', icon: <FileText className="h-4 w-4" />, role: 'finance' },
   { href: '/dashboard/payments', label: 'Payments Collection', icon: <CreditCard className="h-4 w-4" />, role: 'finance' },
+  { href: '/dashboard/finance-ap', label: 'Finance AP & Reimburse', icon: <CreditCard className="h-4 w-4" />, role: 'finance' },
   { href: '/dashboard/projects', label: 'Projects', icon: <FolderOpen className="h-4 w-4" />, role: 'project' },
+  { href: '/dashboard/purchasing/requests', label: 'Purchase Requests', icon: <ClipboardList className="h-4 w-4" />, role: 'purchasing' },
+  { href: '/dashboard/purchasing/orders', label: 'Purchase Orders', icon: <ShoppingCart className="h-4 w-4" />, role: 'purchasing' },
+  { href: '/dashboard/purchasing/vendors', label: 'Vendor Scorecard', icon: <Store className="h-4 w-4" />, role: 'purchasing' },
 ]
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {

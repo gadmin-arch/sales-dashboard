@@ -26,6 +26,7 @@ export async function POST(request: NextRequest) {
         sales: user.sales,
         finance: user.finance,
         project: user.project,
+        purchasing: user.purchasing,
       },
     })
   } catch (error) {

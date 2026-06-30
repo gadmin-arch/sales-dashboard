@@ -150,7 +150,8 @@ export async function GET(request: NextRequest) {
     const overdueRows = finalRows.filter((r) => r.status === 'overdue')
     const overdueCount = overdueRows.length
     const overdueAmount = overdueRows.reduce((s, r) => s + r.outstanding, 0)
-    const collectionRate = totalInvoiced > 0 ? Math.round((totalPaid / totalInvoiced) * 1000) / 10 : 0
+    // Collected % = Total Invoiced / (Total Invoiced + Total Outstanding)
+    const collectionRate = (totalInvoiced + totalOutstanding) > 0 ? Math.round((totalInvoiced / (totalInvoiced + totalOutstanding)) * 1000) / 10 : 0
 
     // ── Status breakdown (donut) ──
     const statusCounts: Record<PayStatus, number> = { paid: 0, partial: 0, unpaid: 0, overdue: 0 }

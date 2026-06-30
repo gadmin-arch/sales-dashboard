@@ -5,6 +5,17 @@ import { type SelectRootChangeEventDetails } from '@base-ui/react/select'
 
 export type SortDir = 'asc' | 'desc'
 
+// Short id-ID date, e.g. "05 Mar 2026". Returns "-" when blank, raw string when unparseable.
+export function fmtShortDate(d: string): string {
+  if (!d) return '-'
+  const m = d.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/)
+  const date = m ? new Date(+m[3], +m[1] - 1, +m[2]) : new Date(d)
+  return isNaN(date.getTime()) ? d : date.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
+// Truncate a long chart-axis label (full text stays available via tooltip).
+export const truncLabel = (v: string, n = 22): string => (v && v.length > n ? v.slice(0, n - 1) + '…' : v)
+
 // Currency formatter
 export function fmtCurrency(v: number, currency = 'IDR'): string {
   const prefix = currency === 'USD' ? '$ ' : currency === 'EUR' ? '€ ' : currency === 'SGD' ? 'SGD ' : 'IDR '

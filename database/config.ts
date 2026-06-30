@@ -103,4 +103,49 @@ export const GOOGLE_CONFIG = {
       paymentDetails: 'payment_details',
     },
   },
+
+  // Finance Account Payable & Reimbursements data
+  financeAP: {
+    paymentRequestSpreadsheetId: '17IGDVtFew69_JV63aCEckpMCYqf2iyIdVPHXkwzI_tQ',
+    paymentSpreadsheetId: '1c-WB5QsBtNYFL9LmGuPZSsM2rI9rp6mbFrYvvxEhkGU',
+    reimburseSpreadsheetId: '1rcbBN00I7Ql5SIw_DqNPfeUURiuDCFHoml5m02Us9aM',
+    sheets: {
+      paymentRequests: 'payment_requests',
+      paymentStatuses: 'payment_statuses',
+      logPayments: 'log_payments',
+      payments: 'payments',
+      reimburseCashIn: 'ReimburseCashIn',
+      reimburseCashOut: 'ReimburseCashOut',
+      reimburseFile: 'ReimburseFile',
+      reimburseStatus: 'ReimburseStatus',
+    },
+  },
+
+  // Purchasing — purchase requests, quotation requests, vendor quotes
+  purchasing: {
+    spreadsheetId: '1ZwynlhN0x6R9bvCLrUpthUoc8-n3bejRX8xDJB_j9hM',
+    sheets: {
+      purchaseRequests: 'purchase_requests',
+      quotationRequests: 'quotation_requests',
+      qrLists: 'qr_lists',
+      prStatuses: 'pr_statuses',
+      qrStatuses: 'qr_statuses',
+      overdueStatuses: 'overdue_statuses',
+      paymentStatuses: 'payment_statuses',
+    },
+  },
+
+  // Procurement — purchase orders, PO line items, item master
+  procurement: {
+    spreadsheetId: '1RSd5IX6-ghSij5qM63LyKgonNFoGXX9flykXelOhXmg',
+    sheets: {
+      pos: 'POs',
+      poLists: 'POLists',
+      items: 'Items',
+      itemTypes: 'ItemTypes',
+      itemUnits: 'ItemUnit',
+      statuses: 'Status',
+      paymentTypes: 'PaymentTypes',
+    },
+  },
 } as const

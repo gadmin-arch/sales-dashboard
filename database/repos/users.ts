@@ -21,6 +21,7 @@ export async function getAllAccessUsers(): Promise<AccessUser[]> {
       sales: parseBool(row[2]),
       finance: parseBool(row[3]),
       project: parseBool(row[4]),
+      purchasing: parseBool(row[5]),
     }))
 }
 

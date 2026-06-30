@@ -2,11 +2,12 @@
 > my-project@0.1.0 dev
 > next dev
 
+⚠ Port 3000 is in use by process 64652, using available port 3001 instead.
 ▲ Next.js 16.2.6 (Turbopack)
-- Local:         http://localhost:3000
-- Network:       http://192.168.100.61:3000
+- Local:         http://localhost:3001
+- Network:       http://192.168.100.61:3001
 - Environments: .env
-✓ Ready in 123ms
+✓ Ready in 227ms
 ⚠ Warning: Next.js inferred your workspace root, but it may not be correct.
  We detected multiple lockfiles and selected the directory of /Users/irfanzuhdiabdillah/package-lock.json as the root directory.
  To silence this warning, set `turbopack.root` in your Next.js config, or consider removing one of the lockfiles if it's not needed.
@@ -14,8 +15,12 @@
  Detected additional lockfiles: 
    * /Users/irfanzuhdiabdillah/Code/2026/sales-dashboard/pnpm-workspace.yaml
 
+⨯ Another next dev server is already running.
 
- GET /dashboard/sales 200 in 395ms (next.js: 231ms, application-code: 165ms)
- GET /api/sales/overview?dateFrom=2026-01-01&dateTo=2026-06-29&period=monthly&fresh=1 200 in 2.7s (next.js: 337ms, application-code: 2.3s)
- GET /api/sales/overview 200 in 778ms (next.js: 4ms, application-code: 774ms)
+- Local:        http://localhost:3000
+- PID:          64652
+- Dir:          /Users/irfanzuhdiabdillah/Code/2026/sales-dashboard
+- Log:          .next/dev/logs/next-development.log
+
+Run kill 64652 to stop it.
 [?25h

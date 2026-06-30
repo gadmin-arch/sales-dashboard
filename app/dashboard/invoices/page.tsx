@@ -268,6 +268,7 @@ export default function InvoicesPage() {
                   <SortHead label="Due Date" column="dueDate" sortKey={invSort.sortKey} sortDir={invSort.sortDir} onSort={invSort.toggle} />
                   <SortHead label="Lead Time" column="leadTime" sortKey={invSort.sortKey} sortDir={invSort.sortDir} onSort={invSort.toggle} className="text-right" />
                   <SortHead label="Amount" column="amount" sortKey={invSort.sortKey} sortDir={invSort.sortDir} onSort={invSort.toggle} className="text-right" />
+                  <SortHead label="Paid" column="paid" sortKey={invSort.sortKey} sortDir={invSort.sortDir} onSort={invSort.toggle} className="text-right" />
                   <SortHead label="Outstanding" column="outstanding" sortKey={invSort.sortKey} sortDir={invSort.sortDir} onSort={invSort.toggle} className="text-right" />
                   <SortHead label="Status" column="status" sortKey={invSort.sortKey} sortDir={invSort.sortDir} onSort={invSort.toggle} />
                   <SortHead label="Overdue (days)" column="daysOverdue" sortKey={invSort.sortKey} sortDir={invSort.sortDir} onSort={invSort.toggle} className="text-right" />
@@ -282,6 +283,7 @@ export default function InvoicesPage() {
                       <TableCell className="text-muted-foreground">{fmtDate(r.dueDate)}</TableCell>
                       <TableCell className="text-right text-muted-foreground">{r.leadTime === null ? '-' : `${r.leadTime}d`}</TableCell>
                       <TableCell className="text-right font-medium">{fmtRp(r.amount)}</TableCell>
+                      <TableCell className="text-right font-medium text-emerald-600 dark:text-emerald-400">{fmtRp(r.paid)}</TableCell>
                       <TableCell className="text-right font-medium">{fmtRp(r.outstanding)}</TableCell>
                       <TableCell>
                         <span className={`inline-flex rounded-md px-2 py-0.5 text-[10px] font-medium ${statusClass[r.status] || 'bg-muted text-muted-foreground'}`}>{r.statusLabel}</span>

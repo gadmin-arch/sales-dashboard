@@ -6,6 +6,7 @@ interface UserRoles {
   sales: boolean
   finance: boolean
   project: boolean
+  purchasing: boolean
 }
 
 interface UserInfo {

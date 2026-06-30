@@ -7,6 +7,7 @@ export interface AccessUser {
   sales: boolean
   finance: boolean
   project: boolean
+  purchasing: boolean
 }
 
 // ── sales users sheet (employee directory) ──
@@ -337,6 +338,125 @@ export interface Payment {
 export interface LeadRating {
   lrId: string
   lrDescription: string
+}
+
+// ── purchasing spreadsheet ──
+export interface PurchaseRequest {
+  prId: string
+  prPrfId: string
+  prItemId: string
+  prQuantity: number
+  prQuantityPurchased: number
+  prEstimatedPrice: number
+  prPurchasedPrice: number
+  prVariance: number
+  prDuedate: string
+  prRemarks: string
+  prApprovalStatus: string
+  prStatus: string
+  prCompletedAt: string
+  prOverdueStatus: string
+  prProjectId: string
+  prHandleBy: string
+  prUserId: string
+  createdAt: string
+  updatedAt: string
+  deletedAt: string
+}
+
+export interface QuotationRequest {
+  qrId: string
+  qrQrfId: string
+  qrItemId: string
+  qrQuantity: number
+  qrDuedate: string
+  qrRemarks: string
+  qrStatus: string
+  qrSubmittedAt: string
+  qrOverdueStatus: string
+  qrHandleBy: string
+  qrUserId: string
+  createdAt: string
+  updatedAt: string
+  deletedAt: string
+}
+
+export interface QrList {
+  qrlId: string
+  qrlQrId: string
+  qrlPrId: string
+  qrlItemId: string
+  qrlQuantity: number
+  qrlUnit: string
+  qrlPrice: number
+  qrlTotalPrice: number
+  qrlVendor: string
+  qrlRemarks: string
+  qrlEta: string
+  qrlDueDate: string
+  qrlStatusId: string
+  qrlApprovedAt: string
+  qrlApproverId: string
+  createdAt: string
+  deletedAt: string
+}
+
+// reference rows (id + name), shared shape
+export interface RefRow {
+  id: string
+  name: string
+}
+
+// ── procurement spreadsheet (POs) ──
+export interface PurchaseOrder {
+  poNumber: string
+  poDate: string
+  poCurrency: string
+  poCompanyId: string
+  poCompanyName: string
+  poPaymentType: string
+  poDpPercent: number
+  poDpTotal: number
+  poPaymentProgress: number
+  poAmountPayment: number
+  poPaymentDueDate: string
+  poGross: number
+  poDiscount: number
+  poNet: number
+  poPpn: number
+  poPph: number
+  poAmount: number
+  poDeliveryDate: string
+  poReceivedDate: string
+  poStatus: string
+  poWStatus: string
+  poUserId: string
+  poUserName: string
+}
+
+export interface PoLine {
+  polId: string
+  polPoNumber: string
+  polVendorId: string
+  polPrId: string
+  polItemId: string
+  polItemName: string
+  polItemTypeId: string
+  polQty: number
+  polPrice: number
+  polTotal: number
+  polPrjId: string
+  polLocationId: string
+  deletedAt: string
+}
+
+export interface ProcItem {
+  itemId: string
+  itemTypeId: string
+  itemName: string
+  itemBrand: string
+  itemCategory: string
+  itemUnit: string
 }
 
 
