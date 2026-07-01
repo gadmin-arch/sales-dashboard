@@ -33,7 +33,14 @@ export async function GET(request: NextRequest) {
     ])
     const { invoices, invPrjMap, paymentDetails } = invoicing
 
-    const orders = ordersRaw.filter((o) => !o.deletedAt)
+    const orders = ordersRaw.filter((o) => !o.deletedAt).map((o) => {
+      const invPct = o.prjInvPercent || 0
+      const payPct = o.prjPayPercent || 0
+      if (invPct >= 100 || payPct >= 100) {
+        return { ...o, prjFStatus: 'C' }
+      }
+      return o
+    })
     const quotations = quotationsRaw.filter((q) => !q.deletedAt)
 
     // Build company map for customer lookup

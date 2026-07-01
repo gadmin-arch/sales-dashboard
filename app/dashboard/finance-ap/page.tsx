@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef, type ReactNode, type Dispatch, type SetStateAction } from 'react'
 import { KPICard } from '@/components/kpi-card'
+import { InfoTooltip } from '@/components/info-tooltip'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table'
@@ -19,6 +20,7 @@ import { LoadMore, useLoadMore } from '@/components/load-more'
 import { useSort, SortHead } from '@/components/sortable'
 import { fmtCurrency, buildQuery, getYTD, fmtShortDate as fmtDate } from '@/lib/sales-helpers'
 import { useAuth } from '@/lib/auth-context'
+import { cn } from '@/lib/utils'
 
 // ── formatting ──
 const rp = (v: number) => 'Rp' + Math.round(v || 0).toLocaleString('id-ID')
@@ -53,11 +55,22 @@ type TabKey = typeof TABS[number]['key']
 type CF = { label: string; test: (r: any) => boolean } | null
 
 // ── building blocks ──
-function ChartCard({ title, subtitle, children, className }: { title: string; subtitle?: string; children: ReactNode; className?: string }) {
+interface ChartCardProps {
+  title: string
+  subtitle?: string
+  children: ReactNode
+  className?: string
+  tooltip?: string
+}
+
+function ChartCard({ title, subtitle, children, className, tooltip }: ChartCardProps) {
   return (
-    <Card className={className}>
+    <Card className={cn('overflow-visible', className)}>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-semibold">{title}</CardTitle>
+        <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
+          {title}
+          {tooltip && <InfoTooltip tooltip={tooltip} />}
+        </CardTitle>
         {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
       </CardHeader>
       <CardContent>{children}</CardContent>
@@ -65,14 +78,14 @@ function ChartCard({ title, subtitle, children, className }: { title: string; su
   )
 }
 
-function BarCard({ title, subtitle, data, bars, vertical, categoryKey = 'name', height = 260, stacked, onBarClick, className }: {
+function BarCard({ title, subtitle, data, bars, vertical, categoryKey = 'name', height = 260, stacked, onBarClick, className, tooltip }: {
   title: string; subtitle?: string; data: any[]; bars: { key: string; color: string; label?: string }[]
-  vertical?: boolean; categoryKey?: string; height?: number; stacked?: boolean; onBarClick?: (name: string) => void; className?: string
+  vertical?: boolean; categoryKey?: string; height?: number; stacked?: boolean; onBarClick?: (name: string) => void; className?: string; tooltip?: string
 }) {
   const config = Object.fromEntries(bars.map((b) => [b.key, { label: b.label || b.key, color: b.color }]))
   const click = onBarClick ? (d: any) => onBarClick(String(d?.[categoryKey] ?? d?.payload?.[categoryKey] ?? '')) : undefined
   return (
-    <ChartCard title={title} subtitle={subtitle} className={className}>
+    <ChartCard title={title} subtitle={subtitle} className={className} tooltip={tooltip}>
       <ChartContainer config={config} className="w-full" style={{ height }}>
         <BarChart data={data} layout={vertical ? 'vertical' : 'horizontal'} margin={{ top: 8, right: 12, left: vertical ? 8 : 4, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={!vertical} vertical={vertical} />
@@ -290,21 +303,22 @@ function OverviewTab({ d }: { d: FA['overview'] }) {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <KPICard title="Total Cash Outflow" value={rpC(k.totalOutflow)} icon={<TrendingDown className="h-4 w-4" />} />
-        <KPICard title="Total Outstanding" value={rpC(k.totalOutstanding)} icon={<AlertTriangle className="h-4 w-4" />} />
-        <KPICard title="Payroll Disbursed" value={rpC(k.payrollDisbursed)} icon={<Banknote className="h-4 w-4" />} />
-        <KPICard title="Petty Cash Balance" value={rpC(k.pettyCashBalance)} icon={<Wallet className="h-4 w-4" />} trend={{ value: k.pendingAp, label: 'AP pending', positive: k.pettyCashBalance >= 0 }} />
+        <KPICard title="Total Cash Outflow" value={rpC(k.totalOutflow)} icon={<TrendingDown className="h-4 w-4" />} tooltip="Total realisasi dana keluar dari seluruh aliran dana (PO Payments + Payroll + Petty Cash Out + Loans + Meal Benefit) periode-to-date." />
+        <KPICard title="Total Outstanding" value={rpC(k.totalOutstanding)} icon={<AlertTriangle className="h-4 w-4" />} tooltip="Total kewajiban/utang jatuh tempo yang belum terbayar (AP Outstanding + Sisa Pinjaman/Loans Outstanding + Gaji Belum Dibayar/Payroll Unpaid)." />
+        <KPICard title="Payroll Disbursed" value={rpC(k.payrollDisbursed)} icon={<Banknote className="h-4 w-4" />} tooltip="Total realisasi gaji karyawan yang sudah ditransfer dari rekening perusahaan ke karyawan." />
+        <KPICard title="Petty Cash Balance" value={rpC(k.pettyCashBalance)} icon={<Wallet className="h-4 w-4" />} trend={{ value: k.pendingAp, label: 'AP pending', positive: k.pettyCashBalance >= 0 }} tooltip="Saldo kas kecil (Petty Cash) saat ini: Total Refill (Cash In) dikurangi Total Klaim Keluar (Cash Out)." />
       </div>
       <BarCard title="Monthly Cash Outflow by Stream" subtitle="Stacked — PO Payments · Payroll · Reimburse · Loans · Meal" data={d.monthly} stacked height={300}
+        tooltip="Perkembangan bulanan realisasi pengeluaran kas kumulatif yang dibagi berdasarkan pos aliran dana (PO Payments, Payroll, Reimburse, Loans, Meal Benefit)."
         bars={[
           { key: 'PO Payments', color: CHART[0] }, { key: 'Payroll', color: CHART[1] }, { key: 'Reimburse', color: CHART[2] },
           { key: 'Loans', color: CHART[3] }, { key: 'Meal', color: CHART[4] },
         ]} />
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <ChartCard title="Outflow Composition by Stream" subtitle={`Total ${rp(k.totalOutflow)} period-to-date`}>
+        <ChartCard title="Outflow Composition by Stream" subtitle={`Total ${rp(k.totalOutflow)} period-to-date`} tooltip="Persentase kontribusi masing-masing pos aliran dana terhadap total seluruh pengeluaran kas periode berjalan.">
           <DonutChart data={d.composition.map((c) => ({ name: c.stream, value: c.outflow }))} height={280} />
         </ChartCard>
-        <BarCard title="Outstanding Exposure by Stream" data={d.outstandingByStream} bars={[{ key: 'value', color: 'var(--chart-3)', label: 'Outstanding' }]} vertical height={280} />
+        <BarCard title="Outstanding Exposure by Stream" data={d.outstandingByStream} bars={[{ key: 'value', color: 'var(--chart-3)', label: 'Outstanding' }]} vertical height={280} tooltip="Distribusi saldo kewajiban utang jatuh tempo/belum dibayar yang masih berjalan pada masing-masing pos aliran dana." />
       </div>
       <DataTable title="Streams Summary" rows={d.composition.map((c) => ({ ...c, id: c.stream }))} searchKeys={['stream']} initialSort="outflow"
         cols={[
@@ -325,27 +339,27 @@ function PoPaymentsTab({ d }: { d: FA['poPayments'] }) {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <KPICard title="Outstanding AP" value={rpC(k.totalOutstanding)} icon={<FileText className="h-4 w-4" />} trend={{ value: `${k.pctOverdue}%`, label: 'overdue', positive: k.pctOverdue < 10 }} />
-        <KPICard title="Overdue" value={rpC(k.overdue)} icon={<AlertTriangle className="h-4 w-4" />} />
-        <KPICard title="Total Paid" value={rpC(k.totalPaid)} icon={<DollarSign className="h-4 w-4" />} />
-        <KPICard title="Requests" value={k.totalRequests.toLocaleString('id-ID')} icon={<Clock className="h-4 w-4" />} trend={{ value: k.openCount, label: `open · ${k.pendingApproval} pending`, positive: false }} />
+        <KPICard title="Outstanding AP" value={rpC(k.totalOutstanding)} icon={<FileText className="h-4 w-4" />} trend={{ value: `${k.pctOverdue}%`, label: 'overdue', positive: k.pctOverdue < 10 }} tooltip="Total nominal pengajuan pembayaran (payment requests) dari vendor yang belum terbayar: SUM(payreq_amount - payreq_pay_amount) untuk request aktif. Trend menampilkan persentase overdue." />
+        <KPICard title="Overdue" value={rpC(k.overdue)} icon={<AlertTriangle className="h-4 w-4" />} tooltip="Total nominal pengajuan pembayaran (outstanding) yang telah melewati tanggal duedate pengajuan." />
+        <KPICard title="Total Paid" value={rpC(k.totalPaid)} icon={<DollarSign className="h-4 w-4" />} tooltip="Total realisasi kas keluar yang dibayarkan ke vendor: SUM(payments.p_amount) periode-to-date." />
+        <KPICard title="Requests" value={k.totalRequests.toLocaleString('id-ID')} icon={<Clock className="h-4 w-4" />} trend={{ value: k.openCount, label: `open · ${k.pendingApproval} pending`, positive: false }} tooltip="Jumlah lembar pengajuan pembayaran vendor (payment requests) ter-filter." />
       </div>
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <KPICard title="Lead Time → Approval" value={days(k.avgLeadToApproval)} icon={<Timer className="h-4 w-4" />} trend={{ value: `${k.leadToApprovalCount}`, label: 'notify→Approval Needed', positive: true }} />
-        <KPICard title="Lead Time → Paid" value={days(k.avgLeadToPaid)} icon={<Timer className="h-4 w-4" />} trend={{ value: `${k.leadToPaidCount}`, label: 'notify→paid', positive: true }} />
-        <KPICard title="Avg Request Duration" value={days(k.avgRequestDuration)} icon={<CalendarClock className="h-4 w-4" />} trend={{ value: 'created→due', label: 'requested term', positive: true }} />
-        <KPICard title="On-Time Rate" value={`${k.onTimeRate}%`} icon={<Gauge className="h-4 w-4" />} trend={{ value: `${k.tempoCount}`, label: 'tempo requests', positive: k.onTimeRate >= 75 }} />
+        <KPICard title="Lead Time → Approval" value={days(k.avgLeadToApproval)} icon={<Timer className="h-4 w-4" />} trend={{ value: `${k.leadToApprovalCount}`, label: 'notify→Approval Needed', positive: true }} tooltip="Rata-rata hari dari tanggal notifikasi terkirim (notify_at) sampai disetujui (log status 'AN')." />
+        <KPICard title="Lead Time → Paid" value={days(k.avgLeadToPaid)} icon={<Timer className="h-4 w-4" />} trend={{ value: `${k.leadToPaidCount}`, label: 'notify→paid', positive: true }} tooltip="Rata-rata hari dari tanggal notifikasi terkirim (notify_at) sampai pembayaran pertama dilakukan." />
+        <KPICard title="Avg Request Duration" value={days(k.avgRequestDuration)} icon={<CalendarClock className="h-4 w-4" />} trend={{ value: 'created→due', label: 'requested term', positive: true }} tooltip="Rata-rata jangka waktu pengajuan pembayaran dari tanggal dibuat (created_at) ke jatuh tempo (duedate)." />
+        <KPICard title="On-Time Rate" value={`${k.onTimeRate}%`} icon={<Gauge className="h-4 w-4" />} trend={{ value: `${k.tempoCount}`, label: 'tempo requests', positive: k.onTimeRate >= 75 }} tooltip="Persentase pembayaran tepat waktu atau sebelum jatuh tempo: OnTime / (OnTime + Overdue Late)." />
       </div>
       {k.largestExposure > 0 && <Card><CardContent className="pt-4 flex items-center gap-3 text-sm"><AlertTriangle className="h-4 w-4 text-amber-500" /><span className="text-muted-foreground">Largest single exposure:</span><span className="font-semibold">{rp(k.largestExposure)}</span><span className="text-muted-foreground">— {k.largestExposurePo}</span></CardContent></Card>}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <BarCard title="AP Aging" data={d.aging} bars={[{ key: 'value', color: 'var(--chart-3)', label: 'Outstanding' }]} />
-        <BarCard title="Monthly Cash Outflow" data={d.monthlyOutflow} bars={[{ key: 'value', color: 'var(--chart-1)', label: 'Paid' }]} />
+        <BarCard title="AP Aging" data={d.aging} bars={[{ key: 'value', color: 'var(--chart-3)', label: 'Outstanding' }]} tooltip="Pengelompokan sisa kewajiban pembayaran yang belum dilunasi berdasarkan rentang waktu keterlambatan dari tanggal jatuh tempo (aging bucket)." />
+        <BarCard title="Monthly Cash Outflow" data={d.monthlyOutflow} bars={[{ key: 'value', color: 'var(--chart-1)', label: 'Paid' }]} tooltip="Tren pembayaran riil yang ditransfer ke vendor/suplier per bulan." />
       </div>
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <ChartCard title="Payment Timeliness" subtitle="Click a slice to filter the table">
+        <ChartCard title="Payment Timeliness" subtitle="Click a slice to filter the table" tooltip="Analisis ketepatan waktu pembayaran vendor (Paid On-Time, Paid Late, Overdue Open, Unpaid On-Time, dll.)." align="right">
           <DonutChart data={d.timelinessBreakdown} height={260} onSliceClick={(name) => setCf({ label: `Timeliness: ${name}`, test: (r) => r.timeliness === name })} />
         </ChartCard>
-        <ChartCard title="Outstanding by Status">
+        <ChartCard title="Outstanding by Status" tooltip="Distribusi nominal kewajiban/utang vendor yang belum terbayar dikelompokkan berdasarkan status pengajuan saat ini." align="right">
           <DonutChart data={d.byStatus} height={260} onSliceClick={(name) => setCf({ label: `Status: ${name}`, test: (r) => r.statusLabel === name })} />
         </ChartCard>
       </div>
@@ -373,26 +387,26 @@ function PayrollTab({ d }: { d: FA['payroll'] }) {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <KPICard title="Total Receipt" value={rpC(k.totalReceipts)} icon={<Receipt className="h-4 w-4" />} />
-        <KPICard title="Take-Home Pay" value={rpC(k.totalThp)} icon={<Banknote className="h-4 w-4" />} trend={{ value: rpC(k.medianThp), label: 'median/slip', positive: true }} />
-        <KPICard title="Transferred" value={rpC(k.totalDisbursed)} icon={<DollarSign className="h-4 w-4" />} trend={{ value: `${k.disbursementCoverage}%`, label: 'of released', positive: k.disbursementCoverage >= 99 }} />
-        <KPICard title="Shortfall (Kurang)" value={rpC(k.shortfall)} icon={<AlertTriangle className="h-4 w-4" />} trend={{ value: k.releasedUnpaidCount, label: 'slips unpaid', positive: false }} />
+        <KPICard title="Total Receipt" value={rpC(k.totalReceipts)} icon={<Receipt className="h-4 w-4" />} tooltip="Total penerimaan gaji bruto dari seluruh slip gaji (payslip) periode-to-date." />
+        <KPICard title="Take-Home Pay" value={rpC(k.totalThp)} icon={<Banknote className="h-4 w-4" />} trend={{ value: rpC(k.medianThp), label: 'median/slip', positive: true }} tooltip="Total gaji bersih yang diterima karyawan (Take Home Pay). Trend menampilkan nilai median per slip." />
+        <KPICard title="Transferred" value={rpC(k.totalDisbursed)} icon={<DollarSign className="h-4 w-4" />} trend={{ value: `${k.disbursementCoverage}%`, label: 'of released', positive: k.disbursementCoverage >= 99 }} tooltip="Total nominal gaji yang sudah ditransfer: SUM(payroll_payments.amount). Trend menampilkan persentase coverage terhadap total gaji dirilis." />
+        <KPICard title="Shortfall (Kurang)" value={rpC(k.shortfall)} icon={<AlertTriangle className="h-4 w-4" />} trend={{ value: k.releasedUnpaidCount, label: 'slips unpaid', positive: false }} tooltip="Total akumulasi kekurangan transfer per-slip gaji (kelebihan transfer di slip lain tidak menutiti kekurangan slip lainnya)." />
       </div>
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <KPICard title="Released but Unpaid" value={rpC(k.releasedUnpaid)} icon={<AlertTriangle className="h-4 w-4" />} trend={{ value: k.releasedUnpaidCount, label: 'slips', positive: false }} />
-        <KPICard title="Payslips" value={k.payslips.toLocaleString('id-ID')} icon={<Users className="h-4 w-4" />} trend={{ value: k.employees, label: 'employees', positive: true }} />
-        <KPICard title="Total Additions" value={rpC(k.totalAdditions)} icon={<CheckCircle2 className="h-4 w-4" />} />
-        <KPICard title="Total Reductions" value={rpC(k.totalReductions)} icon={<TrendingDown className="h-4 w-4" />} />
+        <KPICard title="Released but Unpaid" value={rpC(k.releasedUnpaid)} icon={<AlertTriangle className="h-4 w-4" />} trend={{ value: k.releasedUnpaidCount, label: 'slips', positive: false }} tooltip="Total nominal gaji yang sudah dirilis (released > 0) namun belum ditransfer sama sekali (disbursed = 0)." />
+        <KPICard title="Payslips" value={k.payslips.toLocaleString('id-ID')} icon={<Users className="h-4 w-4" />} trend={{ value: k.employees, label: 'employees', positive: true }} tooltip="Jumlah lembar slip gaji karyawan (payslips) dalam filter terpilih." />
+        <KPICard title="Total Additions" value={rpC(k.totalAdditions)} icon={<CheckCircle2 className="h-4 w-4" />} tooltip="Total komponen penambahan penghasilan karyawan (lembur, bonus, insentif, dll.)." />
+        <KPICard title="Total Reductions" value={rpC(k.totalReductions)} icon={<TrendingDown className="h-4 w-4" />} tooltip="Total komponen potongan gaji karyawan (PPh21, BPJS, denda, dll.)." />
       </div>
       <BarCard title="Monthly THP vs Released vs Disbursed" data={d.monthly} bars={[
         { key: 'THP', color: CHART[2], label: 'THP' }, { key: 'Released', color: CHART[1], label: 'Released' }, { key: 'Disbursed', color: CHART[0], label: 'Disbursed' },
-      ]} height={280} />
+      ]} height={280} tooltip="Perbandingan bulanan antara total gaji bersih yang harus dibayar (THP), total gaji yang disetujui untuk dirilis (Released), dan total dana gaji yang sudah berhasil ditransfer (Disbursed)." />
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <ChartCard title="Payslip Status" subtitle="Click to filter">
+        <ChartCard title="Payslip Status" subtitle="Click to filter" tooltip="Proporsi slip gaji berdasarkan status rilis (Draft, Lock, Release, dll.)." align="right">
           <DonutChart data={d.statusBreakdown} height={260} onSliceClick={(name) => setCf({ label: `Status: ${name}`, test: (r) => r.statusLabel === name })} />
         </ChartCard>
-        <BarCard title="Top Earnings Additions" data={d.topAdditions} bars={[{ key: 'value', color: 'var(--chart-1)' }]} vertical />
-        <BarCard title="Top Reductions" data={d.topReductions} bars={[{ key: 'value', color: 'var(--chart-5)' }]} vertical />
+        <BarCard title="Top Earnings Additions" data={d.topAdditions} bars={[{ key: 'value', color: 'var(--chart-1)' }]} vertical tooltip="Peringkat jenis tunjangan/penambahan penghasilan karyawan terbesar periode ini." align="right" />
+        <BarCard title="Top Reductions" data={d.topReductions} bars={[{ key: 'value', color: 'var(--chart-5)' }]} vertical tooltip="Peringkat jenis potongan gaji karyawan terbesar periode ini." align="right" />
       </div>
       <FilterBar specs={PAYROLL_FILTERS} sel={f.sel} setSel={f.setSel} options={f.options} active={f.active} onClear={f.clear} />
       <DataTable title="Payslips" rows={d.rows} cf={cf} onClearCf={() => setCf(null)} prefilter={f.predicate} searchKeys={['employee', 'period', 'statusLabel', 'payStatus', 'periodType']} initialSort="startDate"
@@ -418,18 +432,18 @@ function MealTab({ d }: { d: FA['meal'] }) {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <KPICard title="Approved Benefit" value={rpC(k.totalApproved)} icon={<Utensils className="h-4 w-4" />} trend={{ value: `${k.approvalRate}%`, label: 'approval rate', positive: true }} />
-        <KPICard title="Net Released" value={rpC(k.netReleased)} icon={<DollarSign className="h-4 w-4" />} trend={{ value: `${k.releaseRate}%`, label: 'release rate', positive: k.releaseRate >= 80 }} />
-        <KPICard title="Outstanding" value={rpC(k.outstanding)} icon={<AlertTriangle className="h-4 w-4" />} />
-        <KPICard title="Requests" value={k.approvedRequests.toLocaleString('id-ID')} icon={<Receipt className="h-4 w-4" />} trend={{ value: rpC(k.avgPerRequest), label: 'avg/request', positive: true }} />
+        <KPICard title="Approved Benefit" value={rpC(k.totalApproved)} icon={<Utensils className="h-4 w-4" />} trend={{ value: `${k.approvalRate}%`, label: 'approval rate', positive: true }} tooltip="Total anggaran manfaat makan karyawan yang disetujui: SUM(mb_total WHERE status='A')." />
+        <KPICard title="Net Released" value={rpC(k.netReleased)} icon={<DollarSign className="h-4 w-4" />} trend={{ value: `${k.releaseRate}%`, label: 'release rate', positive: k.releaseRate >= 80 }} tooltip="Total realisasi dana makan yang dirilis: SUM(release.amount di mana tipe R=Release, P=Pengembalian/negatif)." />
+        <KPICard title="Outstanding" value={rpC(k.outstanding)} icon={<AlertTriangle className="h-4 w-4" />} tooltip="Sisa kewajiban manfaat makan yang belum dirilis: Approved - Net Released." />
+        <KPICard title="Requests" value={k.approvedRequests.toLocaleString('id-ID')} icon={<Receipt className="h-4 w-4" />} trend={{ value: rpC(k.avgPerRequest), label: 'avg/request', positive: true }} tooltip="Jumlah transaksi pengajuan manfaat makan yang disetujui (status='A')." />
       </div>
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <BarCard title="Approved Meal Benefit by Month" data={d.approvedByMonth} bars={[{ key: 'value', color: 'var(--chart-1)', label: 'Approved' }]} />
-        <ChartCard title="Spend by Meal Type" subtitle="Click to filter">
+        <BarCard title="Approved Meal Benefit by Month" data={d.approvedByMonth} bars={[{ key: 'value', color: 'var(--chart-1)', label: 'Approved' }]} tooltip="Tren pengeluaran anggaran manfaat makan karyawan yang disetujui per bulan." />
+        <ChartCard title="Spend by Meal Type" subtitle="Click to filter" tooltip="Pembagian total pengeluaran manfaat makan karyawan berdasarkan kategori (Overtime Meal, Guest Meal, Operational, dll.)." align="right">
           <DonutChart data={d.byType} height={260} onSliceClick={(name) => setCf({ label: `Type: ${name}`, test: (r) => r.typeLabel === name })} />
         </ChartCard>
       </div>
-      <BarCard title="Top Projects by Approved Spend" data={d.topProjects} bars={[{ key: 'value', color: 'var(--chart-4)' }]} vertical height={300} />
+      <BarCard title="Top Projects by Approved Spend" data={d.topProjects} bars={[{ key: 'value', color: 'var(--chart-4)' }]} vertical height={300} tooltip="Daftar proyek dengan total anggaran manfaat makan karyawan yang disetujui paling tinggi." />
       <FilterBar specs={MEAL_FILTERS} sel={f.sel} setSel={f.setSel} options={f.options} active={f.active} onClear={f.clear} />
       <DataTable title="Meal Benefit Requests" rows={d.rows} cf={cf} onClearCf={() => setCf(null)} prefilter={f.predicate} searchKeys={['mbId', 'typeLabel', 'projectId', 'zone', 'requestedBy']} initialSort="date"
         cols={[
@@ -453,15 +467,15 @@ function LoansTab({ d }: { d: FA['loans'] }) {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <KPICard title="Outstanding" value={rpC(k.outstanding)} icon={<Landmark className="h-4 w-4" />} trend={{ value: `${k.repaymentProgress}%`, label: 'repaid', positive: k.repaymentProgress >= 50 }} />
-        <KPICard title="Total Disbursed" value={rpC(k.totalDisbursed)} icon={<DollarSign className="h-4 w-4" />} />
-        <KPICard title="Expected / Month" value={rpC(k.expectedMonthly)} icon={<CalendarClock className="h-4 w-4" />} trend={{ value: `${k.monthsToClear}mo`, label: 'to clear book', positive: true }} />
-        <KPICard title="Active Loans" value={k.activeLoans.toLocaleString('id-ID')} icon={<Users className="h-4 w-4" />} trend={{ value: `${k.borrowers} borrowers`, label: `median ${k.medianTenor}mo`, positive: true }} />
+        <KPICard title="Outstanding" value={rpC(k.outstanding)} icon={<Landmark className="h-4 w-4" />} trend={{ value: `${k.repaymentProgress}%`, label: 'repaid', positive: k.repaymentProgress >= 50 }} tooltip="Sisa saldo pinjaman karyawan yang belum dilunasi: SUM(amount - repaid)." />
+        <KPICard title="Total Disbursed" value={rpC(k.totalDisbursed)} icon={<DollarSign className="h-4 w-4" />} tooltip="Total dana pinjaman yang telah dicairkan ke karyawan: SUM(loan.amount)." />
+        <KPICard title="Expected / Month" value={rpC(k.expectedMonthly)} icon={<CalendarClock className="h-4 w-4" />} trend={{ value: `${k.monthsToClear}mo`, label: 'to clear book', positive: true }} tooltip="Proyeksi angsuran masuk per bulan: SUM(amount / tenor) dari semua pinjaman aktif." />
+        <KPICard title="Active Loans" value={k.activeLoans.toLocaleString('id-ID')} icon={<Users className="h-4 w-4" />} trend={{ value: `${k.borrowers} borrowers`, label: `median ${k.medianTenor}mo`, positive: true }} tooltip="Jumlah buku pinjaman karyawan yang masih memiliki sisa saldo outstanding." />
       </div>
-      <BarCard title="Repayment Forecast (next 12 months)" subtitle="Projected payroll-deduction inflow at each loan's installment rate" data={d.forecast} bars={[{ key: 'value', color: 'var(--chart-1)', label: 'Expected' }]} height={280} />
+      <BarCard title="Repayment Forecast (next 12 months)" subtitle="Projected payroll-deduction inflow at each loan's installment rate" data={d.forecast} bars={[{ key: 'value', color: 'var(--chart-1)', label: 'Expected' }]} height={280} tooltip="Proyeksi nilai total pemotongan gaji bulanan (inflow) di masa depan untuk melunasi pinjaman aktif yang sedang berjalan." />
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <BarCard title="Disbursement vs Repayment by Month" data={d.monthly} bars={[{ key: 'Disbursed', color: CHART[3], label: 'Disbursed' }, { key: 'Repaid', color: CHART[0], label: 'Repaid' }]} />
-        <BarCard title="Top Borrowers by Outstanding" data={d.topBorrowers} bars={[{ key: 'value', color: 'var(--chart-3)' }]} vertical onBarClick={(name) => setCf({ label: `Borrower: ${name}`, test: (r) => r.borrower === name })} />
+        <BarCard title="Disbursement vs Repayment by Month" data={d.monthly} bars={[{ key: 'Disbursed', color: CHART[3], label: 'Disbursed' }, { key: 'Repaid', color: CHART[0], label: 'Repaid' }]} tooltip="Perbandingan bulanan antara total nominal pinjaman baru yang dicairkan (Disbursed) vs pinjaman yang berhasil didebit/dikembalikan (Repaid)." />
+        <BarCard title="Top Borrowers by Outstanding" data={d.topBorrowers} bars={[{ key: 'value', color: 'var(--chart-3)' }]} vertical onBarClick={(name) => setCf({ label: `Borrower: ${name}`, test: (r) => r.borrower === name })} tooltip="Peringkat karyawan dengan saldo outstanding pinjaman terbesar saat ini." align="right" />
       </div>
       <FilterBar specs={LOAN_FILTERS} sel={f.sel} setSel={f.setSel} options={f.options} active={f.active} onClear={f.clear} />
       <DataTable title="Loans" subtitle="Full loan book — outstanding is point-in-time, so this tab isn't scoped by the date filter." rows={d.rows} cf={cf} onClearCf={() => setCf(null)} prefilter={f.predicate} searchKeys={['loanId', 'borrower', 'remarks', 'statusLabel']} initialSort="outstanding"
@@ -486,20 +500,20 @@ function ReimburseTab({ d }: { d: FA['reimburse'] }) {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <KPICard title="Petty Cash Balance" value={rpC(k.balance)} icon={<Wallet className="h-4 w-4" />} trend={{ value: k.pending, label: 'pending', positive: k.balance >= 0 }} />
-        <KPICard title="Cash In (Approved)" value={rpC(k.totalIn)} icon={<DollarSign className="h-4 w-4" />} />
-        <KPICard title="Cash Out (Approved)" value={rpC(k.totalOut)} icon={<TrendingDown className="h-4 w-4" />} />
-        <KPICard title="Claims" value={k.approvedClaims.toLocaleString('id-ID')} icon={<Receipt className="h-4 w-4" />} trend={{ value: rpC(k.avgTicket), label: 'avg ticket', positive: true }} />
+        <KPICard title="Petty Cash Balance" value={rpC(k.balance)} icon={<Wallet className="h-4 w-4" />} trend={{ value: k.pending, label: 'pending', positive: k.balance >= 0 }} tooltip="Saldo kas kecil Petty Cash saat ini: Total Refill (Cash In) dikurangi Total Klaim Keluar (Cash Out)." />
+        <KPICard title="Cash In (Approved)" value={rpC(k.totalIn)} icon={<DollarSign className="h-4 w-4" />} tooltip="Total pengisian (refill) kas kecil yang disetujui: SUM(amount WHERE status='A' & cash_in)." />
+        <KPICard title="Cash Out (Approved)" value={rpC(k.totalOut)} icon={<TrendingDown className="h-4 w-4" />} tooltip="Total pengeluaran/klaim kas kecil yang disetujui: SUM(amount WHERE status='A' & cash_out)." />
+        <KPICard title="Claims" value={k.approvedClaims.toLocaleString('id-ID')} icon={<Receipt className="h-4 w-4" />} trend={{ value: rpC(k.avgTicket), label: 'avg ticket', positive: true }} tooltip="Jumlah berkas klaim pengeluaran kas kecil yang disetujui." />
       </div>
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <BarCard title="Monthly In / Out + Balance" data={d.monthly} bars={[{ key: 'CashIn', color: CHART[0], label: 'In' }, { key: 'CashOut', color: CHART[1], label: 'Out' }]} className="lg:col-span-2" height={280} />
-        <ChartCard title="Spend by Category" subtitle="Click to filter">
+        <BarCard title="Monthly In / Out + Balance" data={d.monthly} bars={[{ key: 'CashIn', color: CHART[0], label: 'In' }, { key: 'CashOut', color: CHART[1], label: 'Out' }]} className="lg:col-span-2" height={280} tooltip="Tren bulanan dana kas kecil yang diisi masuk (CashIn) vs nominal klaim yang dicairkan keluar (CashOut)." />
+        <ChartCard title="Spend by Category" subtitle="Click to filter" tooltip="Pembagian total pengeluaran petty cash berdasarkan kategori operasional." align="right">
           <DonutChart data={d.categoryBreakdown} height={280} onSliceClick={(name) => setCf({ label: `Category: ${name}`, test: (r) => r.category === name })} />
         </ChartCard>
       </div>
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <BarCard title="Top Projects by Spend" data={d.topProjects} bars={[{ key: 'value', color: 'var(--chart-4)' }]} vertical onBarClick={(name) => setCf({ label: `Project: ${name}`, test: (r) => r.projectName === name })} />
-        <BarCard title="Top Employees by Cash-Out" data={d.topEmployees} bars={[{ key: 'value', color: 'var(--chart-2)' }]} vertical onBarClick={(name) => setCf({ label: `Employee: ${name}`, test: (r) => r.employeeName === name })} />
+        <BarCard title="Top Projects by Spend" data={d.topProjects} bars={[{ key: 'value', color: 'var(--chart-4)' }]} vertical onBarClick={(name) => setCf({ label: `Project: ${name}`, test: (r) => r.projectName === name })} tooltip="Daftar proyek dengan total klaim reimbursement kas kecil terbesar." />
+        <BarCard title="Top Employees by Cash-Out" data={d.topEmployees} bars={[{ key: 'value', color: 'var(--chart-2)' }]} vertical onBarClick={(name) => setCf({ label: `Employee: ${name}`, test: (r) => r.employeeName === name })} tooltip="Daftar karyawan dengan pencairan reimbursement kas kecil kumulatif terbesar." align="right" />
       </div>
       <FilterBar specs={REIMBURSE_FILTERS} sel={f.sel} setSel={f.setSel} options={f.options} active={f.active} onClear={f.clear} />
       <DataTable title="Reimbursement Claims (Approved)" rows={d.rows} cf={cf} onClearCf={() => setCf(null)} prefilter={f.predicate} searchKeys={['reimburseId', 'projectName', 'description', 'employeeName', 'category']} initialSort="date"

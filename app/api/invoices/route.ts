@@ -6,23 +6,34 @@ import { parseDashboardParams } from '@/lib/api-helpers'
 import { parseDate, formatMonth, sortByPeriod, parseMulti, filterDataByDateRange } from '@/lib/utils-date-currency'
 import type { Invoice } from '@/database/types'
 
-type PayStatus = 'paid' | 'partial' | 'unpaid' | 'overdue'
+type PayStatus = 'overdue_ongoing' | 'overdue' | 'on_time' | 'unpaid'
 
 const STATUS_LABELS: Record<PayStatus, string> = {
-  paid: 'Paid',
-  partial: 'Partial',
-  unpaid: 'Unpaid',
+  overdue_ongoing: 'Overdue (On Going)',
   overdue: 'Overdue',
+  on_time: 'On Time',
+  unpaid: 'Unpaid',
 }
 
-// Payment status is driven by the payment PERCENTAGE, not the amount —
-// e.g. 100% with amount 0 still counts as fully collected ("paid").
-function statusOf(inv: Invoice, today: Date): PayStatus {
+function statusOf(inv: Invoice, paymentDateStr: string | null, today: Date): PayStatus {
   const pct = inv.invPaymentPercentage
-  if (pct >= 100) return 'paid'
   const due = parseDate(inv.invEstPaymentDate)
-  if (due && due < today) return 'overdue'
-  return pct > 0 ? 'partial' : 'unpaid'
+  const isFullyPaid = pct >= 100
+
+  if (isFullyPaid) {
+    if (due && paymentDateStr) {
+      const payDate = parseDate(paymentDateStr)
+      if (payDate && payDate > due) {
+        return 'overdue'
+      }
+    }
+    return 'on_time'
+  } else {
+    if (due && due < today) {
+      return 'overdue_ongoing'
+    }
+    return 'unpaid'
+  }
 }
 
 
@@ -34,6 +45,10 @@ export async function GET(request: NextRequest) {
     const customer = parseMulti(searchParams, 'customer')
     const status = parseMulti(searchParams, 'status')
     const projectStatus = parseMulti(searchParams, 'projectStatus')
+    const minAmountParam = searchParams.get('minAmount')
+    const minPaymentParam = searchParams.get('minPayment')
+    const minAmount = minAmountParam ? parseFloat(minAmountParam) : null
+    const minPayment = minPaymentParam ? parseFloat(minPaymentParam) : null
 
     const [{ invoices, invPrjMap, paymentDetails }, nameMap, completionMap, orders] = await Promise.all([
       getInvoicingData(),
@@ -59,7 +74,6 @@ export async function GET(request: NextRequest) {
     // ── Filter invoices ──
     let filtered = filterDataByDateRange(invoices, (inv) => inv.invDate, dateFrom, dateTo)
     if (customer.length) filtered = filtered.filter((inv) => customer.includes(inv.invCompanyId))
-    if (status.length) filtered = filtered.filter((inv) => status.includes(statusOf(inv, today)))
     if (projectStatus.length) filtered = filtered.filter((inv) => {
       const statuses = getInvPeStatuses(inv.invId)
       return statuses.some(s => projectStatus.includes(s))
@@ -70,16 +84,24 @@ export async function GET(request: NextRequest) {
     const filteredIds = new Set(filtered.map((inv) => inv.invId))
     const paidByInv = new Map<string, number>()
     const payMonthsByInv = new Map<string, Set<string>>() // inv_id -> months it received a payment
+    const paymentDatesByInv = new Map<string, string>() // inv_id -> latest payment date
     for (const pd of paymentDetails) {
       if (!filteredIds.has(pd.invId)) continue
       paidByInv.set(pd.invId, (paidByInv.get(pd.invId) || 0) + pd.amount)
       const mk = formatMonth(pd.date)
       if (mk) { let s = payMonthsByInv.get(pd.invId); if (!s) payMonthsByInv.set(pd.invId, (s = new Set())); s.add(mk) }
+      if (pd.date) {
+        const currentMax = paymentDatesByInv.get(pd.invId)
+        if (!currentMax || pd.date > currentMax) {
+          paymentDatesByInv.set(pd.invId, pd.date)
+        }
+      }
     }
 
     // ── Per-invoice derived rows ──
     const rows = filtered.map((inv) => {
-      const st = statusOf(inv, today)
+      const payDate = paymentDatesByInv.get(inv.invId) || null
+      const st = statusOf(inv, payDate, today)
       // Outstanding from the payment percentage: (1 - pct) * invoice amount.
       // Paid uses the actual collected amount field (inv_payment_amount).
       const pct = Math.min(100, Math.max(0, inv.invPaymentPercentage))
@@ -87,13 +109,31 @@ export async function GET(request: NextRequest) {
       const outstanding = Math.max(0, (1 - pct / 100) * amount)
       const paid = paidByInv.get(inv.invId) || 0
       const due = parseDate(inv.invEstPaymentDate)
-      const daysOverdue = st === 'overdue' && due ? Math.floor((today.getTime() - due.getTime()) / 86400000) : 0
+      
+      let daysOverdue = 0
+      if (due) {
+        if (st === 'overdue_ongoing') {
+          daysOverdue = Math.max(0, Math.floor((today.getTime() - due.getTime()) / 86400000))
+        } else if (st === 'overdue' && payDate) {
+          const actualPayDate = parseDate(payDate)
+          if (actualPayDate) {
+            daysOverdue = Math.max(0, Math.floor((actualPayDate.getTime() - due.getTime()) / 86400000))
+          }
+        }
+      }
+
       // Lead time: days from project completion (status -> C) to the invoice date
       const prjStr = invPrjMap.get(inv.invId) || ''
       const firstPrj = prjStr.split(',')[0].trim()
       const compDate = firstPrj ? parseDate(completionMap.get(firstPrj) || '') : null
       const invDate = parseDate(inv.invDate)
-      const leadTime = compDate && invDate ? Math.round((invDate.getTime() - compDate.getTime()) / 86400000) : null
+      const leadTimeRaw = compDate && invDate ? Math.round((invDate.getTime() - compDate.getTime()) / 86400000) : null
+      const leadTime = leadTimeRaw !== null && leadTimeRaw < 0 ? null : leadTimeRaw
+      
+      const estPaymentDays = invDate && due ? Math.max(0, Math.round((due.getTime() - invDate.getTime()) / 86400000)) : null
+      const payDateObj = payDate ? parseDate(payDate) : null
+      const actualPaymentDays = invDate && payDateObj ? Math.max(0, Math.round((payDateObj.getTime() - invDate.getTime()) / 86400000)) : null
+
       return {
         invId: inv.invId,
         invNumber: inv.invNumber,
@@ -103,6 +143,7 @@ export async function GET(request: NextRequest) {
         customer: nameOf(inv.invCompanyId),
         invoiceDate: inv.invDate,
         dueDate: inv.invEstPaymentDate,
+        paymentDate: payDate || '-',
         amount,
         paid,
         outstanding,
@@ -112,11 +153,26 @@ export async function GET(request: NextRequest) {
         paymentMonths: [...(payMonthsByInv.get(inv.invId) || [])],
         refName: inv.invRefName,
         remarks: inv.invRemarks,
+        completedDate: firstPrj ? completionMap.get(firstPrj) || '-' : '-',
+        estPaymentDays,
+        actualPaymentDays,
       }
     })
 
+    // ── Apply Min Amount, Min Payment and Status Filters ──
+    let filteredRows = rows
+    if (minAmount !== null && !isNaN(minAmount)) {
+      filteredRows = filteredRows.filter((r) => r.amount >= minAmount)
+    }
+    if (minPayment !== null && !isNaN(minPayment)) {
+      filteredRows = filteredRows.filter((r) => r.paid >= minPayment)
+    }
+    if (status.length) {
+      filteredRows = filteredRows.filter((r) => status.includes(r.status))
+    }
+
     // ── Apply Chart Filters (Cross-Filtering) ──
-    let finalRows = rows
+    let finalRows = filteredRows
     const cType = searchParams.get('cType')
     const cVal = searchParams.get('cVal')
     if (cType && cVal) {
@@ -141,6 +197,22 @@ export async function GET(request: NextRequest) {
           if (cVal === '31-60') return r.leadTime >= 31 && r.leadTime <= 60
           if (cVal === '60+') return r.leadTime >= 61
         }
+        if (cType === 'estPaymentDays') {
+          if (r.estPaymentDays === null) return false
+          if (cVal === '0-15') return r.estPaymentDays >= 0 && r.estPaymentDays <= 15
+          if (cVal === '16-30') return r.estPaymentDays >= 16 && r.estPaymentDays <= 30
+          if (cVal === '31-45') return r.estPaymentDays >= 31 && r.estPaymentDays <= 45
+          if (cVal === '46-60') return r.estPaymentDays >= 46 && r.estPaymentDays <= 60
+          if (cVal === '60+') return r.estPaymentDays >= 61
+        }
+        if (cType === 'actualPaymentDays') {
+          if (r.actualPaymentDays === null) return false
+          if (cVal === '0-15') return r.actualPaymentDays >= 0 && r.actualPaymentDays <= 15
+          if (cVal === '16-30') return r.actualPaymentDays >= 16 && r.actualPaymentDays <= 30
+          if (cVal === '31-45') return r.actualPaymentDays >= 31 && r.actualPaymentDays <= 45
+          if (cVal === '46-60') return r.actualPaymentDays >= 46 && r.actualPaymentDays <= 60
+          if (cVal === '60+') return r.actualPaymentDays >= 61
+        }
         return true
       })
     }
@@ -150,14 +222,14 @@ export async function GET(request: NextRequest) {
     const totalInvoiced = finalRows.reduce((s, r) => s + r.amount, 0)
     const totalPaid = finalRows.reduce((s, r) => s + r.paid, 0)
     const totalOutstanding = finalRows.reduce((s, r) => s + r.outstanding, 0)
-    const overdueRows = finalRows.filter((r) => r.status === 'overdue')
+    const overdueRows = finalRows.filter((r) => r.status === 'overdue_ongoing')
     const overdueCount = overdueRows.length
     const overdueAmount = overdueRows.reduce((s, r) => s + r.outstanding, 0)
     // Collected % = Total Invoiced / (Total Invoiced + Total Outstanding)
     const collectionRate = (totalInvoiced + totalOutstanding) > 0 ? Math.round((totalInvoiced / (totalInvoiced + totalOutstanding)) * 1000) / 10 : 0
 
     // ── Status breakdown (donut) ──
-    const statusCounts: Record<PayStatus, number> = { paid: 0, partial: 0, unpaid: 0, overdue: 0 }
+    const statusCounts: Record<PayStatus, number> = { overdue_ongoing: 0, overdue: 0, on_time: 0, unpaid: 0 }
     for (const r of finalRows) statusCounts[r.status]++
     const statusBreakdown = (Object.keys(statusCounts) as PayStatus[])
       .map((k) => ({ name: STATUS_LABELS[k], value: statusCounts[k] }))
@@ -215,7 +287,7 @@ export async function GET(request: NextRequest) {
       relatedPaymentsAgg[k].Invoice += r.amount
     }
     for (const pd of paymentDetails) {
-      if (!filteredIds.has(pd.invId)) continue
+      if (!finalIds.has(pd.invId)) continue
       const k = formatMonth(pd.date)
       if (!k) continue
       if (!relatedPaymentsAgg[k]) relatedPaymentsAgg[k] = { Invoice: 0, Payment: 0 }
@@ -265,6 +337,46 @@ export async function GET(request: NextRequest) {
     }
     const avgLeadTime = leadCount > 0 ? Math.round(leadSum / leadCount) : 0
 
+    // ── Payment Estimate Days distribution (invoice -> due date, in days) ──
+    const estDefs = [
+      { name: '0-15', min: 0, max: 15 },
+      { name: '16-30', min: 16, max: 30 },
+      { name: '31-45', min: 31, max: 45 },
+      { name: '46-60', min: 46, max: 60 },
+      { name: '60+', min: 61, max: Infinity },
+    ]
+    const estPaymentDaysDistribution = estDefs.map((d) => ({ name: d.name, value: 0 }))
+    let estSum = 0
+    let estCount = 0
+    for (const r of finalRows) {
+      if (r.estPaymentDays === null) continue
+      estSum += r.estPaymentDays
+      estCount++
+      const idx = estDefs.findIndex((d) => r.estPaymentDays! >= d.min && r.estPaymentDays! <= d.max)
+      if (idx >= 0) estPaymentDaysDistribution[idx].value++
+    }
+    const avgEstPaymentDays = estCount > 0 ? Math.round(estSum / estCount) : 0
+
+    // ── Payment Actual Days distribution (invoice -> payment date, in days) ──
+    const actDefs = [
+      { name: '0-15', min: 0, max: 15 },
+      { name: '16-30', min: 16, max: 30 },
+      { name: '31-45', min: 31, max: 45 },
+      { name: '46-60', min: 46, max: 60 },
+      { name: '60+', min: 61, max: Infinity },
+    ]
+    const actualPaymentDaysDistribution = actDefs.map((d) => ({ name: d.name, value: 0 }))
+    let actSum = 0
+    let actCount = 0
+    for (const r of finalRows) {
+      if (r.actualPaymentDays === null) continue
+      actSum += r.actualPaymentDays
+      actCount++
+      const idx = actDefs.findIndex((d) => r.actualPaymentDays! >= d.min && r.actualPaymentDays! <= d.max)
+      if (idx >= 0) actualPaymentDaysDistribution[idx].value++
+    }
+    const avgActualPaymentDays = actCount > 0 ? Math.round(actSum / actCount) : 0
+
     // ── Estimated Payment Schedule (outstanding by est payment date month) ──
     const estAgg: Record<string, number> = {}
     for (const r of finalRows) {
@@ -285,7 +397,7 @@ export async function GET(request: NextRequest) {
       c.totalInvoiced += r.amount
       c.totalPaid += r.paid
       c.outstanding += r.outstanding
-      if (r.status === 'overdue') c.overdue += r.outstanding
+      if (r.status === 'overdue_ongoing') c.overdue += r.outstanding
     }
     const customerSummary = Object.entries(custAgg)
       .map(([customerId, v]) => ({
@@ -318,13 +430,26 @@ export async function GET(request: NextRequest) {
       .sort((a, b) => (parseDate(b.invoiceDate)?.getTime() || 0) - (parseDate(a.invoiceDate)?.getTime() || 0))
 
     return NextResponse.json({
-      kpis: { totalInvoiced, totalPaid, totalOutstanding, overdueCount, overdueAmount, collectionRate, invoiceCount: finalRows.length, avgLeadTime },
+      kpis: {
+        totalInvoiced,
+        totalPaid,
+        totalOutstanding,
+        overdueCount,
+        overdueAmount,
+        collectionRate,
+        invoiceCount: finalRows.length,
+        avgLeadTime,
+        avgEstPaymentDays,
+        avgActualPaymentDays
+      },
       statusBreakdown,
       trend,
       trendByInvoiceDate,
       trendByRelatedPaymentDate,
       aging,
       leadTimeDistribution,
+      estPaymentDaysDistribution,
+      actualPaymentDaysDistribution,
       estPaymentSchedule,
       customerSummary,
       invoices: tableRows,

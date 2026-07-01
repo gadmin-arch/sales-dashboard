@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { KPICard } from '@/components/kpi-card'
+import { InfoTooltip } from '@/components/info-tooltip'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -96,16 +97,21 @@ export default function PaymentsPage() {
 
         {/* KPIs */}
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <KPICard title="Total Collected" value={fmtRp(data.kpis.totalCollected)} icon={<Wallet className="h-4 w-4" />} />
-          <KPICard title="Collected This Month" value={fmtRp(data.kpis.paymentsThisMonth)} icon={<Calendar className="h-4 w-4" />} />
-          <KPICard title="Payments" value={data.kpis.paymentCount.toLocaleString('id-ID')} icon={<Hash className="h-4 w-4" />} />
-          <KPICard title="Avg Payment" value={fmtRp(data.kpis.avgPayment)} icon={<DollarSign className="h-4 w-4" />} />
+          <KPICard title="Total Collected" value={fmtRp(data.kpis.totalCollected)} icon={<Wallet className="h-4 w-4" />} tooltip="Akumulasi nominal pembayaran yang telah diterima: SUM(pay_total_amount || pay_amount) dalam filter terpilih." />
+          <KPICard title="Collected This Month" value={fmtRp(data.kpis.paymentsThisMonth)} icon={<Calendar className="h-4 w-4" />} tooltip="Akumulasi nominal pembayaran yang diterima khusus pada bulan berjalan saat ini." />
+          <KPICard title="Payments" value={data.kpis.paymentCount.toLocaleString('id-ID')} icon={<Hash className="h-4 w-4" />} tooltip="Jumlah transaksi pembayaran yang tercatat dalam filter terpilih." />
+          <KPICard title="Avg Payment" value={fmtRp(data.kpis.avgPayment)} icon={<DollarSign className="h-4 w-4" />} tooltip="Rata-rata nominal per transaksi pembayaran diterima: Total Collected / Jumlah Transaksi." />
         </div>
 
         {/* Charts */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          <Card className="lg:col-span-2">
-            <CardHeader><CardTitle className="text-sm font-semibold">Collection Trend</CardTitle></CardHeader>
+          <Card className="lg:col-span-2 overflow-visible">
+            <CardHeader>
+              <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
+                Collection Trend
+                <InfoTooltip tooltip="Tren penerimaan dana pembayaran yang berhasil dicairkan per bulan." />
+              </CardTitle>
+            </CardHeader>
             <CardContent>
               <ChartContainer config={{}} className="h-[280px] w-full">
                 <BarChart data={data.trend} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
@@ -118,8 +124,13 @@ export default function PaymentsPage() {
               </ChartContainer>
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader><CardTitle className="text-sm font-semibold">Top Customers</CardTitle></CardHeader>
+          <Card className="overflow-visible">
+            <CardHeader>
+              <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
+                Top Customers
+                <InfoTooltip tooltip="Peringkat pelanggan berdasarkan total nilai pembayaran kas masuk yang disetor." align="right" />
+              </CardTitle>
+            </CardHeader>
             <CardContent className="space-y-3">
               {data.byCustomer.length === 0 ? <p className="text-center text-muted-foreground py-8">No data</p> : data.byCustomer.slice(0, 8).map((c, i) => {
                 const isActive = chartFilter?.type === 'customer' && chartFilter.value === c.customer

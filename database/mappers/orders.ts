@@ -43,6 +43,8 @@ export function mapOrder(row: string[]): Order {
     prjEndDateActual: row[26] || '',
     prjPeStatus: row[31] || '',
     prjFStatus: row[33] || '',
+    prjInvPercent: parseNum(row[34]),
+    prjPayPercent: parseNum(row[36]),
     prjOwner: row[41] || '',
     createdBy: row[42] || '',
     createdAt: row[43] || '',

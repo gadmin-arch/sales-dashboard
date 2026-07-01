@@ -70,6 +70,8 @@ export interface Order {
   prjEndDateActual: string
   prjPeStatus: string
   prjFStatus: string
+  prjInvPercent?: number
+  prjPayPercent?: number
   prjOwner: string
   createdBy: string
   createdAt: string

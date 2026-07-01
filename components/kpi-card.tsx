@@ -3,6 +3,7 @@
 import { cn } from '@/lib/utils'
 import { TrendingUp, TrendingDown } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
+import { InfoTooltip } from '@/components/info-tooltip'
 
 interface KPITrend {
   value: number | string
@@ -16,15 +17,19 @@ interface KPICardProps {
   icon?: React.ReactNode
   /** Optional sub-line: e.g. { value: 92.7, label: 'collected', positive: true } */
   trend?: KPITrend
+  tooltip?: string
 }
 
-export function KPICard({ title, value, icon, trend }: KPICardProps) {
+export function KPICard({ title, value, icon, trend, tooltip }: KPICardProps) {
   return (
-    <Card>
+    <Card className="overflow-visible">
       <CardContent className="pt-5">
         <div className="flex items-start justify-between">
           <div className="flex-1">
-            <p className="text-sm font-medium text-muted-foreground">{title}</p>
+            <div className="flex items-center gap-1.5">
+              <p className="text-sm font-medium text-muted-foreground">{title}</p>
+              {tooltip && <InfoTooltip tooltip={tooltip} />}
+            </div>
             <p className="mt-2 text-2xl font-bold text-foreground">{value}</p>
             {trend && (
               <div className="mt-2 flex items-center gap-1">

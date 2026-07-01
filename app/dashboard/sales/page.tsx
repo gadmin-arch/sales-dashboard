@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { cn } from '@/lib/utils'
 import { KPICard } from '@/components/kpi-card'
 import { ChartPeriodToggle } from '@/components/chart-period-toggle'
+import { InfoTooltip } from '@/components/info-tooltip'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -244,17 +245,23 @@ export default function SalesPage() {
 
         {/* KPIs */}
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-5">
-          <KPICard title="Total Projects" value={data.kpis.totalProjects.toString()} icon={<Briefcase className="h-4 w-4" />} />
-          <KPICard title="Total Sales" value={fmtRp(data.kpis.totalSales)} icon={<DollarSign className="h-4 w-4" />} />
-          <KPICard title="Total Invoice" value={fmtRp(data.kpis.totalInvoice)} icon={<FileText className="h-4 w-4" />} trend={{ value: fmtRp(data.kpis.totalPayment), label: 'paid', positive: true }} />
-          <KPICard title="Total Quotations" value={data.kpis.totalQuotations.toString()} icon={<FileText className="h-4 w-4" />} />
-          <KPICard title="Quotation Value" value={fmtRp(data.kpis.totalQuotationValue)} icon={<TrendingUp className="h-4 w-4" />} />
+          <KPICard title="Total Projects" value={data.kpis.totalProjects.toString()} icon={<Briefcase className="h-4 w-4" />} tooltip="Jumlah proyek aktif (tipe Project) dalam filter terpilih." />
+          <KPICard title="Total Sales" value={fmtRp(data.kpis.totalSales)} icon={<DollarSign className="h-4 w-4" />} tooltip="Akumulasi nilai Purchase Order (PO) proyek: SUM(prj_po_total) dari semua proyek ter-filter." />
+          <KPICard title="Total Invoice" value={fmtRp(data.kpis.totalInvoice)} icon={<FileText className="h-4 w-4" />} trend={{ value: fmtRp(data.kpis.totalPayment), label: 'paid', positive: true }} tooltip="Total invoice diterbitkan: SUM(inv_amount) dari invoice terhubung proyek. Sub-baris menampilkan total pembayaran diterima: SUM(pd_total_amount)." />
+          <KPICard title="Total Quotations" value={data.kpis.totalQuotations.toString()} icon={<FileText className="h-4 w-4" />} tooltip="Jumlah penawaran harga (quotations) aktif dalam filter terpilih." />
+          <KPICard title="Quotation Value" value={fmtRp(data.kpis.totalQuotationValue)} icon={<TrendingUp className="h-4 w-4" />} tooltip="Total nilai akhir penawaran harga: SUM(q_final_price) dari semua penawaran ter-filter." />
         </div>
 
         {/* Charts Row 1 */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
-          <Card className="lg:col-span-2">
-            <CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-sm font-semibold">Sales Revenue Trends</CardTitle><ChartPeriodToggle period={chartPeriod} onPeriodChange={onPeriod} /></CardHeader>
+          <Card className="lg:col-span-2 overflow-visible">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
+                Sales Revenue Trends
+                <InfoTooltip tooltip="Tren dari total nilai kontrak PO yang diterima, dipecah menjadi komponen material dan jasa." />
+              </CardTitle>
+              <ChartPeriodToggle period={chartPeriod} onPeriodChange={onPeriod} />
+            </CardHeader>
             <CardContent>
               <ChartContainer config={revenueConfig} className="h-[280px] w-full">
                 <BarChart data={data.revenueTrend} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
@@ -269,8 +276,13 @@ export default function SalesPage() {
               </ChartContainer>
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader><CardTitle className="text-sm font-semibold">Sales by Type</CardTitle></CardHeader>
+          <Card className="overflow-visible">
+            <CardHeader>
+              <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
+                Sales by Type
+                <InfoTooltip tooltip="Pembagian total nominal kontrak PO berdasarkan jenis penjualan (proyek, material, jasa, dll.)." align="right" />
+              </CardTitle>
+            </CardHeader>
             <CardContent>
               <DonutChart
                 data={data.salesByType}
@@ -282,8 +294,13 @@ export default function SalesPage() {
               />
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader><CardTitle className="text-sm font-semibold">PO Composition</CardTitle></CardHeader>
+          <Card className="overflow-visible">
+            <CardHeader>
+              <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
+                PO Composition
+                <InfoTooltip tooltip="Rasio pembagian nominal Purchase Order (PO) antara pengadaan Material vs Jasa." align="right" />
+              </CardTitle>
+            </CardHeader>
             <CardContent>
               <DonutChart
                 data={data.poComposition}
@@ -299,21 +316,34 @@ export default function SalesPage() {
 
         {/* Charts Row 2 */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <Card><CardHeader><CardTitle className="text-sm font-semibold">Price Composition (%)</CardTitle></CardHeader><CardContent>
-            <ChartContainer config={priceConfig} className="h-[260px] w-full">
-              <BarChart data={data.priceComposition} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis dataKey="name" stroke="var(--muted-foreground)" tickLine={false} axisLine={{ stroke: 'var(--border)' }} className="text-xs" />
-                <YAxis domain={[0, 100]} stroke="var(--muted-foreground)" tickFormatter={v => `${v}%`} tickLine={false} axisLine={false} className="text-xs" />
-                <Tooltip content={<PriceTooltip />} />
-                <ChartLegend content={<ChartLegendContent />} />
-                <Bar dataKey="material" stackId="a" fill="var(--color-material)" radius={[0, 0, 4, 4]} name="Material" onClick={(d: any) => handleChartClick('priceCompMonth', d.name, `Month = ${d.name}`)} style={{ cursor: 'pointer' }} />
-                <Bar dataKey="service" stackId="a" fill="var(--color-service)" radius={[4, 4, 0, 0]} name="Service" onClick={(d: any) => handleChartClick('priceCompMonth', d.name, `Month = ${d.name}`)} style={{ cursor: 'pointer' }} />
-              </BarChart>
-            </ChartContainer>
-          </CardContent></Card>
-          <Card>
-            <CardHeader><CardTitle className="text-sm font-semibold">Quotation Status</CardTitle></CardHeader>
+          <Card className="overflow-visible">
+            <CardHeader>
+              <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
+                Price Composition (%)
+                <InfoTooltip tooltip="Persentase kontribusi material vs jasa terhadap total nominal PO per bulan." />
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ChartContainer config={priceConfig} className="h-[260px] w-full">
+                <BarChart data={data.priceComposition} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                  <XAxis dataKey="name" stroke="var(--muted-foreground)" tickLine={false} axisLine={{ stroke: 'var(--border)' }} className="text-xs" />
+                  <YAxis domain={[0, 100]} stroke="var(--muted-foreground)" tickFormatter={v => `${v}%`} tickLine={false} axisLine={false} className="text-xs" />
+                  <Tooltip content={<PriceTooltip />} />
+                  <ChartLegend content={<ChartLegendContent />} />
+                  <Bar dataKey="material" stackId="a" fill="var(--color-material)" radius={[0, 0, 4, 4]} name="Material" onClick={(d: any) => handleChartClick('priceCompMonth', d.name, `Month = ${d.name}`)} style={{ cursor: 'pointer' }} />
+                  <Bar dataKey="service" stackId="a" fill="var(--color-service)" radius={[4, 4, 0, 0]} name="Service" onClick={(d: any) => handleChartClick('priceCompMonth', d.name, `Month = ${d.name}`)} style={{ cursor: 'pointer' }} />
+                </BarChart>
+              </ChartContainer>
+            </CardContent>
+          </Card>
+          <Card className="overflow-visible">
+            <CardHeader>
+              <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
+                Quotation Status
+                <InfoTooltip tooltip="Jumlah dokumen penawaran harga (quotations) dikelompokkan berdasarkan status persetujuan saat ini." align="right" />
+              </CardTitle>
+            </CardHeader>
             <CardContent>
               <DonutChart
                 data={Object.entries(data.quotStatusBreakdown).map(([name, value]) => ({ name, value }))}
@@ -326,10 +356,13 @@ export default function SalesPage() {
         </div>
 
         {/* PO → Invoice → Payment timeline */}
-        <Card>
+        <Card className="overflow-visible">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <div>
-              <CardTitle className="text-sm font-semibold">PO → Invoice → Payment Timeline</CardTitle>
+              <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
+                PO → Invoice → Payment Timeline
+                <InfoTooltip tooltip="Tren bulanan dari nilai PO yang masuk dibandingkan dengan nilai invoice yang diterbitkan dan pembayaran yang diterima (di-clamp ke bulan PO)." />
+              </CardTitle>
               <p className="text-xs text-muted-foreground">Projects selected by PO date; invoice/payment clamped to the PO month (backfill never runs backwards). Click a bar to filter by PO month.</p>
             </div>
             <ChartPeriodToggle period={chartPeriod} onPeriodChange={onPeriod} />
