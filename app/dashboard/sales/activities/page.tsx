@@ -12,10 +12,12 @@ import {
 } from '@/components/ui/chart'
 import { DonutChart } from '@/components/donut-chart'
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts'
-import { Activity, CheckCircle2, Clock, AlertTriangle, Loader2, Search, ListTodo, CalendarDays, ChevronLeft, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react'
+import { Activity, CheckCircle2, Clock, AlertTriangle, ListTodo, CalendarDays, ChevronLeft, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react'
 import { ThemeToggle, SalesPageShell } from '@/components/theme-toggle'
 import { MultiSelect } from '@/components/multi-select'
 import { DateRangeRow } from '@/components/date-range-row'
+import { PageSpinner, PageError } from '@/components/page-states'
+import { SearchInput } from '@/components/search-input'
 import { LoadMore, useLoadMore } from '@/components/load-more'
 import { useSort, SortHead } from '@/components/sortable'
 import { buildQuery, sameSet, getYTD, fmtCurrency } from '@/lib/sales-helpers'
@@ -161,8 +163,8 @@ export default function SalesActivitiesPage() {
   }, [weekStart])
   const isTodayWeekDay = (d: Date) => d.toDateString() === today.toDateString()
 
-  if (loading && !data) return <div className="flex items-center justify-center min-h-[80vh]"><Loader2 className="animate-spin h-8 w-8 text-primary" /></div>
-  if (error && !data) return <div className="flex flex-col items-center justify-center min-h-[80vh] space-y-4"><p className="text-destructive">{error}</p><Button onClick={onClear}>Retry</Button></div>
+  if (loading && !data) return <PageSpinner />
+  if (error && !data) return <PageError error={error} onRetry={onClear} />
   if (!data) return null
 
   const trendConfig = { activities: { label: 'Activities', color: 'var(--primary)' } }
@@ -298,7 +300,7 @@ export default function SalesActivitiesPage() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between" id="activities-list">
           <h2 className="text-lg font-semibold">Activities {search && <span className="text-sm font-normal text-muted-foreground">({filtered.length} results)</span>}</h2>
           <div className="flex items-center gap-2">
-            <div className="relative w-48"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" /><input type="text" placeholder="Search activities..." value={search} onChange={e => setSearch(e.target.value)} className="w-full rounded-lg border border-input bg-background pl-8 pr-3 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary" /></div>
+            <SearchInput value={search} onChange={setSearch} placeholder="Search activities..." />
             <div className="flex items-center gap-0.5 rounded-lg border border-border p-0.5">
               {([['calendar', CalendarDays, 'Month'], ['week', CalendarDays, 'Week'], ['list', ListTodo, 'List']] as const).map(([mode, Icon, label]) => (
                 <button key={mode} onClick={() => setView(mode)} className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${view === mode ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-muted'}`}><Icon className="h-3.5 w-3.5" /> {label}</button>

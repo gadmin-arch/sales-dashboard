@@ -155,7 +155,8 @@ export async function getProjectLogs(prjId: string): Promise<ProjectLog[]> {
 
 export async function getBasts(prjId: string): Promise<Bast[]> {
   const { rows } = await fetchAllRows(GOOGLE_CONFIG.orders.spreadsheetId, GOOGLE_CONFIG.orders.sheets.basts)
-  return rows.filter((r) => r[2] === prjId).map((r) => ({
+  // exclude soft-deleted rows (deleted_at at index 12)
+  return rows.filter((r) => r[2] === prjId && !r[12]).map((r) => ({
     bastId: r[0] || '', bastNumber: r[1] || '', bastPrjId: r[2] || '',
     bastFile: r[3] || '', bastCreatedDate: r[4] || '', bastSubmitDate: r[5] || '',
     bastReceivedDate: r[6] || '', bastStatus: r[7] || '', createdBy: r[8] || '',

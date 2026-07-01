@@ -5,14 +5,12 @@ import {
   getSalesUserNamesForActivities,
 } from '@/database/repos/sales-activities'
 import { parseMulti, parseDate, formatMonth, formatWeek, filterDataByDateRange } from '@/lib/utils-date-currency'
-import { clearSheetCache } from '@/database/client'
+import { parseDashboardParams } from '@/lib/api-helpers'
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    if (searchParams.get('fresh') === '1') clearSheetCache()
-    const dateFrom = searchParams.get('dateFrom') || ''
-    const dateTo = searchParams.get('dateTo') || ''
+    const { dateFrom, dateTo } = parseDashboardParams(searchParams)
     const salesUser = parseMulti(searchParams, 'salesUser')
     const activityType = parseMulti(searchParams, 'activityType')
     const level = parseMulti(searchParams, 'level')

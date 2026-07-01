@@ -8,10 +8,13 @@ import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components
 import { ChartContainer, ChartLegend, ChartLegendContent } from '@/components/ui/chart'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts'
 import { DonutChart } from '@/components/donut-chart'
-import { ClipboardList, CheckCircle2, FolderOpen, AlertTriangle, Loader2, Search, Wallet, Percent } from 'lucide-react'
-import { ThemeToggle, SalesPageShell } from '@/components/theme-toggle'
+import { ClipboardList, CheckCircle2, FolderOpen, AlertTriangle, Wallet, Percent, Timer, Truck } from 'lucide-react'
+import { SalesPageShell } from '@/components/theme-toggle'
 import { MultiSelect } from '@/components/multi-select'
-import { DateRangeRow } from '@/components/date-range-row'
+import { PageHeader } from '@/components/page-header'
+import { FilterCard } from '@/components/filter-card'
+import { PageSpinner, PageError } from '@/components/page-states'
+import { SearchInput } from '@/components/search-input'
 import { LoadMore, useLoadMore } from '@/components/load-more'
 import { useSort, SortHead } from '@/components/sortable'
 import { fmtCurrency, buildQuery, sameSet, getYTD, fmtShortDate as fmtDate } from '@/lib/sales-helpers'
@@ -23,11 +26,14 @@ interface PRRow {
   status: string; statusLabel: string; overdue: string; overdueLabel: string
   approval: string; approvalLabel: string; handlerId: string; handler: string
   requesterId: string; requester: string; duedate: string; createdAt: string
+  leadTimePO: number | null; leadTimeReceived: number | null
   isPurchased: boolean; isOverdue: boolean
 }
 interface Option { value: string; label: string }
 interface PRData {
-  kpis: { totalPR: number; purchasedCount: number; openCount: number; overdueCount: number; completionRate: number; totalEstimated: number; totalPurchased: number; avgVariancePct: number }
+  kpis: { totalPR: number; purchasedCount: number; openCount: number; overdueCount: number; completionRate: number; totalEstimated: number; totalPurchased: number; avgVariancePct: number
+    leadTimePOAvg: number; leadTimePOMedian: number; leadTimePOCount: number
+    leadTimeReceivedAvg: number; leadTimeReceivedMedian: number; leadTimeReceivedCount: number }
   statusBreakdown: { name: string; value: number }[]
   overdueBreakdown: { name: string; value: number }[]
   monthlyTrend: { name: string; count: number }[]
@@ -108,8 +114,8 @@ export default function PurchaseRequestsPage() {
 
   const hasUnapplied = lFrom !== dateFrom || lTo !== dateTo || !sameSet(lSt, st) || !sameSet(lOv, ov) || !sameSet(lAp, ap) || !sameSet(lPrj, prj) || !sameSet(lHdl, hdl) || !sameSet(lReq, req)
 
-  if (loading && !data) return <div className="flex items-center justify-center min-h-[80vh]"><Loader2 className="animate-spin h-8 w-8 text-primary" /></div>
-  if (error && !data) return <div className="flex flex-col items-center justify-center min-h-[80vh] space-y-4"><p className="text-destructive">{error}</p><Button onClick={onClear}>Retry</Button></div>
+  if (loading && !data) return <PageSpinner />
+  if (error && !data) return <PageError error={error} onRetry={onClear} />
   if (!data) return null
 
   const axis = { stroke: 'var(--muted-foreground)', tickLine: false, className: 'text-xs' } as const
@@ -118,21 +124,9 @@ export default function PurchaseRequestsPage() {
   return (
     <SalesPageShell>
       <div className="bg-background text-foreground min-h-screen space-y-6">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-wrap items-center gap-4">
-            <div><h1 className="text-2xl font-bold tracking-tight">Purchase Requests</h1><p className="text-sm text-muted-foreground">PT. Multi Daya Mitra — Procurement Pipeline</p></div>
-            {chartFilter && (
-              <div className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary border border-primary/20">
-                <span className="text-muted-foreground">Filtered by:</span> {chartFilter.label}
-                <button onClick={() => setChartFilter(null)} className="ml-1 hover:bg-primary/20 rounded-full p-0.5"><div className="h-4 w-4 flex items-center justify-center">✕</div></button>
-              </div>
-            )}
-          </div>
-          <ThemeToggle />
-        </div>
+        <PageHeader title="Purchase Requests" subtitle="PT. Multi Daya Mitra — Procurement Pipeline" chartFilter={chartFilter} onClearFilter={() => setChartFilter(null)} />
 
-        {/* Filters */}
-        <Card><CardContent className="pt-5">
+        <FilterCard from={lFrom} to={lTo} onDateChange={(f, t) => { setLFrom(f); setLTo(t) }} onApply={onApply} onClear={onClear} hasUnapplied={hasUnapplied} loading={loading && !!data}>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 items-start">
             <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Status</label>
               <MultiSelect allLabel="All Statuses" selected={lSt} onChange={setLSt} options={data.filterOptions.statusList} /></div>
@@ -147,15 +141,7 @@ export default function PurchaseRequestsPage() {
             <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Requester</label>
               <MultiSelect allLabel="All Requesters" selected={lReq} onChange={setLReq} options={data.filterOptions.requesterList} /></div>
           </div>
-          <div className="mt-4 border-t border-border pt-4">
-            <DateRangeRow from={lFrom} to={lTo} onChange={(f, t) => { setLFrom(f); setLTo(t) }} />
-          </div>
-          <div className="mt-4 flex justify-end gap-2 border-t border-border pt-3">
-            <Button variant="outline" size="sm" onClick={onClear}>Clear</Button>
-            <Button size="sm" onClick={onApply} className="relative">Apply Filters{hasUnapplied && <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-orange-500 border-2 border-background" />}</Button>
-          </div>
-          {loading && data && <div className="w-full h-1 bg-border overflow-hidden rounded-full mt-3"><div className="h-1/3 bg-primary rounded-full loading-bar-inner" /></div>}
-        </CardContent></Card>
+        </FilterCard>
 
         {/* KPIs */}
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -169,6 +155,22 @@ export default function PurchaseRequestsPage() {
           <KPICard title="Total Purchased" value={fmtRp(data.kpis.totalPurchased)} icon={<Wallet className="h-4 w-4" />} />
           <KPICard title="Avg Saving" value={`${data.kpis.avgVariancePct}%`} icon={<Percent className="h-4 w-4" />} trend={{ value: `${data.kpis.avgVariancePct}%`, label: 'vs estimate', positive: data.kpis.avgVariancePct >= 0 }} />
           <KPICard title="Purchased Items" value={data.kpis.purchasedCount.toLocaleString('id-ID')} icon={<CheckCircle2 className="h-4 w-4" />} />
+        </div>
+
+        {/* Lead time KPIs (date-only, days; negatives clamped to 0) */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <KPICard
+            title="Lead Time (PR → PO)"
+            value={`${data.kpis.leadTimePOAvg} hari`}
+            icon={<Timer className="h-4 w-4" />}
+            trend={{ value: `${data.kpis.leadTimePOMedian} hari`, label: `median · ${data.kpis.leadTimePOCount.toLocaleString('id-ID')} PR`, positive: true }}
+          />
+          <KPICard
+            title="Lead Time Barang Diterima"
+            value={`${data.kpis.leadTimeReceivedAvg} hari`}
+            icon={<Truck className="h-4 w-4" />}
+            trend={{ value: `${data.kpis.leadTimeReceivedMedian} hari`, label: `median · ${data.kpis.leadTimeReceivedCount.toLocaleString('id-ID')} PR`, positive: true }}
+          />
         </div>
 
         {/* Charts Row 1 */}
@@ -233,7 +235,7 @@ export default function PurchaseRequestsPage() {
         <Card className="overflow-hidden" id="pr-table-section">
           <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle className="text-sm font-semibold">Purchase Requests <span className="font-normal text-muted-foreground">({tableRows.length.toLocaleString('id-ID')}{tableRows.length !== data.totalRows ? ` of ${data.totalRows.toLocaleString('id-ID')}` : ''})</span></CardTitle>
-            <div className="relative w-48"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" /><input type="text" placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)} className="w-full rounded-lg border border-input bg-background pl-8 pr-3 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary" /></div>
+            <SearchInput value={search} onChange={setSearch} />
           </CardHeader>
           <CardContent className="p-0">
             <div className="overflow-x-auto">
@@ -250,9 +252,11 @@ export default function PurchaseRequestsPage() {
                   <SortHead label="Overdue" column="overdue" sortKey={prSort.sortKey} sortDir={prSort.sortDir} onSort={prSort.toggle} />
                   <SortHead label="Handler" column="handler" sortKey={prSort.sortKey} sortDir={prSort.sortDir} onSort={prSort.toggle} />
                   <SortHead label="Due" column="duedate" sortKey={prSort.sortKey} sortDir={prSort.sortDir} onSort={prSort.toggle} />
+                  <SortHead label="Lead Time" column="leadTimePO" sortKey={prSort.sortKey} sortDir={prSort.sortDir} onSort={prSort.toggle} className="text-right" />
+                  <SortHead label="Diterima" column="leadTimeReceived" sortKey={prSort.sortKey} sortDir={prSort.sortDir} onSort={prSort.toggle} className="text-right" />
                 </TableRow></TableHeader>
                 <TableBody>
-                  {tableRows.length === 0 ? <TableRow><TableCell colSpan={11} className="text-center text-muted-foreground py-8">No purchase requests found</TableCell></TableRow> : prPage.visible.map(r => (
+                  {tableRows.length === 0 ? <TableRow><TableCell colSpan={13} className="text-center text-muted-foreground py-8">No purchase requests found</TableCell></TableRow> : prPage.visible.map(r => (
                     <TableRow key={r.prId}>
                       <TableCell className="text-xs font-semibold text-primary whitespace-nowrap">{r.prId}</TableCell>
                       <TableCell className="max-w-[220px] truncate" title={r.item}>{r.item}</TableCell>
@@ -265,6 +269,8 @@ export default function PurchaseRequestsPage() {
                       <TableCell><span className={`inline-flex rounded-md px-2 py-0.5 text-[10px] font-medium ${overdueClass[r.overdue] || 'bg-muted text-muted-foreground'}`}>{r.overdueLabel}</span></TableCell>
                       <TableCell className="text-xs">{r.handler}</TableCell>
                       <TableCell className="text-muted-foreground whitespace-nowrap">{fmtDate(r.duedate)}</TableCell>
+                      <TableCell className="text-right whitespace-nowrap">{r.leadTimePO != null ? `${r.leadTimePO.toLocaleString('id-ID')} hari` : <span className="text-muted-foreground">—</span>}</TableCell>
+                      <TableCell className="text-right whitespace-nowrap">{r.leadTimeReceived != null ? `${r.leadTimeReceived.toLocaleString('id-ID')} hari` : <span className="text-muted-foreground">—</span>}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

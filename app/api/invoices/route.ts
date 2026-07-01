@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getInvoicingData } from '@/database/repos/invoicing'
 import { getCompanyNameMap } from '@/database/repos/companies'
 import { getProjectCompletionDates, getAllOrders, loadRefMaps, getPeStatusLabelSync } from '@/database/repos/orders'
-import { clearSheetCache } from '@/database/client'
+import { parseDashboardParams } from '@/lib/api-helpers'
 import { parseDate, formatMonth, sortByPeriod, parseMulti, filterDataByDateRange } from '@/lib/utils-date-currency'
 import type { Invoice } from '@/database/types'
 
@@ -30,9 +30,7 @@ function statusOf(inv: Invoice, today: Date): PayStatus {
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    if (searchParams.get('fresh') === '1') clearSheetCache()
-    const dateFrom = searchParams.get('dateFrom') || ''
-    const dateTo = searchParams.get('dateTo') || ''
+    const { dateFrom, dateTo } = parseDashboardParams(searchParams)
     const customer = parseMulti(searchParams, 'customer')
     const status = parseMulti(searchParams, 'status')
     const projectStatus = parseMulti(searchParams, 'projectStatus')
@@ -71,9 +69,12 @@ export async function GET(request: NextRequest) {
     // joined on pd_inv_id = inv_id, scoped to the filtered invoices.
     const filteredIds = new Set(filtered.map((inv) => inv.invId))
     const paidByInv = new Map<string, number>()
+    const payMonthsByInv = new Map<string, Set<string>>() // inv_id -> months it received a payment
     for (const pd of paymentDetails) {
       if (!filteredIds.has(pd.invId)) continue
       paidByInv.set(pd.invId, (paidByInv.get(pd.invId) || 0) + pd.amount)
+      const mk = formatMonth(pd.date)
+      if (mk) { let s = payMonthsByInv.get(pd.invId); if (!s) payMonthsByInv.set(pd.invId, (s = new Set())); s.add(mk) }
     }
 
     // ── Per-invoice derived rows ──
@@ -108,6 +109,7 @@ export async function GET(request: NextRequest) {
         status: st,
         statusLabel: STATUS_LABELS[st],
         daysOverdue,
+        paymentMonths: [...(payMonthsByInv.get(inv.invId) || [])],
         refName: inv.invRefName,
         remarks: inv.invRemarks,
       }
@@ -121,6 +123,7 @@ export async function GET(request: NextRequest) {
       finalRows = finalRows.filter((r) => {
         if (cType === 'status') return r.statusLabel === cVal
         if (cType === 'invoiceMonth') return formatMonth(r.invoiceDate) === cVal
+        if (cType === 'paymentMonth') return r.paymentMonths.includes(cVal)
         if (cType === 'dueMonth') return formatMonth(r.dueDate) === cVal
         if (cType === 'aging') {
           if (cVal === 'Current') return r.daysOverdue <= 0

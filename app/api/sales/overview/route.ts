@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { clearSheetCache } from '@/database/client'
+import { parseDashboardParams } from '@/lib/api-helpers'
 import { getProjectOrders, getOrderTypeLabelSync, getPeStatusLabelSync, getFinanceStatusLabelSync, loadRefMaps as loadOrderRefMaps, getAllOrderTypes, getAllPeStatuses, getAllFinanceStatuses } from '@/database/repos/orders'
 import { getAllQuotations, getStatusLabel, loadRefMaps as loadQuotRefMaps, getAllQuotationTypes } from '@/database/repos/quotations'
 import { getAllSalesUsers } from '@/database/repos/sales-users'
 import { getAllCompanies } from '@/database/repos/companies'
+import { getInvoicingData } from '@/database/repos/invoicing'
 import { parseDate, formatMonth, formatWeek, sortByPeriod, filterDataByDateRange, parseMulti } from '@/lib/utils-date-currency'
 import type { Order, Quotation, SalesUser, Company } from '@/database'
 
@@ -13,9 +14,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const { searchParams } = new URL(request.url)
-    if (searchParams.get('fresh') === '1') clearSheetCache()
-    const dateFrom = searchParams.get('dateFrom') || ''
-    const dateTo = searchParams.get('dateTo') || ''
+    const { dateFrom, dateTo } = parseDashboardParams(searchParams)
     const salesUser = parseMulti(searchParams, 'salesUser')
     const currency = searchParams.get('currency') || ''
     const orderType = parseMulti(searchParams, 'orderType')
@@ -25,12 +24,14 @@ export async function GET(request: NextRequest) {
 
     await Promise.all([loadOrderRefMaps(), loadQuotRefMaps()])
 
-    const [ordersRaw, quotationsRaw, salesUsers, companies] = await Promise.all([
+    const [ordersRaw, quotationsRaw, salesUsers, companies, invoicing] = await Promise.all([
       getProjectOrders(),
       getAllQuotations(),
       getAllSalesUsers(),
       getAllCompanies(),
+      getInvoicingData(),
     ])
+    const { invoices, invPrjMap, paymentDetails } = invoicing
 
     const orders = ordersRaw.filter((o) => !o.deletedAt)
     const quotations = quotationsRaw.filter((q) => !q.deletedAt)
@@ -89,9 +90,26 @@ export async function GET(request: NextRequest) {
       filteredOrders = filteredOrders.filter((o) => invoiceStatus.includes(o.prjFStatus))
     }
 
+    // Effective (PO-clamped) invoice/payment months per project — so clicking the Invoice/Payment
+    // bar filters by the month it was INVOICED/PAID (matching the chart), not by PO month.
+    const poByPrj = new Map<string, Date>()
+    for (const o of orders) { const d = parseDate(o.prjPoDate); if (d && o.prjId) poByPrj.set(o.prjId, d) }
+    const effKey = (raw: string, po: Date): string => {
+      const rd = parseDate(raw); const eff = rd && rd > po ? rd : po
+      const s = `${eff.getMonth() + 1}/${eff.getDate()}/${eff.getFullYear()}`
+      return (period === 'weekly' ? formatWeek(s) : formatMonth(s)) || ''
+    }
+    const invMonthsByPrj = new Map<string, Set<string>>()
+    const payMonthsByPrj = new Map<string, Set<string>>()
+    const addKey = (m: Map<string, Set<string>>, prj: string, key: string) => { if (!key) return; let s = m.get(prj); if (!s) m.set(prj, (s = new Set())); s.add(key) }
+    for (const inv of invoices) for (const p of (invPrjMap.get(inv.invId) || '').split(',')) { const prj = p.trim(); const po = poByPrj.get(prj); if (po) addKey(invMonthsByPrj, prj, effKey(inv.invDate, po)) }
+    for (const pd of paymentDetails) for (const p of (invPrjMap.get(pd.invId) || '').split(',')) { const prj = p.trim(); const po = poByPrj.get(prj); if (po) addKey(payMonthsByPrj, prj, effKey(pd.date, po)) }
+
     const cType = searchParams.get('cType')
     const cVal = searchParams.get('cVal')
     if (cType && cVal) {
+      if (cType === 'invoiceMonth') filteredOrders = filteredOrders.filter((o) => invMonthsByPrj.get(o.prjId)?.has(cVal))
+      if (cType === 'paymentMonth') filteredOrders = filteredOrders.filter((o) => payMonthsByPrj.get(o.prjId)?.has(cVal))
       if (cType === 'salesType') {
         filteredOrders = filteredOrders.filter(o => getOrderTypeLabelSync(o.prjOtId) === cVal)
         filteredQuotations = filteredQuotations.filter(q => getOrderTypeLabelSync(q.qType) === cVal)
@@ -122,6 +140,44 @@ export async function GET(request: NextRequest) {
     const totalSales = filteredOrders.reduce((s, o) => s + o.prjPoTotal, 0)
     const totalQuotations = filteredQuotations.length
     const totalQuotationValue = filteredQuotations.reduce((s, q) => s + q.qFinalPrice, 0)
+
+    // ── PO → Invoice → Payment conversion (projects selected by prj_po_date) ──
+    // Only projects with a VALID prj_po_date are in scope (blanks are dropped — they have no
+    // PO period to anchor to). Each series is plotted by its own date, but BACKFILL is clamped:
+    // an invoice/payment dated before its project's PO date is plotted at the PO month
+    // (effective date = max(record date, PO date)), so the flow never runs backwards.
+    const prjPoDate = new Map<string, Date>()
+    for (const o of filteredOrders) { const d = parseDate(o.prjPoDate); if (d && o.prjId) prjPoDate.set(o.prjId, d) }
+    // Governing PO date for an invoice = earliest PO date among its in-scope linked projects.
+    const invPoDate = (invId: string): Date | null => {
+      let best: Date | null = null
+      for (const p of (invPrjMap.get(invId) || '').split(',')) {
+        const d = prjPoDate.get(p.trim())
+        if (d && (!best || d < best)) best = d
+      }
+      return best
+    }
+    const projInvoices = invoices.filter((inv) => invPoDate(inv.invId) != null)
+    const projInvIds = new Set(projInvoices.map((i) => i.invId))
+    const projPayments = paymentDetails.filter((pd) => projInvIds.has(pd.invId))
+    const totalInvoice = projInvoices.reduce((s, i) => s + i.invAmount, 0)
+    const totalPayment = projPayments.reduce((s, pd) => s + pd.amount, 0)
+
+    const convAgg: Record<string, { PO: number; Invoice: number; Payment: number }> = {}
+    const bumpAt = (eff: Date, k: 'PO' | 'Invoice' | 'Payment', v: number) => {
+      const s = `${eff.getMonth() + 1}/${eff.getDate()}/${eff.getFullYear()}`
+      const key = period === 'weekly' ? formatWeek(s) : formatMonth(s)
+      if (!key) return
+      ;(convAgg[key] ??= { PO: 0, Invoice: 0, Payment: 0 })[k] += v
+    }
+    // clamp a record's date to its project's PO date (never earlier than PO)
+    const clamped = (raw: string, po: Date): Date => { const d = parseDate(raw); return d && d > po ? d : po }
+    for (const o of filteredOrders) { const po = prjPoDate.get(o.prjId); if (po) bumpAt(po, 'PO', o.prjPoTotal) }
+    for (const inv of projInvoices) { const po = invPoDate(inv.invId)!; bumpAt(clamped(inv.invDate, po), 'Invoice', inv.invAmount) }
+    for (const pd of projPayments) { const po = invPoDate(pd.invId); if (po) bumpAt(clamped(pd.date, po), 'Payment', pd.amount) }
+    const conversionTimeline = sortByPeriod(convAgg, period).map(([name, v]) => ({
+      name, PO: Math.round(v.PO), Invoice: Math.round(v.Invoice), Payment: Math.round(v.Payment),
+    }))
 
     // ── Quotation status breakdown ──
     const quotStatusBreakdown: Record<string, number> = {}
@@ -313,7 +369,8 @@ export async function GET(request: NextRequest) {
     const invoiceStatusList = await getAllFinanceStatuses()
 
     const result: any = {
-      kpis: { totalProjects, totalSales, totalQuotations, totalQuotationValue },
+      kpis: { totalProjects, totalSales, totalQuotations, totalQuotationValue, totalInvoice, totalPayment },
+      conversionTimeline,
       quotStatusBreakdown,
       salesByType,
       revenueTrend,

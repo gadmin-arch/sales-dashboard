@@ -3,16 +3,14 @@ import {
   getAllPurchaseOrders, getAllPoLines, getAllOrders,
   getPoStatusLabel, getPaymentTypeLabel, getItemTypeLabel, loadProcurementRefMaps,
 } from '@/database'
-import { clearSheetCache } from '@/database/client'
+import { parseDashboardParams } from '@/lib/api-helpers'
 import { parseDate, formatMonth, sortByPeriod, parseMulti, filterDataByDateRange } from '@/lib/utils-date-currency'
 import { distinct, makeProjectLabeler, makeVendorNamer, makeNamer } from '@/lib/purchasing-helpers'
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    if (searchParams.get('fresh') === '1') clearSheetCache()
-    const dateFrom = searchParams.get('dateFrom') || ''
-    const dateTo = searchParams.get('dateTo') || ''
+    const { dateFrom, dateTo } = parseDashboardParams(searchParams)
     const vendor = parseMulti(searchParams, 'vendor')
     const project = parseMulti(searchParams, 'project')
     const paymentType = parseMulti(searchParams, 'paymentType')

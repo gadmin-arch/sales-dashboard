@@ -11,8 +11,10 @@ import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, Table
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from '@/components/ui/chart'
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts'
 import { DonutChart } from '@/components/donut-chart'
-import { FileText, Briefcase, DollarSign, TrendingUp, Loader2, Search, ListTodo, ExternalLink } from 'lucide-react'
+import { FileText, Briefcase, DollarSign, TrendingUp, ListTodo, ExternalLink } from 'lucide-react'
 import { ThemeToggle, SalesPageShell } from '@/components/theme-toggle'
+import { PageSpinner, PageError } from '@/components/page-states'
+import { SearchInput } from '@/components/search-input'
 import {
   fmtCurrency,
   onSel,
@@ -29,7 +31,8 @@ import { useChartFilter } from '@/hooks/use-chart-filter'
 
 /* ── Types ── */
 interface SalesData {
-  kpis: { totalProjects: number; totalSales: number; totalQuotations: number; totalQuotationValue: number }
+  kpis: { totalProjects: number; totalSales: number; totalQuotations: number; totalQuotationValue: number; totalInvoice: number; totalPayment: number }
+  conversionTimeline: { name: string; PO: number; Invoice: number; Payment: number }[]
   quotStatusBreakdown: Record<string, number>
   salesByType: { name: string; value: number }[]
   revenueTrend: { name: string; value: number; material: number; service: number }[]
@@ -172,8 +175,8 @@ export default function SalesPage() {
   const revTooltipFormatter = (v: any, n: any) => { const pct = revTotal > 0 ? ((Number(v) / revTotal) * 100).toFixed(1) : '0.0'; return [`${fmtRp(Number(v))} (${pct}%)`, n] as [string, string] }
   const priceTotal = useMemo(() => data?.priceComposition?.reduce((s, x) => s + x.material + x.service, 0) || 0, [data])
 
-  if (loading && !data) return <div className="flex items-center justify-center min-h-[80vh]"><Loader2 className="animate-spin h-8 w-8 text-primary" /></div>
-  if (error && !data) return <div className="flex flex-col items-center justify-center min-h-[80vh]"><p className="text-destructive mb-4">{error}</p><Button onClick={onClear}>Retry</Button></div>
+  if (loading && !data) return <PageSpinner />
+  if (error && !data) return <PageError error={error} onRetry={onClear} />
   if (!data) return null
 
   const thClass = "text-xs font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors [&_svg]:inline [&_svg]:ml-1 [&_svg]:align-middle"
@@ -240,9 +243,10 @@ export default function SalesPage() {
         </CardContent></Card>
 
         {/* KPIs */}
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-5">
           <KPICard title="Total Projects" value={data.kpis.totalProjects.toString()} icon={<Briefcase className="h-4 w-4" />} />
           <KPICard title="Total Sales" value={fmtRp(data.kpis.totalSales)} icon={<DollarSign className="h-4 w-4" />} />
+          <KPICard title="Total Invoice" value={fmtRp(data.kpis.totalInvoice)} icon={<FileText className="h-4 w-4" />} trend={{ value: fmtRp(data.kpis.totalPayment), label: 'paid', positive: true }} />
           <KPICard title="Total Quotations" value={data.kpis.totalQuotations.toString()} icon={<FileText className="h-4 w-4" />} />
           <KPICard title="Quotation Value" value={fmtRp(data.kpis.totalQuotationValue)} icon={<TrendingUp className="h-4 w-4" />} />
         </div>
@@ -321,6 +325,31 @@ export default function SalesPage() {
           </Card>
         </div>
 
+        {/* PO → Invoice → Payment timeline */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <div>
+              <CardTitle className="text-sm font-semibold">PO → Invoice → Payment Timeline</CardTitle>
+              <p className="text-xs text-muted-foreground">Projects selected by PO date; invoice/payment clamped to the PO month (backfill never runs backwards). Click a bar to filter by PO month.</p>
+            </div>
+            <ChartPeriodToggle period={chartPeriod} onPeriodChange={onPeriod} />
+          </CardHeader>
+          <CardContent>
+            <ChartContainer config={{ PO: { label: 'PO Value', color: 'var(--chart-1)' }, Invoice: { label: 'Invoice', color: 'var(--chart-2)' }, Payment: { label: 'Payment', color: 'var(--chart-3)' } }} className="h-[300px] w-full">
+              <BarChart data={data.conversionTimeline} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                <XAxis dataKey="name" stroke="var(--muted-foreground)" tickLine={false} axisLine={{ stroke: 'var(--border)' }} className="text-xs" />
+                <YAxis stroke="var(--muted-foreground)" tickFormatter={fmtRp} tickLine={false} axisLine={false} className="text-xs" />
+                <Tooltip formatter={(v: any) => fmtRp(Number(v))} cursor={{ fill: 'var(--muted)' }} contentStyle={{ background: 'var(--background)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }} />
+                <ChartLegend content={<ChartLegendContent />} />
+                <Bar dataKey="PO" fill="var(--color-PO)" name="PO Value" radius={[4, 4, 0, 0]} onClick={(d: any) => handleChartClick('revenueMonth', d.name, `PO Month = ${d.name}`)} style={{ cursor: 'pointer' }} />
+                <Bar dataKey="Invoice" fill="var(--color-Invoice)" name="Invoice" radius={[4, 4, 0, 0]} onClick={(d: any) => handleChartClick('invoiceMonth', d.name, `Invoiced = ${d.name}`)} style={{ cursor: 'pointer' }} />
+                <Bar dataKey="Payment" fill="var(--color-Payment)" name="Payment" radius={[4, 4, 0, 0]} onClick={(d: any) => handleChartClick('paymentMonth', d.name, `Paid = ${d.name}`)} style={{ cursor: 'pointer' }} />
+              </BarChart>
+            </ChartContainer>
+          </CardContent>
+        </Card>
+
         {/* Top Projects + Top Sales Persons */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           <Card className="lg:col-span-2 overflow-hidden" id="sales-projects-table">
@@ -329,7 +358,7 @@ export default function SalesPage() {
                 <CardTitle className="text-sm font-semibold">Top Projects</CardTitle>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <div className="relative w-40"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" /><input type="text" placeholder="Search..." value={tableSearch} onChange={e => setTableSearch(e.target.value)} className="w-full rounded-lg border border-input bg-background pl-8 pr-3 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary" /></div>
+                <SearchInput value={tableSearch} onChange={setTableSearch} className="w-40" />
                 <Select value={tCust} onValueChange={onSel(setTCust)}>
                   <SelectTrigger className="w-28 h-7 text-xs"><SelectValue>{tCust === 'all' ? 'All Customers' : tCust}</SelectValue></SelectTrigger>
                   <SelectContent><SelectItem value="all">All Customers</SelectItem>{custs.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>

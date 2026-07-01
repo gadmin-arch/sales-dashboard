@@ -303,7 +303,7 @@ function ChartLegendContent({
         .map((item, index) => {
           const key = `${nameKey ?? item.dataKey ?? "value"}`
           const itemConfig = getPayloadConfigFromPayload(config, item, key)
-          const label = itemConfig?.label ?? item.payload?.name ?? item.name
+          const label = itemConfig?.label ?? (item.payload as { name?: string })?.name ?? (item as { name?: string }).name
           const displayLabel = formatter ? formatter(label as string) : label
 
           return (

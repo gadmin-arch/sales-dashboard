@@ -141,7 +141,7 @@ export async function getFinanceAPData(): Promise<FinanceAPData> {
       payreqPoId: r[1] || '',
       payreqInvoiceNumber: r[2] || '',
       payreqSite: r[3] || '',
-      payeqReceiptDate: r[4] || '',
+      payreqReceiptDate: r[4] || '',
       payreqInvoiceDate: r[5] || '',
       payreqPercentage: r[6] || '',
       payreqAmount: parseNum(r[7]),
@@ -234,4 +234,27 @@ export async function getFinanceAPData(): Promise<FinanceAPData> {
     paymentStatusesMap,
     reimburseStatusesMap
   }
+}
+
+/** A status transition on a payment request (log_payments — no deleted_at column). */
+export interface PaymentLog {
+  lpId: string
+  payreqId: string
+  statusOld: string
+  statusNew: string // C, R, AN (Approval Needed), P (Paid), CC, RF
+  createdAt: string
+}
+
+export async function getPaymentLogs(): Promise<PaymentLog[]> {
+  const ssPayReq = GOOGLE_CONFIG.financeAP.paymentRequestSpreadsheetId
+  const { rows } = await fetchAllRows(ssPayReq, GOOGLE_CONFIG.financeAP.sheets.logPayments)
+  return rows
+    .filter((r) => r[0] && r[0] !== 'lp_id')
+    .map((r) => ({
+      lpId: r[0] || '',
+      payreqId: r[1] || '',
+      statusOld: r[2] || '',
+      statusNew: r[3] || '',
+      createdAt: r[4] || '',
+    }))
 }

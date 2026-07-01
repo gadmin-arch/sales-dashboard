@@ -70,12 +70,3 @@ export function parseMulti(searchParams: URLSearchParams, key: string): string[]
   const raw = all.length > 1 ? all : (all[0]?.split(',') ?? [])
   return raw.map((s) => s.trim()).filter(Boolean)
 }
-
-// Currency utilities
-export function formatCurrency(value: number, currency = 'IDR'): string {
-  const prefix = currency === 'USD' ? '$ ' : currency === 'EUR' ? '€ ' : currency === 'SGD' ? 'SGD ' : 'IDR '
-  if (value >= 1_000_000_000) return `${prefix}${Math.round(value / 1_000_000_000)}B`
-  if (value >= 1_000_000) return `${prefix}${Math.round(value / 1_000_000)}M`
-  if (value >= 1_000) return `${prefix}${Math.round(value / 1_000)}K`
-  return `${prefix}${value.toLocaleString('id-ID')}`
-}

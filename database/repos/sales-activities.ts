@@ -98,7 +98,7 @@ export async function getSalesUserNamesForActivities(
 ): Promise<Map<string, string>> {
   const uniqueUserIds = new Set<string>()
   for (const a of activities) {
-    if (a.saOwner) uniqueUserIds.add(a.saOwner)
+    if (a.saUserId) uniqueUserIds.add(a.saUserId)
     if (a.createdBy) uniqueUserIds.add(a.createdBy)
   }
   const { getSalesUserNamesMap } = await import('./sales-users')

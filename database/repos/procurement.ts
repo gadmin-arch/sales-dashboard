@@ -37,7 +37,8 @@ export function getItemTypeLabel(id: string): string {
 
 export async function getAllPurchaseOrders(): Promise<PurchaseOrder[]> {
   const { rows } = await fetchAllRows(ssId, sheets.pos)
-  return rows.filter((r) => r[0] && r[0] !== 'PO_Number').map(mapPurchaseOrder)
+  // drop header echo + soft-deleted rows (PO_DeletedAt at index 58)
+  return rows.filter((r) => r[0] && r[0] !== 'PO_Number' && !r[58]).map(mapPurchaseOrder)
 }
 
 export async function getAllPoLines(): Promise<PoLine[]> {
@@ -46,24 +47,24 @@ export async function getAllPoLines(): Promise<PoLine[]> {
   return rows.filter((r) => r[0] && r[0] !== 'POL_ID' && !r[31]).map(mapPoLine)
 }
 
-// item_id -> item name, from the Items master sheet
+// item_id -> item name, from the Items master sheet (skip soft-deleted, Item_DeletedAt at index 13)
 export async function getItemNameMap(): Promise<Map<string, string>> {
   const { rows } = await fetchAllRows(ssId, sheets.items)
   const map = new Map<string, string>()
   for (const r of rows) {
-    if (!r[0] || r[0] === 'Item_ID') continue
+    if (!r[0] || r[0] === 'Item_ID' || r[13]) continue
     const item = mapProcItem(r)
     if (item.itemId) map.set(item.itemId, item.itemName)
   }
   return map
 }
 
-// item_id -> full item (for type/category breakdowns)
+// item_id -> full item (for type/category breakdowns; skip soft-deleted)
 export async function getItemMap(): Promise<Map<string, ProcItem>> {
   const { rows } = await fetchAllRows(ssId, sheets.items)
   const map = new Map<string, ProcItem>()
   for (const r of rows) {
-    if (!r[0] || r[0] === 'Item_ID') continue
+    if (!r[0] || r[0] === 'Item_ID' || r[13]) continue
     const item = mapProcItem(r)
     if (item.itemId) map.set(item.itemId, item)
   }

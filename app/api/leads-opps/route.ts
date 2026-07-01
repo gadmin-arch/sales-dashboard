@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAllLeads, getAllOpportunities, getSalesUserNamesForLeadsOpps } from '@/database/repos/leads-opps'
 import { parseMulti, filterDataByDateRange } from '@/lib/utils-date-currency'
-import { clearSheetCache } from '@/database/client'
+import { parseDashboardParams } from '@/lib/api-helpers'
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    if (searchParams.get('fresh') === '1') clearSheetCache()
-    const dateFrom = searchParams.get('dateFrom') || ''
-    const dateTo = searchParams.get('dateTo') || ''
+    const { dateFrom, dateTo } = parseDashboardParams(searchParams)
     const status = parseMulti(searchParams, 'status')
     const assignedTo = parseMulti(searchParams, 'assignedTo')
     const source = parseMulti(searchParams, 'source')

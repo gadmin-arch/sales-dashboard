@@ -15,7 +15,9 @@ import { DateRangeRow } from '@/components/date-range-row'
 import { LoadMore, useLoadMore } from '@/components/load-more'
 import { ThemeToggle, SalesPageShell } from '@/components/theme-toggle'
 import { useChartFilter } from '@/hooks/use-chart-filter'
-import { DollarSign, TrendingUp, Users, Target, Loader2, Search } from 'lucide-react'
+import { DollarSign, TrendingUp, Users, Target } from 'lucide-react'
+import { PageSpinner, PageError } from '@/components/page-states'
+import { SearchInput } from '@/components/search-input'
 
 interface LeadData {
   kpis: { totalLeads: number; totalOpportunities: number; totalOppValue: number; conversionRate: number }
@@ -245,8 +247,8 @@ export default function LeadsOppsPage() {
   const leadPage = useLoadMore(sortedLeads)
   const oppPage = useLoadMore(sortedOpps)
 
-  if (loading && !data) return <div className="flex items-center justify-center min-h-[80vh]"><Loader2 className="animate-spin h-8 w-8 text-primary" /></div>
-  if (error && !data) return <div className="flex flex-col items-center justify-center min-h-[80vh]"><p className="text-destructive mb-4">{error}</p><Button onClick={onClear}>Retry</Button></div>
+  if (loading && !data) return <PageSpinner />
+  if (error && !data) return <PageError error={error} onRetry={onClear} />
   if (!data) return null
 
   const kpiCards = [
@@ -363,7 +365,7 @@ export default function LeadsOppsPage() {
                 ))}
               </div>
             </div>
-            <div className="relative w-64"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" /><input type="text" placeholder="Search name/company..." value={tabSearch} onChange={e => setTabSearch(e.target.value)} className="w-full rounded-lg border border-input bg-background pl-8 pr-3 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary" /></div>
+            <SearchInput value={tabSearch} onChange={setTabSearch} placeholder="Search name/company..." className="w-64" />
           </CardHeader>
           <CardContent className="p-0">
             <Table>

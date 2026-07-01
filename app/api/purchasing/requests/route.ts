@@ -4,7 +4,7 @@ import {
   getPrStatusLabel, loadPurchasingRefMaps,
 } from '@/database'
 import { getSalesUserNamesMap } from '@/database/repos/sales-users'
-import { clearSheetCache } from '@/database/client'
+import { parseDashboardParams } from '@/lib/api-helpers'
 import { parseDate, formatMonth, sortByPeriod, parseMulti, filterDataByDateRange } from '@/lib/utils-date-currency'
 import { distinct, startOfDay, makeProjectLabeler, makePrPurchaseDates } from '@/lib/purchasing-helpers'
 
@@ -24,12 +24,21 @@ const OVERDUE_LABELS: Record<string, string> = {
 const OVERDUE_KEYS = Object.keys(OVERDUE_LABELS)
 const OVERDUE_BAD = new Set(['overdue', 'overdueOngoing', 'unhandledOverdue'])
 
+const MS_PER_DAY = 86_400_000
+// Whole-day lead time (date-only) between two dates, clamped to >= 0.
+// Returns null when either endpoint is missing. created_at carries a time-of-day
+// while PO_Date / completed_at are date-only, so both are floored to the day first —
+// a PR created 09:00 and its PO stamped midnight the SAME day is 0 days, not -1.
+const leadDays = (from: Date | null | undefined, to: Date | null | undefined): number | null => {
+  if (!from || !to) return null
+  const days = Math.round((startOfDay(to).getTime() - startOfDay(from).getTime()) / MS_PER_DAY)
+  return days < 0 ? 0 : days
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    if (searchParams.get('fresh') === '1') clearSheetCache()
-    const dateFrom = searchParams.get('dateFrom') || ''
-    const dateTo = searchParams.get('dateTo') || ''
+    const { dateFrom, dateTo } = parseDashboardParams(searchParams)
     const status = parseMulti(searchParams, 'status')
     const overdue = parseMulti(searchParams, 'overdue')
     const approval = parseMulti(searchParams, 'approval')
@@ -106,6 +115,10 @@ export async function GET(request: NextRequest) {
       const variancePct = isPurchased && p.prEstimatedPrice > 0
         ? Math.round(((p.prEstimatedPrice - p.prPurchasedPrice) / p.prEstimatedPrice) * 1000) / 10
         : null
+      // Lead times (date-only, days): created_at → PO date, and created_at → goods received.
+      const createdD = parseDate(p.createdAt)
+      const leadTimePO = leadDays(createdD, prPurchaseDate.get(p.prId))
+      const leadTimeReceived = leadDays(createdD, parseDate(p.prCompletedAt))
       return {
         prId: p.prId,
         item: itemMap.get(p.prItemId) || p.prItemId || '-',
@@ -129,6 +142,8 @@ export async function GET(request: NextRequest) {
         requester: userName(p.prUserId),
         duedate: p.prDuedate,
         createdAt: p.createdAt,
+        leadTimePO,
+        leadTimeReceived,
         isPurchased,
         isOverdue,
       }
@@ -163,6 +178,18 @@ export async function GET(request: NextRequest) {
     const estPurSum = purchasedRows.reduce((s, r) => s + r.estimated, 0)
     const purSum = purchasedRows.reduce((s, r) => s + r.purchased, 0)
     const avgVariancePct = estPurSum > 0 ? Math.round(((estPurSum - purSum) / estPurSum) * 1000) / 10 : 0
+
+    // ── Lead time (date-only, days; negatives already clamped to 0 above) ──
+    const avgOf = (a: number[]) => (a.length ? Math.round((a.reduce((s, n) => s + n, 0) / a.length) * 10) / 10 : 0)
+    const medianOf = (a: number[]) => {
+      if (!a.length) return 0
+      const s = [...a].sort((x, y) => x - y); const n = s.length
+      return n % 2 ? s[(n - 1) / 2] : Math.round(((s[n / 2 - 1] + s[n / 2]) / 2) * 10) / 10
+    }
+    const leadPO = finalRows.map((r) => r.leadTimePO).filter((v): v is number => v != null)
+    const leadRecv = finalRows.map((r) => r.leadTimeReceived).filter((v): v is number => v != null)
+    const leadTimePOAvg = avgOf(leadPO), leadTimePOMedian = medianOf(leadPO), leadTimePOCount = leadPO.length
+    const leadTimeReceivedAvg = avgOf(leadRecv), leadTimeReceivedMedian = medianOf(leadRecv), leadTimeReceivedCount = leadRecv.length
 
     // ── Status / overdue breakdown (donut) ──
     const countBy = (key: (r: typeof finalRows[number]) => string) => {
@@ -217,7 +244,11 @@ export async function GET(request: NextRequest) {
     )
 
     return NextResponse.json({
-      kpis: { totalPR, purchasedCount, openCount, overdueCount, completionRate, totalEstimated, totalPurchased, avgVariancePct },
+      kpis: {
+        totalPR, purchasedCount, openCount, overdueCount, completionRate, totalEstimated, totalPurchased, avgVariancePct,
+        leadTimePOAvg, leadTimePOMedian, leadTimePOCount,
+        leadTimeReceivedAvg, leadTimeReceivedMedian, leadTimeReceivedCount,
+      },
       statusBreakdown,
       overdueBreakdown,
       monthlyTrend,

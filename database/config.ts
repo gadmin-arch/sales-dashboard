@@ -148,4 +148,33 @@ export const GOOGLE_CONFIG = {
       paymentTypes: 'PaymentTypes',
     },
   },
+
+  // Payroll / HR disbursements — payroll, employee loans, meal benefits.
+  // Three spreadsheets: the main payroll_db, plus the payroll-payments and
+  // meal-benefit-releases ledgers. `sheets` notes which spreadsheet each tab is in.
+  payroll: {
+    spreadsheetId: '1KY_pc-ZNgYrdaozEPyqR0ti6wiU1aMYgQqqn2pKhUpc', // payroll_db
+    paymentsSpreadsheetId: '1hBMkkUToY4Ep7qOFZPL080GGjAwxcaj0H7e-FQtdXfA', // payroll_payments_db
+    mealReleasesSpreadsheetId: '1Ef2becB9JmB8CqTD7oXaVSY6FuItQfK43TGXIvt-ynA', // meal_benefit_releases_db
+    sheets: {
+      // in payroll_db
+      payroll: 'payroll',
+      payrollLists: 'payroll_lists',
+      payrollCategories: 'payroll_categories',
+      payrollTypes: 'payroll_types',
+      payrollStatus: 'payroll_status',
+      occupations: 'occupations',
+      loans: 'loans',
+      repayments: 'repayments',
+      mealBenefits: 'meal_benefits',
+      mealBenefitDetails: 'meal_benefit_details',
+      mbTypes: 'mb_types',
+      zones: 'zones',
+      // in payroll_payments_db
+      payrollPayments: 'payroll_payments',
+      // in meal_benefit_releases_db
+      mealReleases: 'meal_benefit_releases',
+      mbrTypes: 'mbr_types',
+    },
+  },
 } as const

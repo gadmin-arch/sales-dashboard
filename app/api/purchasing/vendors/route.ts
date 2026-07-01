@@ -1,15 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAllPurchaseOrders, getAllQrLists, getPaymentTypeLabel, loadProcurementRefMaps } from '@/database'
-import { clearSheetCache } from '@/database/client'
+import { parseDashboardParams } from '@/lib/api-helpers'
 import { parseDate, parseMulti, filterDataByDateRange } from '@/lib/utils-date-currency'
 import { distinct, makeVendorNamer } from '@/lib/purchasing-helpers'
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    if (searchParams.get('fresh') === '1') clearSheetCache()
-    const dateFrom = searchParams.get('dateFrom') || ''
-    const dateTo = searchParams.get('dateTo') || ''
+    const { dateFrom, dateTo } = parseDashboardParams(searchParams)
     const paymentType = parseMulti(searchParams, 'paymentType')
     const minSpend = Number(searchParams.get('minSpend') || '0') || 0
 

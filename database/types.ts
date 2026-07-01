@@ -8,6 +8,7 @@ export interface AccessUser {
   finance: boolean
   project: boolean
   purchasing: boolean
+  payroll: boolean
 }
 
 // ── sales users sheet (employee directory) ──
@@ -457,6 +458,135 @@ export interface ProcItem {
   itemBrand: string
   itemCategory: string
   itemUnit: string
+}
+
+// ── Payroll / HR disbursements ──
+
+export interface Payroll {
+  userId: string
+  payrollAccountId: string
+  startDate: string
+  endDate: string
+  idPayroll: string
+  description: string
+  reductionAmount: number
+  receiptAmount: number
+  totalReceipts: number
+  thpReduction: number
+  thpReceipt: number
+  takeHomePay: number
+  releasedPrice: number
+  file: string
+  status: string // R=Release, U=Unrelease, S=Show
+  createdBy: string
+  updatedAt: string
+  createdAt: string
+  deletedAt: string
+}
+
+// Actual payroll disbursement (payroll_payments_db).
+export interface PayrollPayment {
+  ppId: string
+  payrollId: string
+  amount: number
+  createdAt: string
+  deletedAt: string
+}
+
+// A line item on a payslip (allowance / deduction).
+export interface PayrollListItem {
+  id: string
+  payrollId: string
+  faId: string
+  categoryId: string
+  typeId: string // P-1 Pemasukan (+), P-2 Pengurangan (−), …
+  amount: number
+  remarks: string
+  deletedAt: string
+}
+
+export interface Occupation {
+  occupationId: string
+  userId: string
+  name: string
+  salaryFixed: string
+  salaryFix: number
+  salaryMeal: number
+}
+
+export interface Loan {
+  loanId: string
+  date: string
+  userId: string
+  amount: number
+  tenor: number
+  paid: number
+  count: number
+  thp: string
+  remarks: string
+  createdAt: string
+  deletedAt: string
+}
+
+export interface Repayment {
+  repaymentId: string
+  date: string
+  loanId: string
+  userId: string
+  amount: number
+  thp: string
+  count: number
+  remarks: string
+  createdAt: string
+  deletedAt: string
+}
+
+export interface MealBenefit {
+  mbId: string
+  date: string
+  startDate: string
+  endDate: string
+  totalDays: number
+  type: string // m-1 Meeting, m-2 PM, m-3 Luar Kota
+  totalUser: number
+  total: number
+  approve: number
+  releasePrice: number
+  projectId: string
+  zone: string
+  city: string
+  notes: string
+  remarks: string
+  status: string // A=Approved
+  userId: string
+  approver: string
+  approvedAt: string
+  createdAt: string
+  deletedAt: string
+}
+
+export interface MealBenefitDetail {
+  mbdId: string
+  mbId: string
+  amount: number
+  approved: number
+  projectId: string
+  type: string
+  date: string
+  userId: string
+  userName: string
+  deletedAt: string
+}
+
+// Disbursement/payback against a meal benefit (meal_benefit_releases_db).
+export interface MealBenefitRelease {
+  mbrId: string
+  mbId: string
+  amount: number
+  status: string
+  type: string // R=Release (+), P=Payback (−)
+  createdAt: string
+  deletedAt: string
 }
 
 

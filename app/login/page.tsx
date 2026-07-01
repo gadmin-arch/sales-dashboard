@@ -4,6 +4,7 @@ import { useGoogleLogin } from '@react-oauth/google'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { LogIn } from 'lucide-react'
+import { firstAllowedHref } from '@/lib/nav'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -54,7 +55,8 @@ export default function LoginPage() {
         )
         localStorage.setItem('google_token', token)
 
-        router.push('/dashboard/sales')
+        // Land on the first page this user's roles actually allow (not always sales).
+        router.push(firstAllowedHref(validatedUser.roles) || '/dashboard/sales')
       } catch (err) {
         console.error('Login error:', err)
         setError(err instanceof Error ? err.message : 'Login failed. Please try again.')

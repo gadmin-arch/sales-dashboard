@@ -8,10 +8,13 @@ import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components
 import { ChartContainer } from '@/components/ui/chart'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts'
 import { DonutChart } from '@/components/donut-chart'
-import { ShoppingCart, FileText, Wallet, Store, Receipt, Loader2, Search, CheckCircle2 } from 'lucide-react'
-import { ThemeToggle, SalesPageShell } from '@/components/theme-toggle'
+import { ShoppingCart, FileText, Wallet, Store, Receipt, CheckCircle2 } from 'lucide-react'
+import { SalesPageShell } from '@/components/theme-toggle'
 import { MultiSelect } from '@/components/multi-select'
-import { DateRangeRow } from '@/components/date-range-row'
+import { PageHeader } from '@/components/page-header'
+import { FilterCard } from '@/components/filter-card'
+import { PageSpinner, PageError } from '@/components/page-states'
+import { SearchInput } from '@/components/search-input'
 import { LoadMore, useLoadMore } from '@/components/load-more'
 import { useSort, SortHead } from '@/components/sortable'
 import { fmtCurrency, buildQuery, sameSet, getYTD, fmtShortDate as fmtDate, truncLabel as truncTick } from '@/lib/sales-helpers'
@@ -101,8 +104,8 @@ export default function PurchaseOrdersPage() {
 
   const hasUnapplied = lFrom !== dateFrom || lTo !== dateTo || !sameSet(lVen, ven) || !sameSet(lPrj, prj) || !sameSet(lPt, pt) || !sameSet(lSt, st) || !sameSet(lIt, it) || !sameSet(lUsr, usr)
 
-  if (loading && !data) return <div className="flex items-center justify-center min-h-[80vh]"><Loader2 className="animate-spin h-8 w-8 text-primary" /></div>
-  if (error && !data) return <div className="flex flex-col items-center justify-center min-h-[80vh] space-y-4"><p className="text-destructive">{error}</p><Button onClick={onClear}>Retry</Button></div>
+  if (loading && !data) return <PageSpinner />
+  if (error && !data) return <PageError error={error} onRetry={onClear} />
   if (!data) return null
 
   const axis = { stroke: 'var(--muted-foreground)', tickLine: false, className: 'text-xs' } as const
@@ -111,21 +114,9 @@ export default function PurchaseOrdersPage() {
   return (
     <SalesPageShell>
       <div className="bg-background text-foreground min-h-screen space-y-6">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-wrap items-center gap-4">
-            <div><h1 className="text-2xl font-bold tracking-tight">Purchase Orders & Spend</h1><p className="text-sm text-muted-foreground">PT. Multi Daya Mitra — Procurement Spend</p></div>
-            {chartFilter && (
-              <div className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary border border-primary/20">
-                <span className="text-muted-foreground">Filtered by:</span> {chartFilter.label}
-                <button onClick={() => setChartFilter(null)} className="ml-1 hover:bg-primary/20 rounded-full p-0.5"><div className="h-4 w-4 flex items-center justify-center">✕</div></button>
-              </div>
-            )}
-          </div>
-          <ThemeToggle />
-        </div>
+        <PageHeader title="Purchase Orders & Spend" subtitle="PT. Multi Daya Mitra — Procurement Spend" chartFilter={chartFilter} onClearFilter={() => setChartFilter(null)} />
 
-        {/* Filters */}
-        <Card><CardContent className="pt-5">
+        <FilterCard from={lFrom} to={lTo} onDateChange={(f, t) => { setLFrom(f); setLTo(t) }} onApply={onApply} onClear={onClear} hasUnapplied={hasUnapplied} loading={loading && !!data}>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 items-start">
             <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Vendor</label>
               <MultiSelect allLabel="All Vendors" selected={lVen} onChange={setLVen} options={data.filterOptions.vendorList} /></div>
@@ -140,15 +131,7 @@ export default function PurchaseOrdersPage() {
             <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">User</label>
               <MultiSelect allLabel="All Users" selected={lUsr} onChange={setLUsr} options={data.filterOptions.userList} /></div>
           </div>
-          <div className="mt-4 border-t border-border pt-4">
-            <DateRangeRow from={lFrom} to={lTo} onChange={(f, t) => { setLFrom(f); setLTo(t) }} />
-          </div>
-          <div className="mt-4 flex justify-end gap-2 border-t border-border pt-3">
-            <Button variant="outline" size="sm" onClick={onClear}>Clear</Button>
-            <Button size="sm" onClick={onApply} className="relative">Apply Filters{hasUnapplied && <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-orange-500 border-2 border-background" />}</Button>
-          </div>
-          {loading && data && <div className="w-full h-1 bg-border overflow-hidden rounded-full mt-3"><div className="h-1/3 bg-primary rounded-full loading-bar-inner" /></div>}
-        </CardContent></Card>
+        </FilterCard>
 
         {/* KPIs */}
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -251,7 +234,7 @@ export default function PurchaseOrdersPage() {
         <Card className="overflow-hidden" id="po-table-section">
           <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle className="text-sm font-semibold">Purchase Orders <span className="font-normal text-muted-foreground">({tableRows.length.toLocaleString('id-ID')}{tableRows.length !== data.totalRows ? ` of ${data.totalRows.toLocaleString('id-ID')}` : ''})</span></CardTitle>
-            <div className="relative w-48"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" /><input type="text" placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)} className="w-full rounded-lg border border-input bg-background pl-8 pr-3 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary" /></div>
+            <SearchInput value={search} onChange={setSearch} />
           </CardHeader>
           <CardContent className="p-0">
             <div className="overflow-x-auto">

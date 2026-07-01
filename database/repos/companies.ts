@@ -25,5 +25,6 @@ export async function getAllPicCompanies(): Promise<PicCompany[]> {
     GOOGLE_CONFIG.companies.spreadsheetId,
     GOOGLE_CONFIG.companies.sheets.picCompanies
   )
-  return rows.filter((r) => r[0] && r[0] !== 'picc_id').map(mapPicCompany)
+  // drop header echo + soft-deleted rows (deleted_at at index 10)
+  return rows.filter((r) => r[0] && r[0] !== 'picc_id' && !r[10]).map(mapPicCompany)
 }

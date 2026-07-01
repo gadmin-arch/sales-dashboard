@@ -18,6 +18,15 @@ export {
   getAllPurchaseOrders, getAllPoLines, getItemNameMap, getItemMap,
   getPoStatusLabel, getPaymentTypeLabel, getItemTypeLabel, loadRefMaps as loadProcurementRefMaps,
 } from './repos/procurement'
+export {
+  getAllPayroll, getPayrollPayments, getPayrollLists, getOccupations,
+  getPayrollCategoryLabel, getPayrollTypeInfo, getPayrollStatusLabel, loadPayrollRefMaps,
+} from './repos/payroll'
+export { getAllLoans, getRepayments } from './repos/loans'
+export {
+  getAllMealBenefits, getMealBenefitDetails, getMealBenefitReleases,
+  getMbTypeLabel, getMbrTypeInfo, loadMealRefMaps,
+} from './repos/meal-benefits'
 
 export type {
   AccessUser,
@@ -32,4 +41,7 @@ export type {
   SalesActivityLog, SalesActivityEvidence,
   PurchaseRequest, QuotationRequest, QrList, RefRow,
   PurchaseOrder, PoLine, ProcItem,
+  Payroll, PayrollPayment, PayrollListItem, Occupation,
+  Loan, Repayment,
+  MealBenefit, MealBenefitDetail, MealBenefitRelease,
 } from './types'
