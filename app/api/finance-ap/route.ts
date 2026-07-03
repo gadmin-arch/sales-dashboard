@@ -282,6 +282,7 @@ export async function GET(request: NextRequest) {
     const fReleases = dr(filteredMealReleases, (r) => r.createdAt)
     const fEvidences = dr(filteredMealEvidences, (e) => e.createdAt)
 
+    // Trigger route reload
     const poPayments = computePoPayments(fPaymentReqs, fPayments, paymentLogs, apStatusLabel, now, borrowerName)
     const payrollData = computePayroll(
       dr(filteredPayroll, (p) => p.endDate),

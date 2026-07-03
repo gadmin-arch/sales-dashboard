@@ -19,7 +19,14 @@ export { fmtDate }
 
 export const rp = (v: number) => 'Rp' + Math.round(v || 0).toLocaleString('id-ID')
 export const rpC = (v: number) => fmtCurrency(v || 0, 'IDR')
-export const days = (v: number) => `${v}d`
+export const days = (v: number) => {
+  if (v === 0) return '0d'
+  if (v < 1) {
+    const h = v * 24
+    return `${h % 1 === 0 ? h : h.toFixed(1)}h`
+  }
+  return `${v % 1 === 0 ? v : v.toFixed(1)}d`
+}
 export const axis = { stroke: 'var(--muted-foreground)', tickLine: false, className: 'text-xs' } as const
 export const tip = { contentStyle: { background: 'var(--background)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 } }
 export const CHART = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)', 'var(--chart-5)']

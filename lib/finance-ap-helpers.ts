@@ -432,6 +432,8 @@ export function computePoPayments(
       hoursToDue,
       hoursOverdue,
       dueToPaidHours,
+      requestDate: reqStart,
+      paymentDate: paidTime || null,
       createdAt: r.payreqCreatedAt,
       createdBy: employeeName(r.payreqCreatedBy) || r.payreqCreatedBy || '-',
     }
