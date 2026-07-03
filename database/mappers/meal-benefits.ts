@@ -1,4 +1,4 @@
-import type { MealBenefit, MealBenefitDetail, MealBenefitRelease } from '../types'
+import type { MealBenefit, MealBenefitDetail, MealBenefitRelease, MealBenefitEvidence } from '../types'
 import { parseNum } from './orders'
 
 // meal_benefits columns:
@@ -65,5 +65,20 @@ export function mapMealBenefitRelease(row: string[]): MealBenefitRelease {
     type: row[5] || '',
     createdAt: row[9] || '',
     deletedAt: row[11] || '',
+  }
+}
+
+// meal_benefit_evidences columns (meal_benefit_evidences_db):
+// 0:mbe_id 1:mbe_mb_id 2:mbe_file 3:mbe_amount 4:mbe_status 5:created_by
+// 6:updated_by 7:deleted_by 8:created_at 9:updated_at 10:deleted_at
+export function mapMealBenefitEvidence(row: string[]): MealBenefitEvidence {
+  return {
+    mbeId: row[0] || '',
+    mbId: row[1] || '',
+    file: row[2] || '',
+    amount: parseNum(row[3]),
+    status: row[4] || '',
+    createdAt: row[8] || '',
+    deletedAt: row[10] || '',
   }
 }

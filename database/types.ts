@@ -501,7 +501,7 @@ export interface PayrollListItem {
   payrollId: string
   faId: string
   categoryId: string
-  typeId: string // P-1 Pemasukan (+), P-2 Pengurangan (−), …
+  typeId: string // P-1 Earnings (+), P-2 Deductions (−), …
   amount: number
   remarks: string
   deletedAt: string
@@ -549,7 +549,7 @@ export interface MealBenefit {
   startDate: string
   endDate: string
   totalDays: number
-  type: string // m-1 Meeting, m-2 PM, m-3 Luar Kota
+  type: string // m-1 Meeting, m-2 PM, m-3 Out of Town
   totalUser: number
   total: number
   approve: number
@@ -589,6 +589,39 @@ export interface MealBenefitRelease {
   type: string // R=Release (+), P=Payback (−)
   createdAt: string
   deletedAt: string
+}
+
+// User-submitted evidence (real price) for a meal benefit request.
+export interface MealBenefitEvidence {
+  mbeId: string
+  mbId: string
+  file: string
+  amount: number
+  status: string
+  createdAt: string
+  deletedAt: string
+}
+
+export interface TravelAllowance {
+  taId: string
+  userId: string
+  date: string
+  amount: number
+  totalDays: number
+}
+
+export interface UserTerStatus {
+  userId: string
+  taxStatusId: string
+  terStatusId: string
+}
+
+export interface TerRate {
+  id: string
+  lowerLimit: number
+  upperLimit: number
+  percentage: number
+  status: string
 }
 
 

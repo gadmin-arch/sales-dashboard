@@ -5,12 +5,18 @@ import { type SelectRootChangeEventDetails } from '@base-ui/react/select'
 
 export type SortDir = 'asc' | 'desc'
 
-// Short id-ID date, e.g. "05 Mar 2026". Returns "-" when blank, raw string when unparseable.
+// Short en-US date, e.g. "Mar 05, 2026". Returns "-" when blank, raw string when unparseable.
 export function fmtShortDate(d: string): string {
   if (!d) return '-'
   const m = d.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/)
   const date = m ? new Date(+m[3], +m[1] - 1, +m[2]) : new Date(d)
-  return isNaN(date.getTime()) ? d : date.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })
+  if (isNaN(date.getTime())) return d
+  const dateStr = date.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' })
+  const timeMatch = d.match(/(\d{1,2}):(\d{2})(?::\d{2})?/)
+  if (timeMatch) {
+    return `${dateStr} ${timeMatch[1].padStart(2, '0')}:${timeMatch[2]}`
+  }
+  return dateStr
 }
 
 // Truncate a long chart-axis label (full text stays available via tooltip).
@@ -60,7 +66,7 @@ export function getYTD() {
 }
 
 // Quick date range presets — single source of truth for keys + readable labels
-export type QuickRangeKey = 'thisMonth' | 'last30' | '6month' | '1year' | 'lastYear' | 'YTD'
+export type QuickRangeKey = 'thisMonth' | 'last30' | '6month' | '1year' | 'lastYear' | 'YTD' | '5year'
 
 export const QUICK_RANGES: { key: QuickRangeKey; label: string }[] = [
   { key: 'thisMonth', label: 'This Month' },
@@ -69,6 +75,7 @@ export const QUICK_RANGES: { key: QuickRangeKey; label: string }[] = [
   { key: '1year', label: '1 Year' },
   { key: 'lastYear', label: 'Last Year' },
   { key: 'YTD', label: 'YTD' },
+  { key: '5year', label: '5 Years' },
 ]
 
 export function getQuickDateRange(range: QuickRangeKey) {
@@ -95,6 +102,10 @@ export function getQuickDateRange(range: QuickRangeKey) {
     const ly = t.getFullYear() - 1
     f = `${ly}-01-01`
     to = `${ly}-12-31`
+  } else if (range === '5year') {
+    const p = new Date()
+    p.setFullYear(t.getFullYear() - 5)
+    f = p.toLocaleDateString('en-CA')
   }
   return { from: f, to }
 }

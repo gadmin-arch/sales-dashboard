@@ -20,6 +20,26 @@ export function DateRangeRow({ from, to, onChange, label = 'Date Range' }: DateR
       <label className="text-xs font-medium text-muted-foreground">{label}</label>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <div className="flex items-center gap-2">
+          {/* Native month picker for quick month/year selection */}
+          <div className="relative flex items-center">
+            <input
+              type="month"
+              onChange={(e) => {
+                const val = e.target.value;
+                if (!val) return;
+                const [yyyy, mm] = val.split('-');
+                const y = parseInt(yyyy, 10);
+                const m = parseInt(mm, 10);
+                const firstDay = `${yyyy}-${mm}-01`;
+                const lastDay = new Date(y, m, 0).getDate();
+                const toDate = `${yyyy}-${mm}-${String(lastDay).padStart(2, '0')}`;
+                onChange(firstDay, toDate);
+              }}
+              className="w-[150px] rounded-lg border border-input bg-background px-2 py-1.5 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary text-muted-foreground"
+              title="Pick a specific Month & Year"
+            />
+          </div>
+          <span className="text-muted-foreground/40 text-xs hidden sm:inline px-1">or specific dates:</span>
           <input
             type="date"
             value={from}

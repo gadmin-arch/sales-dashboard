@@ -21,10 +21,11 @@ export {
 export {
   getAllPayroll, getPayrollPayments, getPayrollLists, getOccupations,
   getPayrollCategoryLabel, getPayrollTypeInfo, getPayrollStatusLabel, loadPayrollRefMaps,
+  getTravelAllowances, getUserTerStatuses, getTerRates,
 } from './repos/payroll'
 export { getAllLoans, getRepayments } from './repos/loans'
 export {
-  getAllMealBenefits, getMealBenefitDetails, getMealBenefitReleases,
+  getAllMealBenefits, getMealBenefitDetails, getMealBenefitReleases, getMealBenefitEvidences,
   getMbTypeLabel, getMbrTypeInfo, loadMealRefMaps,
 } from './repos/meal-benefits'
 
@@ -44,4 +45,5 @@ export type {
   Payroll, PayrollPayment, PayrollListItem, Occupation,
   Loan, Repayment,
   MealBenefit, MealBenefitDetail, MealBenefitRelease,
+  TravelAllowance, UserTerStatus, TerRate,
 } from './types'

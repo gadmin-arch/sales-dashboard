@@ -1,11 +1,19 @@
-import { fetchAllRows } from '../client'
+import { fetchAllRows, registerCacheClearCallback } from '../client'
 import { GOOGLE_CONFIG } from '../config'
-import { mapMealBenefit, mapMealBenefitDetail, mapMealBenefitRelease } from '../mappers/meal-benefits'
-import type { MealBenefit, MealBenefitDetail, MealBenefitRelease } from '../types'
+import { mapMealBenefit, mapMealBenefitDetail, mapMealBenefitRelease, mapMealBenefitEvidence } from '../mappers/meal-benefits'
+import type { MealBenefit, MealBenefitDetail, MealBenefitRelease, MealBenefitEvidence } from '../types'
 
 const cfg = GOOGLE_CONFIG.payroll
 const ssId = cfg.spreadsheetId
 const sheets = cfg.sheets
+
+let mbTypeMap: Map<string, string> | null = null
+let mbrTypeMap: Map<string, { name: string; positive: boolean }> | null = null
+
+registerCacheClearCallback(() => {
+  mbTypeMap = null
+  mbrTypeMap = null
+})
 
 export async function getAllMealBenefits(): Promise<MealBenefit[]> {
   const { rows } = await fetchAllRows(ssId, sheets.mealBenefits)
@@ -24,8 +32,6 @@ export async function getMealBenefitReleases(): Promise<MealBenefitRelease[]> {
 }
 
 // ── Reference maps (meal types, release types) ──
-let mbTypeMap: Map<string, string> | null = null
-let mbrTypeMap: Map<string, { name: string; positive: boolean }> | null = null
 
 export async function loadMealRefMaps(): Promise<void> {
   if (mbTypeMap) return
@@ -46,4 +52,9 @@ export function getMbTypeLabel(id: string): string {
 }
 export function getMbrTypeInfo(id: string): { name: string; positive: boolean } {
   return mbrTypeMap?.get(id) || { name: id || '-', positive: true }
+}
+
+export async function getMealBenefitEvidences(): Promise<MealBenefitEvidence[]> {
+  const { rows } = await fetchAllRows(cfg.mealEvidencesSpreadsheetId, sheets.mealEvidences)
+  return rows.filter((r) => r[0] && r[0] !== 'mbe_id' && !r[10]).map(mapMealBenefitEvidence)
 }

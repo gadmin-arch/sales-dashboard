@@ -37,7 +37,7 @@ function fmtRp(v: number): string {
   if (v >= 1_000_000_000) return (v / 1_000_000_000).toFixed(1) + 'B'
   if (v >= 1_000_000) return (v / 1_000_000).toFixed(0) + 'M'
   if (v >= 1_000) return Math.round(v / 1_000).toFixed(0) + 'K'
-  return v.toLocaleString('id-ID')
+  return v.toLocaleString('en-US')
 }
 
 const colors = [

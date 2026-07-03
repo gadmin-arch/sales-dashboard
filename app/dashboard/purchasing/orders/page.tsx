@@ -136,15 +136,15 @@ export default function PurchaseOrdersPage() {
         {/* KPIs */}
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           <KPICard title="Total Spend" value={fmtRp(data.kpis.totalSpend)} icon={<ShoppingCart className="h-4 w-4" />} />
-          <KPICard title="PO Count" value={data.kpis.poCount.toLocaleString('id-ID')} icon={<FileText className="h-4 w-4" />} trend={{ value: data.kpis.lineCount.toLocaleString('id-ID'), label: 'line items', positive: true }} />
+          <KPICard title="PO Count" value={data.kpis.poCount.toLocaleString('en-US')} icon={<FileText className="h-4 w-4" />} trend={{ value: data.kpis.lineCount.toLocaleString('en-US'), label: 'line items', positive: true }} />
           <KPICard title="Avg PO Value" value={fmtRp(data.kpis.avgPO)} icon={<Wallet className="h-4 w-4" />} />
-          <KPICard title="Vendors" value={data.kpis.vendorCount.toLocaleString('id-ID')} icon={<Store className="h-4 w-4" />} />
+          <KPICard title="Vendors" value={data.kpis.vendorCount.toLocaleString('en-US')} icon={<Store className="h-4 w-4" />} />
         </div>
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           <KPICard title="Net Spend" value={fmtRp(data.kpis.totalNet)} icon={<Wallet className="h-4 w-4" />} />
           <KPICard title="Total PPN" value={fmtRp(data.kpis.totalPpn)} icon={<Receipt className="h-4 w-4" />} />
           <KPICard title="Total PPH" value={fmtRp(data.kpis.totalPph)} icon={<Receipt className="h-4 w-4" />} />
-          <KPICard title="Approved" value={data.kpis.approvedCount.toLocaleString('id-ID')} icon={<CheckCircle2 className="h-4 w-4" />} trend={{ value: data.kpis.waitingCount, label: 'waiting', positive: false }} />
+          <KPICard title="Approved" value={data.kpis.approvedCount.toLocaleString('en-US')} icon={<CheckCircle2 className="h-4 w-4" />} trend={{ value: data.kpis.waitingCount, label: 'waiting', positive: false }} />
         </div>
 
         {/* Spend trend */}
@@ -233,7 +233,7 @@ export default function PurchaseOrdersPage() {
         {/* PO table */}
         <Card className="overflow-hidden" id="po-table-section">
           <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <CardTitle className="text-sm font-semibold">Purchase Orders <span className="font-normal text-muted-foreground">({tableRows.length.toLocaleString('id-ID')}{tableRows.length !== data.totalRows ? ` of ${data.totalRows.toLocaleString('id-ID')}` : ''})</span></CardTitle>
+            <CardTitle className="text-sm font-semibold">Purchase Orders <span className="font-normal text-muted-foreground">({tableRows.length.toLocaleString('en-US')}{tableRows.length !== data.totalRows ? ` of ${data.totalRows.toLocaleString('en-US')}` : ''})</span></CardTitle>
             <SearchInput value={search} onChange={setSearch} />
           </CardHeader>
           <CardContent className="p-0">

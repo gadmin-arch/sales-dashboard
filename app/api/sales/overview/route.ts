@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { parseDashboardParams } from '@/lib/api-helpers'
-import { getProjectOrders, getOrderTypeLabelSync, getPeStatusLabelSync, getFinanceStatusLabelSync, loadRefMaps as loadOrderRefMaps, getAllOrderTypes, getAllPeStatuses, getAllFinanceStatuses } from '@/database/repos/orders'
+import { getProjectOrders, getOrderTypeLabelSync, getPeStatusLabelSync, getFinanceStatusLabelSync, loadRefMaps as loadOrderRefMaps, getAllOrderTypes, getAllPeStatuses, getAllFinanceStatuses, getFlagLabel } from '@/database/repos/orders'
 import { getAllQuotations, getStatusLabel, loadRefMaps as loadQuotRefMaps, getAllQuotationTypes } from '@/database/repos/quotations'
 import { getAllSalesUsers } from '@/database/repos/sales-users'
 import { getAllCompanies } from '@/database/repos/companies'
@@ -20,6 +20,7 @@ export async function GET(request: NextRequest) {
     const orderType = parseMulti(searchParams, 'orderType')
     const projectStatus = parseMulti(searchParams, 'projectStatus')
     const invoiceStatus = parseMulti(searchParams, 'invoiceStatus')
+    const projectFlag = parseMulti(searchParams, 'projectFlag')
     const period = (searchParams.get('period') as 'monthly' | 'weekly') || 'monthly'
 
     await Promise.all([loadOrderRefMaps(), loadQuotRefMaps()])
@@ -95,6 +96,10 @@ export async function GET(request: NextRequest) {
     }
     if (invoiceStatus.length) {
       filteredOrders = filteredOrders.filter((o) => invoiceStatus.includes(o.prjFStatus))
+    }
+    if (projectFlag.length) {
+      filteredOrders = filteredOrders.filter((o) => projectFlag.includes(o.prjFlag))
+      filteredQuotations = filteredQuotations.filter((q) => projectFlag.includes(q.qFlag))
     }
 
     // Effective (PO-clamped) invoice/payment months per project — so clicking the Invoice/Payment
@@ -375,6 +380,14 @@ export async function GET(request: NextRequest) {
     const projectStatusList = await getAllPeStatuses()
     const invoiceStatusList = await getAllFinanceStatuses()
 
+    // Resolve all project flags from orders & quotations
+    const activeFlags = new Set<string>()
+    for (const o of orders) if (o.prjFlag) activeFlags.add(o.prjFlag)
+    for (const q of quotations) if (q.qFlag) activeFlags.add(q.qFlag)
+    const projectFlagList = Array.from(activeFlags)
+      .map((f) => ({ flagId: f, flagDescription: getFlagLabel(f) || f }))
+      .sort((a, b) => a.flagDescription.localeCompare(b.flagDescription))
+
     const result: any = {
       kpis: { totalProjects, totalSales, totalQuotations, totalQuotationValue, totalInvoice, totalPayment },
       conversionTimeline,
@@ -392,6 +405,7 @@ export async function GET(request: NextRequest) {
       orderTypeList,
       projectStatusList,
       invoiceStatusList,
+      projectFlagList,
     }
 
     // Debug: include raw data samples

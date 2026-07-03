@@ -1,51 +1,30 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import {
-  Loader2, Layers, FileText, Banknote, Utensils, Landmark, Receipt,
-} from 'lucide-react'
+import { Loader2, Banknote } from 'lucide-react'
 import { ThemeToggle, SalesPageShell } from '@/components/theme-toggle'
 import { useChartFilter } from '@/hooks/use-chart-filter'
 import { DateRangeRow } from '@/components/date-range-row'
 import { buildQuery, getYTD } from '@/lib/sales-helpers'
 import { useAuth } from '@/lib/auth-context'
 
-import { type FA } from './components/shared'
-import { OverviewTab } from './components/overview-tab'
-import { PoPaymentsTab } from './components/po-payments-tab'
-import { MealTab } from './components/meal-tab'
-import { LoansTab } from './components/loans-tab'
-import { ReimburseTab } from './components/reimburse-tab'
+import { type FA } from '../finance-ap/components/shared'
+import { PayrollTab } from '../finance-ap/components/payroll-tab'
 
-const TABS = [
-  { key: 'overview', label: 'Overview', icon: <Layers className="h-4 w-4" />, role: null },
-  { key: 'poPayments', label: 'PO Payments', icon: <FileText className="h-4 w-4" />, role: null },
-  { key: 'payroll', label: 'Payroll', icon: <Banknote className="h-4 w-4" />, role: 'payroll' },
-  { key: 'meal', label: 'Meal Benefits', icon: <Utensils className="h-4 w-4" />, role: null },
-  { key: 'loans', label: 'Loans', icon: <Landmark className="h-4 w-4" />, role: null },
-  { key: 'reimburse', label: 'Reimburse', icon: <Receipt className="h-4 w-4" />, role: null },
-] as const
-
-type TabKey = typeof TABS[number]['key']
-
-export default function FinanceAPPage() {
+export default function PayrollPage() {
   const { user } = useAuth()
   const [data, setData] = useState<FA | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [tab, setTab] = useState<TabKey>('overview')
 
-  const { chartFilter, setChartFilter, handleChartClick } = useChartFilter('finance-tables-section')
+  const { chartFilter, setChartFilter, handleChartClick } = useChartFilter('payroll-section')
 
   const [dateFrom, setDateFrom] = useState(getYTD().from)
   const [dateTo, setDateTo] = useState(getYTD().to)
   const [lFrom, setLFrom] = useState(dateFrom)
   const [lTo, setLTo] = useState(dateTo)
-
-  const tabs = useMemo(() => TABS.filter((t) => !t.role || (user?.roles as any)?.[t.role]), [user])
-  useEffect(() => { if (!tabs.some((t) => t.key === tab)) setTab('overview') }, [tabs, tab])
 
   const doFetch = useCallback(async (p: Record<string, string>) => {
     setLoading(true); setError(null)
@@ -75,14 +54,19 @@ export default function FinanceAPPage() {
   if (error && !data) return <div className="flex flex-col items-center justify-center min-h-[80vh] space-y-4"><p className="text-destructive">{error}</p><Button onClick={onClear}>Retry</Button></div>
   if (!data) return null
 
+  // Ensure user has access
+  if (user && !(user.roles as any)?.['payroll']) {
+    return <div className="flex items-center justify-center min-h-[80vh]"><p className="text-muted-foreground">You do not have access to Payroll & Salaries.</p></div>
+  }
+
   return (
     <SalesPageShell>
       <div className="bg-background text-foreground min-h-screen space-y-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap items-center gap-4">
             <div>
-              <h1 className="text-2xl font-bold tracking-tight">Finance — Accounts Payable</h1>
-              <p className="text-sm text-muted-foreground">PT. Multi Daya Mitra — Reimburse · PO Payments · Payroll · Meal Benefits · Loans</p>
+              <h1 className="text-2xl font-bold tracking-tight">Payroll & Salaries</h1>
+              <p className="text-sm text-muted-foreground">PT. Multi Daya Mitra — Employee Compensations</p>
             </div>
             {chartFilter && (
               <div className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary border border-primary/20">
@@ -97,26 +81,14 @@ export default function FinanceAPPage() {
         <Card><CardContent className="pt-5">
           <DateRangeRow from={lFrom} to={lTo} onChange={(f, t) => { setLFrom(f); setLTo(t) }} />
           <div className="mt-4 flex justify-end gap-2 border-t border-border pt-3">
-            <Button variant="outline" size="sm" onClick={onClear}>Clear</Button>
-            <Button size="sm" onClick={onApply} className="relative">Apply{hasUnapplied && <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-orange-500 border-2 border-background" />}</Button>
+            <Button variant="outline" onClick={onClear} className="w-[120px]">Reset Filter</Button>
+            <Button onClick={onApply} disabled={!hasUnapplied} className="w-[120px]">Apply</Button>
           </div>
-          {loading && data && <div className="w-full h-1 bg-border overflow-hidden rounded-full mt-3"><div className="h-1/3 bg-primary rounded-full loading-bar-inner" /></div>}
         </CardContent></Card>
 
-        <div id="finance-tables-section" className="flex flex-wrap gap-1.5 border-b border-border">
-          {tabs.map((t) => (
-            <button key={t.key} onClick={() => setTab(t.key)} className={`inline-flex items-center gap-2 rounded-t-lg px-3.5 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${tab === t.key ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>
-              {t.icon}{t.label}
-            </button>
-          ))}
+        <div className="bg-card border border-border shadow-sm rounded-xl overflow-hidden min-h-[500px] p-6">
+          <PayrollTab d={data.payroll} handleChartClick={handleChartClick} hideCharts={true} />
         </div>
-
-        {tab === 'overview' && <OverviewTab d={data.overview} setTab={setTab} />}
-        {tab === 'poPayments' && <PoPaymentsTab d={data.poPayments} handleChartClick={handleChartClick} />}
-        {tab === 'payroll' && <PayrollTab d={data.payroll} handleChartClick={handleChartClick} hideTable={true} />}
-        {tab === 'meal' && <MealTab d={data.meal} handleChartClick={handleChartClick} />}
-        {tab === 'loans' && <LoansTab d={data.loans} handleChartClick={handleChartClick} />}
-        {tab === 'reimburse' && <ReimburseTab d={data.reimburse} handleChartClick={handleChartClick} />}
       </div>
     </SalesPageShell>
   )

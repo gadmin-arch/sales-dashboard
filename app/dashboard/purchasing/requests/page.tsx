@@ -145,31 +145,31 @@ export default function PurchaseRequestsPage() {
 
         {/* KPIs */}
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <KPICard title="Total PR" value={data.kpis.totalPR.toLocaleString('id-ID')} icon={<ClipboardList className="h-4 w-4" />} />
-          <KPICard title="Purchased" value={data.kpis.purchasedCount.toLocaleString('id-ID')} icon={<CheckCircle2 className="h-4 w-4" />} trend={{ value: `${data.kpis.completionRate}%`, label: 'completion', positive: data.kpis.completionRate >= 50 }} />
-          <KPICard title="Open PRs" value={data.kpis.openCount.toLocaleString('id-ID')} icon={<FolderOpen className="h-4 w-4" />} />
-          <KPICard title="Overdue" value={data.kpis.overdueCount.toLocaleString('id-ID')} icon={<AlertTriangle className="h-4 w-4" />} trend={{ value: data.kpis.overdueCount, label: 'PRs late', positive: false }} />
+          <KPICard title="Total PR" value={data.kpis.totalPR.toLocaleString('en-US')} icon={<ClipboardList className="h-4 w-4" />} />
+          <KPICard title="Purchased" value={data.kpis.purchasedCount.toLocaleString('en-US')} icon={<CheckCircle2 className="h-4 w-4" />} trend={{ value: `${data.kpis.completionRate}%`, label: 'completion', positive: data.kpis.completionRate >= 50 }} />
+          <KPICard title="Open PRs" value={data.kpis.openCount.toLocaleString('en-US')} icon={<FolderOpen className="h-4 w-4" />} />
+          <KPICard title="Overdue" value={data.kpis.overdueCount.toLocaleString('en-US')} icon={<AlertTriangle className="h-4 w-4" />} trend={{ value: data.kpis.overdueCount, label: 'PRs late', positive: false }} />
         </div>
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           <KPICard title="Total Estimated" value={fmtRp(data.kpis.totalEstimated)} icon={<Wallet className="h-4 w-4" />} />
           <KPICard title="Total Purchased" value={fmtRp(data.kpis.totalPurchased)} icon={<Wallet className="h-4 w-4" />} />
           <KPICard title="Avg Saving" value={`${data.kpis.avgVariancePct}%`} icon={<Percent className="h-4 w-4" />} trend={{ value: `${data.kpis.avgVariancePct}%`, label: 'vs estimate', positive: data.kpis.avgVariancePct >= 0 }} />
-          <KPICard title="Purchased Items" value={data.kpis.purchasedCount.toLocaleString('id-ID')} icon={<CheckCircle2 className="h-4 w-4" />} />
+          <KPICard title="Purchased Items" value={data.kpis.purchasedCount.toLocaleString('en-US')} icon={<CheckCircle2 className="h-4 w-4" />} />
         </div>
 
         {/* Lead time KPIs (date-only, days; negatives clamped to 0) */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <KPICard
             title="Lead Time (PR → PO)"
-            value={`${data.kpis.leadTimePOAvg} hari`}
+            value={`${data.kpis.leadTimePOAvg} days`}
             icon={<Timer className="h-4 w-4" />}
-            trend={{ value: `${data.kpis.leadTimePOMedian} hari`, label: `median · ${data.kpis.leadTimePOCount.toLocaleString('id-ID')} PR`, positive: true }}
+            trend={{ value: `${data.kpis.leadTimePOMedian} days`, label: `median · ${data.kpis.leadTimePOCount.toLocaleString('en-US')} PR`, positive: true }}
           />
           <KPICard
-            title="Lead Time Barang Diterima"
-            value={`${data.kpis.leadTimeReceivedAvg} hari`}
+            title="Lead Time Goods Received"
+            value={`${data.kpis.leadTimeReceivedAvg} days`}
             icon={<Truck className="h-4 w-4" />}
-            trend={{ value: `${data.kpis.leadTimeReceivedMedian} hari`, label: `median · ${data.kpis.leadTimeReceivedCount.toLocaleString('id-ID')} PR`, positive: true }}
+            trend={{ value: `${data.kpis.leadTimeReceivedMedian} days`, label: `median · ${data.kpis.leadTimeReceivedCount.toLocaleString('en-US')} PR`, positive: true }}
           />
         </div>
 
@@ -234,7 +234,7 @@ export default function PurchaseRequestsPage() {
         {/* Requests table */}
         <Card className="overflow-hidden" id="pr-table-section">
           <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <CardTitle className="text-sm font-semibold">Purchase Requests <span className="font-normal text-muted-foreground">({tableRows.length.toLocaleString('id-ID')}{tableRows.length !== data.totalRows ? ` of ${data.totalRows.toLocaleString('id-ID')}` : ''})</span></CardTitle>
+            <CardTitle className="text-sm font-semibold">Purchase Requests <span className="font-normal text-muted-foreground">({tableRows.length.toLocaleString('en-US')}{tableRows.length !== data.totalRows ? ` of ${data.totalRows.toLocaleString('en-US')}` : ''})</span></CardTitle>
             <SearchInput value={search} onChange={setSearch} />
           </CardHeader>
           <CardContent className="p-0">
@@ -261,7 +261,7 @@ export default function PurchaseRequestsPage() {
                       <TableCell className="text-xs font-semibold text-primary whitespace-nowrap">{r.prId}</TableCell>
                       <TableCell className="max-w-[220px] truncate" title={r.item}>{r.item}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">{r.project}</TableCell>
-                      <TableCell className="text-right text-muted-foreground">{r.qtyPurchased.toLocaleString('id-ID')}/{r.qtyReq.toLocaleString('id-ID')}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">{r.qtyPurchased.toLocaleString('en-US')}/{r.qtyReq.toLocaleString('en-US')}</TableCell>
                       <TableCell className="text-right font-medium">{fmtRp(r.estimated)}</TableCell>
                       <TableCell className="text-right font-medium">{fmtRp(r.purchased)}</TableCell>
                       <TableCell className={`text-right font-medium ${r.variance > 0 ? 'text-emerald-600 dark:text-emerald-400' : r.variance < 0 ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}>{fmtRp(r.variance)}</TableCell>
@@ -269,8 +269,8 @@ export default function PurchaseRequestsPage() {
                       <TableCell><span className={`inline-flex rounded-md px-2 py-0.5 text-[10px] font-medium ${overdueClass[r.overdue] || 'bg-muted text-muted-foreground'}`}>{r.overdueLabel}</span></TableCell>
                       <TableCell className="text-xs">{r.handler}</TableCell>
                       <TableCell className="text-muted-foreground whitespace-nowrap">{fmtDate(r.duedate)}</TableCell>
-                      <TableCell className="text-right whitespace-nowrap">{r.leadTimePO != null ? `${r.leadTimePO.toLocaleString('id-ID')} hari` : <span className="text-muted-foreground">—</span>}</TableCell>
-                      <TableCell className="text-right whitespace-nowrap">{r.leadTimeReceived != null ? `${r.leadTimeReceived.toLocaleString('id-ID')} hari` : <span className="text-muted-foreground">—</span>}</TableCell>
+                      <TableCell className="text-right whitespace-nowrap">{r.leadTimePO != null ? `${r.leadTimePO.toLocaleString('en-US')} days` : <span className="text-muted-foreground">—</span>}</TableCell>
+                      <TableCell className="text-right whitespace-nowrap">{r.leadTimeReceived != null ? `${r.leadTimeReceived.toLocaleString('en-US')} days` : <span className="text-muted-foreground">—</span>}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

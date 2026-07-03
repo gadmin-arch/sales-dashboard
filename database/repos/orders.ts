@@ -1,4 +1,4 @@
-import { fetchAllRows, getSheetHeaders } from '../client'
+import { fetchAllRows, getSheetHeaders, registerCacheClearCallback } from '../client'
 import { GOOGLE_CONFIG } from '../config'
 import { mapOrder, parseNum } from '../mappers/orders'
 import { mapOrderType, mapPeStatus, mapFinanceStatus } from '../mappers/reference'
@@ -9,6 +9,13 @@ let orderTypeMap: Map<string, string> | null = null
 let flagMap: Map<string, string> | null = null
 let peStatusMap: Map<string, string> | null = null
 let financeStatusMap: Map<string, string> | null = null
+
+registerCacheClearCallback(() => {
+  orderTypeMap = null
+  flagMap = null
+  peStatusMap = null
+  financeStatusMap = null
+})
 
 export async function loadRefMaps() {
   if (orderTypeMap) return

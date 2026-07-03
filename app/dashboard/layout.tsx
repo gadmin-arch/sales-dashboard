@@ -14,6 +14,7 @@ const ICONS: Record<string, ReactNode> = {
   '/dashboard/sales/activities': <ListTodo className="h-4 w-4" />,
   '/dashboard/leads-opps': <Users className="h-4 w-4" />,
   '/dashboard/invoices': <FileText className="h-4 w-4" />,
+  '/dashboard/customers': <Users className="h-4 w-4" />,
   '/dashboard/payments': <CreditCard className="h-4 w-4" />,
   '/dashboard/finance-ap': <CreditCard className="h-4 w-4" />,
   '/dashboard/projects': <FolderOpen className="h-4 w-4" />,

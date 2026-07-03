@@ -1,4 +1,4 @@
-import { fetchAllRows } from '../client'
+import { fetchAllRows, registerCacheClearCallback } from '../client'
 import { GOOGLE_CONFIG } from '../config'
 import { mapSalesUser, mapSalesRole, mapDepartement } from '../mappers/sales-users'
 import type { SalesUser, SalesRole, Departement } from '../types'
@@ -6,6 +6,12 @@ import type { SalesUser, SalesRole, Departement } from '../types'
 let userCache: Map<string, SalesUser> | null = null
 let roleCache: Map<string, string> | null = null
 let deptCache: Map<string, string> | null = null
+
+registerCacheClearCallback(() => {
+  userCache = null
+  roleCache = null
+  deptCache = null
+})
 
 async function loadCache() {
   if (userCache) return

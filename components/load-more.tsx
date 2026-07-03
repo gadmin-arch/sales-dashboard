@@ -39,7 +39,7 @@ export function LoadMore({ hasMore, shown, total, onClick, onLoadAll, onCollapse
   return (
     <div className="flex items-center justify-center gap-3 border-t border-border px-4 py-3">
       <span className="text-xs text-muted-foreground">
-        Showing {shown.toLocaleString('id-ID')} of {total.toLocaleString('id-ID')}
+        Showing {shown.toLocaleString('en-US')} of {total.toLocaleString('en-US')}
       </span>
       {hasMore && (
         <Button variant="outline" size="sm" onClick={onClick}>

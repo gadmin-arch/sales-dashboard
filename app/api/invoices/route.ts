@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getInvoicingData } from '@/database/repos/invoicing'
 import { getCompanyNameMap } from '@/database/repos/companies'
-import { getProjectCompletionDates, getAllOrders, loadRefMaps, getPeStatusLabelSync } from '@/database/repos/orders'
+import { getProjectCompletionDates, getAllOrders, loadRefMaps, getPeStatusLabelSync, getFlagLabel } from '@/database/repos/orders'
 import { parseDashboardParams } from '@/lib/api-helpers'
 import { parseDate, formatMonth, sortByPeriod, parseMulti, filterDataByDateRange } from '@/lib/utils-date-currency'
 import type { Invoice } from '@/database/types'
@@ -45,6 +45,8 @@ export async function GET(request: NextRequest) {
     const customer = parseMulti(searchParams, 'customer')
     const status = parseMulti(searchParams, 'status')
     const projectStatus = parseMulti(searchParams, 'projectStatus')
+    const projectFlag = parseMulti(searchParams, 'projectFlag')
+    const dateType = searchParams.get('dateType') || 'invoice'
     const minAmountParam = searchParams.get('minAmount')
     const minPaymentParam = searchParams.get('minPayment')
     const minAmount = minAmountParam ? parseFloat(minAmountParam) : null
@@ -60,9 +62,15 @@ export async function GET(request: NextRequest) {
     const nameOf = (id: string) => nameMap.get(id) || id || '-'
     const today = new Date()
 
-    // Build prj_id → pe_status map from orders
+    // Build prj_id → pe_status and prj_id → prj_flag maps from orders
     const prjStatusMap = new Map<string, string>()
-    for (const o of orders) if (o.prjId) prjStatusMap.set(o.prjId, o.prjPeStatus)
+    const prjFlagMap = new Map<string, string>()
+    for (const o of orders) {
+      if (o.prjId) {
+        prjStatusMap.set(o.prjId, o.prjPeStatus)
+        prjFlagMap.set(o.prjId, o.prjFlag || '')
+      }
+    }
 
     // Helper: get pe_status(es) for an invoice via its linked prj(s)
     const getInvPeStatuses = (invId: string): string[] => {
@@ -71,12 +79,70 @@ export async function GET(request: NextRequest) {
       return prjStr.split(',').map(p => p.trim()).filter(Boolean).map(p => prjStatusMap.get(p) || '').filter(Boolean)
     }
 
+    // Helper: get flag(s) for an invoice via its linked prj(s)
+    const getInvFlags = (invId: string): string[] => {
+      const prjStr = invPrjMap.get(invId) || ''
+      if (!prjStr) return []
+      return prjStr.split(',').map(p => p.trim()).filter(Boolean).map(p => prjFlagMap.get(p) || '').filter(Boolean)
+    }
+
+    // Helper: get PO date(s) for an invoice via its linked prj(s)
+    const prjPoDateMap = new Map<string, string>()
+    for (const o of orders) if (o.prjId) prjPoDateMap.set(o.prjId, o.prjPoDate || '')
+    const getInvPoDates = (invId: string): string[] => {
+      const prjStr = invPrjMap.get(invId) || ''
+      if (!prjStr) return []
+      return prjStr.split(',').map(p => p.trim()).filter(Boolean).map(p => prjPoDateMap.get(p) || '').filter(Boolean)
+    }
+
+    // Helper: get latest payment date for each invoice across all payment details (for filtering)
+    const latestPaymentDatesMap = new Map<string, string>()
+    for (const pd of paymentDetails) {
+      if (pd.date) {
+        const current = latestPaymentDatesMap.get(pd.invId)
+        if (!current || pd.date > current) {
+          latestPaymentDatesMap.set(pd.invId, pd.date)
+        }
+      }
+    }
+
     // ── Filter invoices ──
-    let filtered = filterDataByDateRange(invoices, (inv) => inv.invDate, dateFrom, dateTo)
+    let filtered = invoices
+    if (dateType === 'po') {
+      filtered = invoices.filter(inv => {
+        const poDates = getInvPoDates(inv.invId)
+        if (!poDates.length) return false
+        return poDates.some(pd => {
+          const d = parseDate(pd)
+          if (!d) return false
+          if (dateFrom && d < parseDate(dateFrom)!) return false
+          if (dateTo && d > parseDate(dateTo)!) return false
+          return true
+        })
+      })
+    } else if (dateType === 'payment') {
+      filtered = invoices.filter(inv => {
+        const payDate = latestPaymentDatesMap.get(inv.invId)
+        if (!payDate) return false
+        const d = parseDate(payDate)
+        if (!d) return false
+        if (dateFrom && d < parseDate(dateFrom)!) return false
+        if (dateTo && d > parseDate(dateTo)!) return false
+        return true
+      })
+    } else {
+      // Default: invoice date
+      filtered = filterDataByDateRange(invoices, (inv) => inv.invDate, dateFrom, dateTo)
+    }
+
     if (customer.length) filtered = filtered.filter((inv) => customer.includes(inv.invCompanyId))
     if (projectStatus.length) filtered = filtered.filter((inv) => {
       const statuses = getInvPeStatuses(inv.invId)
       return statuses.some(s => projectStatus.includes(s))
+    })
+    if (projectFlag.length) filtered = filtered.filter((inv) => {
+      const flags = getInvFlags(inv.invId)
+      return flags.some(f => projectFlag.includes(f))
     })
 
     // Actual collected amount per invoice from payment_details (pd_total_amount),
@@ -133,6 +199,7 @@ export async function GET(request: NextRequest) {
       const estPaymentDays = invDate && due ? Math.max(0, Math.round((due.getTime() - invDate.getTime()) / 86400000)) : null
       const payDateObj = payDate ? parseDate(payDate) : null
       const actualPaymentDays = invDate && payDateObj ? Math.max(0, Math.round((payDateObj.getTime() - invDate.getTime()) / 86400000)) : null
+      const dueDateToPaymentDays = due && payDateObj ? Math.round((payDateObj.getTime() - due.getTime()) / 86400000) : null
 
       return {
         invId: inv.invId,
@@ -156,6 +223,7 @@ export async function GET(request: NextRequest) {
         completedDate: firstPrj ? completionMap.get(firstPrj) || '-' : '-',
         estPaymentDays,
         actualPaymentDays,
+        dueDateToPaymentDays,
       }
     })
 
@@ -212,6 +280,15 @@ export async function GET(request: NextRequest) {
           if (cVal === '31-45') return r.actualPaymentDays >= 31 && r.actualPaymentDays <= 45
           if (cVal === '46-60') return r.actualPaymentDays >= 46 && r.actualPaymentDays <= 60
           if (cVal === '60+') return r.actualPaymentDays >= 61
+        }
+        if (cType === 'dueDateToPaymentDays') {
+          if (r.dueDateToPaymentDays === null) return false
+          if (cVal === 'Early (<0)') return r.dueDateToPaymentDays < 0
+          if (cVal === 'On Time (0)') return r.dueDateToPaymentDays === 0
+          if (cVal === '1-15') return r.dueDateToPaymentDays >= 1 && r.dueDateToPaymentDays <= 15
+          if (cVal === '16-30') return r.dueDateToPaymentDays >= 16 && r.dueDateToPaymentDays <= 30
+          if (cVal === '31-60') return r.dueDateToPaymentDays >= 31 && r.dueDateToPaymentDays <= 60
+          if (cVal === '60+') return r.dueDateToPaymentDays >= 61
         }
         return true
       })
@@ -377,6 +454,27 @@ export async function GET(request: NextRequest) {
     }
     const avgActualPaymentDays = actCount > 0 ? Math.round(actSum / actCount) : 0
 
+    // ── Due Date to Payment Days distribution (due date -> payment date, in days) ──
+    const dueToPayDefs = [
+      { name: 'Early (<0)', min: -Infinity, max: -1 },
+      { name: 'On Time (0)', min: 0, max: 0 },
+      { name: '1-15', min: 1, max: 15 },
+      { name: '16-30', min: 16, max: 30 },
+      { name: '31-60', min: 31, max: 60 },
+      { name: '60+', min: 61, max: Infinity },
+    ]
+    const dueDateToPaymentDaysDistribution = dueToPayDefs.map((d) => ({ name: d.name, value: 0 }))
+    let dtpSum = 0
+    let dtpCount = 0
+    for (const r of finalRows) {
+      if (r.dueDateToPaymentDays === null) continue
+      dtpSum += r.dueDateToPaymentDays
+      dtpCount++
+      const idx = dueToPayDefs.findIndex((d) => r.dueDateToPaymentDays! >= d.min && r.dueDateToPaymentDays! <= d.max)
+      if (idx >= 0) dueDateToPaymentDaysDistribution[idx].value++
+    }
+    const avgDueToPayDays = dtpCount > 0 ? Math.round(dtpSum / dtpCount) : 0
+
     // ── Estimated Payment Schedule (outstanding by est payment date month) ──
     const estAgg: Record<string, number> = {}
     for (const r of finalRows) {
@@ -390,23 +488,89 @@ export async function GET(request: NextRequest) {
       outstanding: Math.round(v),
     }))
 
-    // ── Customer summary ──
-    const custAgg: Record<string, { totalInvoiced: number; totalPaid: number; outstanding: number; overdue: number }> = {}
+    // ── Customer summary (Scorecard) ──
+    let dateFilteredOrders = orders
+    if (dateType === 'po') {
+      dateFilteredOrders = filterDataByDateRange(orders, (o) => o.prjPoDate, dateFrom, dateTo)
+    } else {
+      const filteredPrjIds = new Set<string>()
+      for (const inv of filtered) {
+        const prjStr = invPrjMap.get(inv.invId) || ''
+        prjStr.split(',').map(p => p.trim()).filter(Boolean).forEach(p => filteredPrjIds.add(p))
+      }
+      dateFilteredOrders = orders.filter(o => filteredPrjIds.has(o.prjId))
+    }
+    const custAgg: Record<string, {
+      totalInvoiced: number;
+      totalPaid: number;
+      outstanding: number;
+      overdue: number;
+      invToPaySum: number;
+      invToPayCount: number;
+      poToInvSum: number;
+      poToInvCount: number;
+    }> = {}
+
     for (const r of finalRows) {
-      const c = (custAgg[r.customerId] ??= { totalInvoiced: 0, totalPaid: 0, outstanding: 0, overdue: 0 })
+      const c = (custAgg[r.customerId] ??= {
+        totalInvoiced: 0,
+        totalPaid: 0,
+        outstanding: 0,
+        overdue: 0,
+        invToPaySum: 0,
+        invToPayCount: 0,
+        poToInvSum: 0,
+        poToInvCount: 0,
+      })
       c.totalInvoiced += r.amount
       c.totalPaid += r.paid
       c.outstanding += r.outstanding
       if (r.status === 'overdue_ongoing') c.overdue += r.outstanding
+
+      if (r.actualPaymentDays !== null) {
+        c.invToPaySum += r.actualPaymentDays
+        c.invToPayCount++
+      }
+
+      const prjIds = (r.prj || '').split(',').map(p => p.trim()).filter(Boolean)
+      const firstPrj = prjIds[0]
+      if (firstPrj) {
+        const order = orders.find(o => o.prjId === firstPrj)
+        if (order && order.prjPoDate) {
+          const poDate = parseDate(order.prjPoDate)
+          const invDate = parseDate(r.invoiceDate)
+          if (poDate && invDate) {
+            const diffDays = Math.round((invDate.getTime() - poDate.getTime()) / 86400000)
+            if (diffDays >= 0) {
+              c.poToInvSum += diffDays
+              c.poToInvCount++
+            }
+          }
+        }
+      }
     }
+
     const customerSummary = Object.entries(custAgg)
-      .map(([customerId, v]) => ({
-        customer: nameOf(customerId),
-        totalInvoiced: Math.round(v.totalInvoiced),
-        totalPaid: Math.round(v.totalPaid),
-        outstanding: Math.round(v.outstanding),
-        overdue: Math.round(v.overdue),
-      }))
+      .map(([customerId, v]) => {
+        const customerOrders = dateFilteredOrders.filter(o => o.prjCompanyId === customerId && !o.deletedAt)
+        const totalPo = customerOrders.reduce((s, o) => s + (o.prjPoTotal || 0), 0)
+        const poMaterial = customerOrders.reduce((s, o) => s + (o.prjPoMaterial || 0), 0)
+        const poService = customerOrders.reduce((s, o) => s + (o.prjPoService || 0), 0)
+
+        return {
+          customer: nameOf(customerId),
+          customerId,
+          totalInvoiced: Math.round(v.totalInvoiced),
+          totalPaid: Math.round(v.totalPaid),
+          outstanding: Math.round(v.outstanding),
+          overdue: Math.round(v.overdue),
+          avgInvoiceToPaymentDays: v.invToPayCount > 0 ? Math.round(v.invToPaySum / v.invToPayCount) : null,
+          avgPoToInvoiceDays: v.poToInvCount > 0 ? Math.round(v.poToInvSum / v.poToInvCount) : null,
+          totalPo: Math.round(totalPo),
+          poMaterial: Math.round(poMaterial),
+          poService: Math.round(poService),
+        }
+      })
       .sort((a, b) => b.outstanding - a.outstanding)
 
     // ── Filter options (value = id, label = customer name) ──
@@ -417,12 +581,19 @@ export async function GET(request: NextRequest) {
 
     // Project status options from all prj_ids linked to invoices
     const allPrjStatuses = new Set<string>()
+    const allPrjFlags = new Set<string>()
     for (const inv of invoices) {
       const statuses = getInvPeStatuses(inv.invId)
       statuses.forEach(s => allPrjStatuses.add(s))
+      const flags = getInvFlags(inv.invId)
+      flags.forEach(f => allPrjFlags.add(f))
     }
     const projectStatusList = [...allPrjStatuses]
       .map(s => ({ value: s, label: getPeStatusLabelSync(s) || s }))
+      .sort((a, b) => a.label.localeCompare(b.label))
+
+    const projectFlagList = [...allPrjFlags]
+      .map(f => ({ value: f, label: getFlagLabel(f) || f }))
       .sort((a, b) => a.label.localeCompare(b.label))
 
     // ── Invoice table (full filtered set; client paginates with Load More) ──
@@ -440,7 +611,8 @@ export async function GET(request: NextRequest) {
         invoiceCount: finalRows.length,
         avgLeadTime,
         avgEstPaymentDays,
-        avgActualPaymentDays
+        avgActualPaymentDays,
+        avgDueToPayDays
       },
       statusBreakdown,
       trend,
@@ -450,11 +622,12 @@ export async function GET(request: NextRequest) {
       leadTimeDistribution,
       estPaymentDaysDistribution,
       actualPaymentDaysDistribution,
+      dueDateToPaymentDaysDistribution,
       estPaymentSchedule,
       customerSummary,
       invoices: tableRows,
       totalRows: finalRows.length,
-      filterOptions: { customerList, statusList, projectStatusList },
+      filterOptions: { customerList, statusList, projectStatusList, projectFlagList },
     })
   } catch (error) {
     console.error('Invoices API error:', error)

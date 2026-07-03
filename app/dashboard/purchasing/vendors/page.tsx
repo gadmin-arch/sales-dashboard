@@ -105,7 +105,7 @@ export default function VendorScorecardPage() {
 
         {/* KPIs */}
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <KPICard title="Active Vendors" value={data.kpis.activeVendors.toLocaleString('id-ID')} icon={<Users className="h-4 w-4" />} />
+          <KPICard title="Active Vendors" value={data.kpis.activeVendors.toLocaleString('en-US')} icon={<Users className="h-4 w-4" />} />
           <KPICard title="Total Spend" value={fmtRp(data.kpis.totalSpend)} icon={<Wallet className="h-4 w-4" />} />
           <KPICard title="Top Vendor Share" value={`${data.kpis.topVendorShare}%`} icon={<Crown className="h-4 w-4" />} />
           <KPICard title="Avg / Vendor" value={fmtRp(data.kpis.avgPerVendor)} icon={<Store className="h-4 w-4" />} />
@@ -143,7 +143,7 @@ export default function VendorScorecardPage() {
         {/* Vendor table */}
         <Card className="overflow-hidden" id="vendor-table-section">
           <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <CardTitle className="text-sm font-semibold">Vendors <span className="font-normal text-muted-foreground">({tableRows.length.toLocaleString('id-ID')}{tableRows.length !== data.totalRows ? ` of ${data.totalRows.toLocaleString('id-ID')}` : ''})</span></CardTitle>
+            <CardTitle className="text-sm font-semibold">Vendors <span className="font-normal text-muted-foreground">({tableRows.length.toLocaleString('en-US')}{tableRows.length !== data.totalRows ? ` of ${data.totalRows.toLocaleString('en-US')}` : ''})</span></CardTitle>
             <SearchInput value={search} onChange={setSearch} />
           </CardHeader>
           <CardContent className="p-0">
@@ -163,11 +163,11 @@ export default function VendorScorecardPage() {
                   {tableRows.length === 0 ? <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">No vendors found</TableCell></TableRow> : vPage.visible.map(r => (
                     <TableRow key={r.vendorId}>
                       <TableCell className="max-w-[240px] truncate font-medium" title={r.vendor}>{r.vendor}</TableCell>
-                      <TableCell className="text-right text-muted-foreground">{r.poCount.toLocaleString('id-ID')}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">{r.poCount.toLocaleString('en-US')}</TableCell>
                       <TableCell className="text-right font-medium">{fmtRp(r.totalSpend)}</TableCell>
                       <TableCell className="text-right">{fmtRp(r.avgPO)}</TableCell>
                       <TableCell className="text-right text-muted-foreground">{r.sharePct}%</TableCell>
-                      <TableCell className="text-right text-muted-foreground">{r.quotesCount.toLocaleString('id-ID')}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">{r.quotesCount.toLocaleString('en-US')}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">{r.paymentTypes || '-'}</TableCell>
                       <TableCell className="text-muted-foreground whitespace-nowrap">{fmtDate(r.lastPoDate)}</TableCell>
                     </TableRow>

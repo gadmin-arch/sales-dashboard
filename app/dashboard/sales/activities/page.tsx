@@ -52,8 +52,8 @@ function lc(level: string): string {
 function fmtDate(d: string) {
   if (!d) return ''
   const m = d.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
-  if (m) return new Date(+m[3], +m[1] - 1, +m[2]).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })
-  const p = new Date(d); return isNaN(p.getTime()) ? d : p.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })
+  if (m) return new Date(+m[3], +m[1] - 1, +m[2]).toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' })
+  const p = new Date(d); return isNaN(p.getTime()) ? d : p.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
 type ViewMode = 'calendar' | 'week' | 'list'

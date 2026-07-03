@@ -48,6 +48,7 @@ interface SalesData {
   orderTypeList: { otId: string; otDescription: string }[]
   projectStatusList: { pesId: string; pesDescription: string; pesLevel: number }[]
   invoiceStatusList: { fsId: string; fsDescription: string }[]
+  projectFlagList: { flagId: string; flagDescription: string }[]
 }
 
 type SortKey = 'prjId' | 'name' | 'customer' | 'salesOwner' | 'type' | 'total'
@@ -71,11 +72,11 @@ export default function SalesPage() {
   const [dateFrom, setDateFrom] = useState(getYTD().from), [dateTo, setDateTo] = useState(getYTD().to)
   // Applied filters (currency stays single — it drives money formatting; the rest are multi-select)
   const [cur, setCur] = useState('all')
-  const [su, setSu] = useState<string[]>([]), [ot, setOt] = useState<string[]>([]), [ps, setPs] = useState<string[]>([]), [inv, setInv] = useState<string[]>([])
+  const [su, setSu] = useState<string[]>([]), [ot, setOt] = useState<string[]>([]), [ps, setPs] = useState<string[]>([]), [inv, setInv] = useState<string[]>([]), [prjFlag, setPrjFlag] = useState<string[]>([])
   // Draft (unapplied) filters
   const [lFrom, setLFrom] = useState(dateFrom), [lTo, setLTo] = useState(dateTo), [lCur, setLCur] = useState(cur)
-  const [lSu, setLSu] = useState<string[]>([]), [lOt, setLOt] = useState<string[]>([]), [lPs, setLPs] = useState<string[]>([]), [lInv, setLInv] = useState<string[]>([])
-   const [sortKey, setSortKey] = useState<SortKey>('total'), [sortDir, setSortDir] = useState<SortDir>('desc')
+  const [lSu, setLSu] = useState<string[]>([]), [lOt, setLOt] = useState<string[]>([]), [lPs, setLPs] = useState<string[]>([]), [lInv, setLInv] = useState<string[]>([]), [lPrjFlag, setLPrjFlag] = useState<string[]>([])
+  const [sortKey, setSortKey] = useState<SortKey>('total'), [sortDir, setSortDir] = useState<SortDir>('desc')
 
    const fmtRp = useCallback((v: number) => fmtCurrency(v, cur === 'all' ? 'IDR' : cur), [cur])
 
@@ -136,15 +137,15 @@ export default function SalesPage() {
   useEffect(() => {
     const fresh = firstLoad.current; firstLoad.current = false;
     doFetch({
-      dateFrom, dateTo, salesUser: su, currency: cur, orderType: ot, projectStatus: ps, invoiceStatus: inv, period: chartPeriod,
+      dateFrom, dateTo, salesUser: su, currency: cur, orderType: ot, projectStatus: ps, invoiceStatus: inv, projectFlag: prjFlag, period: chartPeriod,
       ...(chartFilter ? { cType: chartFilter.type, cVal: chartFilter.value } : {}),
       ...(fresh ? { fresh: '1' } : {})
     })
-  }, [doFetch, dateFrom, dateTo, su, cur, ot, ps, inv, chartPeriod, chartFilter])
+  }, [doFetch, dateFrom, dateTo, su, cur, ot, ps, inv, prjFlag, chartPeriod, chartFilter])
 
   const onPeriod = (p: 'monthly' | 'weekly') => { setChartPeriod(p) }
-  const onApply = () => { setDateFrom(lFrom); setDateTo(lTo); setSu(lSu); setCur(lCur); setOt(lOt); setPs(lPs); setInv(lInv) }
-  const onClear = () => { const d = getYTD(); setLFrom(d.from); setLTo(d.to); setLSu([]); setLCur('all'); setLOt([]); setLPs([]); setLInv([]); setDateFrom(d.from); setDateTo(d.to); setSu([]); setCur('all'); setOt([]); setPs([]); setInv([]); setChartFilter(null) }
+  const onApply = () => { setDateFrom(lFrom); setDateTo(lTo); setSu(lSu); setCur(lCur); setOt(lOt); setPs(lPs); setInv(lInv); setPrjFlag(lPrjFlag) }
+  const onClear = () => { const d = getYTD(); setLFrom(d.from); setLTo(d.to); setLSu([]); setLCur('all'); setLOt([]); setLPs([]); setLInv([]); setLPrjFlag([]); setDateFrom(d.from); setDateTo(d.to); setSu([]); setCur('all'); setOt([]); setPs([]); setInv([]); setPrjFlag([]); setChartFilter(null) }
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -206,7 +207,7 @@ export default function SalesPage() {
 
         {/* Filters */}
         <Card><CardContent className="pt-5">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5 items-start">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-6 items-start">
             <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Sales Owner</label>
               <MultiSelect allLabel="All Sales Owners" selected={lSu} onChange={setLSu}
                 options={data.salesUserList.map(u => ({ value: u.id, label: u.name }))} />
@@ -229,6 +230,10 @@ export default function SalesPage() {
               <MultiSelect allLabel="All Invoice Statuses" selected={lInv} onChange={setLInv}
                 options={data.invoiceStatusList.map(f => ({ value: f.fsId, label: f.fsDescription }))} />
             </div>
+            <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Project Flag</label>
+              <MultiSelect allLabel="All Project Flags" selected={lPrjFlag} onChange={setLPrjFlag}
+                options={data.projectFlagList.map(f => ({ value: f.flagId, label: f.flagDescription }))} />
+            </div>
           </div>
           <div className="mt-4 border-t border-border pt-4">
             <DateRangeRow from={lFrom} to={lTo} onChange={(f, t) => { setLFrom(f); setLTo(t) }} />
@@ -237,7 +242,7 @@ export default function SalesPage() {
             <Button variant="outline" size="sm" onClick={onClear}>Clear</Button>
             <Button size="sm" onClick={onApply} className="relative">
               Apply Filters
-              {(lFrom !== dateFrom || lTo !== dateTo || lCur !== cur || !sameSet(lSu, su) || !sameSet(lOt, ot) || !sameSet(lPs, ps) || !sameSet(lInv, inv)) && <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-orange-500 border-2 border-background" />}
+              {(lFrom !== dateFrom || lTo !== dateTo || lCur !== cur || !sameSet(lSu, su) || !sameSet(lOt, ot) || !sameSet(lPs, ps) || !sameSet(lInv, inv) || !sameSet(lPrjFlag, prjFlag)) && <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-orange-500 border-2 border-background" />}
             </Button>
           </div>
           {loading && data && <div className="w-full h-1 bg-border overflow-hidden rounded-full mt-3"><div className="h-1/3 bg-primary rounded-full loading-bar-inner" /></div>}
@@ -245,11 +250,11 @@ export default function SalesPage() {
 
         {/* KPIs */}
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-5">
-          <KPICard title="Total Projects" value={data.kpis.totalProjects.toString()} icon={<Briefcase className="h-4 w-4" />} tooltip="Jumlah proyek aktif (tipe Project) dalam filter terpilih." />
-          <KPICard title="Total Sales" value={fmtRp(data.kpis.totalSales)} icon={<DollarSign className="h-4 w-4" />} tooltip="Akumulasi nilai Purchase Order (PO) proyek: SUM(prj_po_total) dari semua proyek ter-filter." />
-          <KPICard title="Total Invoice" value={fmtRp(data.kpis.totalInvoice)} icon={<FileText className="h-4 w-4" />} trend={{ value: fmtRp(data.kpis.totalPayment), label: 'paid', positive: true }} tooltip="Total invoice diterbitkan: SUM(inv_amount) dari invoice terhubung proyek. Sub-baris menampilkan total pembayaran diterima: SUM(pd_total_amount)." />
-          <KPICard title="Total Quotations" value={data.kpis.totalQuotations.toString()} icon={<FileText className="h-4 w-4" />} tooltip="Jumlah penawaran harga (quotations) aktif dalam filter terpilih." />
-          <KPICard title="Quotation Value" value={fmtRp(data.kpis.totalQuotationValue)} icon={<TrendingUp className="h-4 w-4" />} tooltip="Total nilai akhir penawaran harga: SUM(q_final_price) dari semua penawaran ter-filter." />
+          <KPICard title="Total Projects" value={data.kpis.totalProjects.toString()} icon={<Briefcase className="h-4 w-4" />} tooltip="Number of active projects (Project type) within the selected filters." />
+          <KPICard title="Total Sales" value={fmtRp(data.kpis.totalSales)} icon={<DollarSign className="h-4 w-4" />} tooltip="Cumulative project Purchase Order (PO) value: SUM(prj_po_total) from all filtered projects." />
+          <KPICard title="Total Invoice" value={fmtRp(data.kpis.totalInvoice)} icon={<FileText className="h-4 w-4" />} trend={{ value: fmtRp(data.kpis.totalPayment), label: 'paid', positive: true }} tooltip="Total invoices issued: SUM(inv_amount) from project-linked invoices. Sub-row shows total payments received: SUM(pd_total_amount)." />
+          <KPICard title="Total Quotations" value={data.kpis.totalQuotations.toString()} icon={<FileText className="h-4 w-4" />} tooltip="Number of active quotations within the selected filters." />
+          <KPICard title="Quotation Value" value={fmtRp(data.kpis.totalQuotationValue)} icon={<TrendingUp className="h-4 w-4" />} tooltip="Total final quotation value: SUM(q_final_price) from all filtered quotations." />
         </div>
 
         {/* Charts Row 1 */}
@@ -258,7 +263,7 @@ export default function SalesPage() {
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
                 Sales Revenue Trends
-                <InfoTooltip tooltip="Tren dari total nilai kontrak PO yang diterima, dipecah menjadi komponen material dan jasa." />
+                <InfoTooltip tooltip="Trend of total PO contract value received, broken down into material and service components." />
               </CardTitle>
               <ChartPeriodToggle period={chartPeriod} onPeriodChange={onPeriod} />
             </CardHeader>
@@ -280,7 +285,7 @@ export default function SalesPage() {
             <CardHeader>
               <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
                 Sales by Type
-                <InfoTooltip tooltip="Pembagian total nominal kontrak PO berdasarkan jenis penjualan (proyek, material, jasa, dll.)." align="right" />
+                <InfoTooltip tooltip="Total PO contract value breakdown by sales type (project, material, service, etc.)." align="right" />
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -298,7 +303,7 @@ export default function SalesPage() {
             <CardHeader>
               <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
                 PO Composition
-                <InfoTooltip tooltip="Rasio pembagian nominal Purchase Order (PO) antara pengadaan Material vs Jasa." align="right" />
+                <InfoTooltip tooltip="Purchase Order (PO) value split ratio between Material vs Service procurement." align="right" />
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -320,7 +325,7 @@ export default function SalesPage() {
             <CardHeader>
               <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
                 Price Composition (%)
-                <InfoTooltip tooltip="Persentase kontribusi material vs jasa terhadap total nominal PO per bulan." />
+                <InfoTooltip tooltip="Monthly percentage contribution of material vs service to total PO value." />
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -341,7 +346,7 @@ export default function SalesPage() {
             <CardHeader>
               <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
                 Quotation Status
-                <InfoTooltip tooltip="Jumlah dokumen penawaran harga (quotations) dikelompokkan berdasarkan status persetujuan saat ini." align="right" />
+                <InfoTooltip tooltip="Count of quotation documents grouped by their current approval status." align="right" />
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -361,7 +366,7 @@ export default function SalesPage() {
             <div>
               <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
                 PO → Invoice → Payment Timeline
-                <InfoTooltip tooltip="Tren bulanan dari nilai PO yang masuk dibandingkan dengan nilai invoice yang diterbitkan dan pembayaran yang diterima (di-clamp ke bulan PO)." />
+                <InfoTooltip tooltip="Monthly trend of incoming PO value compared to invoices issued and payments received (clamped to PO month)." />
               </CardTitle>
               <p className="text-xs text-muted-foreground">Projects selected by PO date; invoice/payment clamped to the PO month (backfill never runs backwards). Click a bar to filter by PO month.</p>
             </div>

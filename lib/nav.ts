@@ -13,6 +13,7 @@ export const NAV: NavMeta[] = [
   { href: '/dashboard/sales', label: 'Sales Overview', role: 'sales' },
   { href: '/dashboard/sales/activities', label: 'Sales Activities', role: 'sales' },
   { href: '/dashboard/leads-opps', label: 'Leads & Opportunities', role: 'sales' },
+  { href: '/dashboard/customers', label: 'Customer Scorecard', role: 'sales' },
   { href: '/dashboard/invoices', label: 'Invoices & Receivables', role: 'finance' },
   { href: '/dashboard/payments', label: 'Payments Collection', role: 'finance' },
   { href: '/dashboard/finance-ap', label: 'Finance AP & Reimburse', role: 'finance' },
@@ -20,6 +21,7 @@ export const NAV: NavMeta[] = [
   { href: '/dashboard/purchasing/requests', label: 'Purchase Requests', role: 'purchasing' },
   { href: '/dashboard/purchasing/orders', label: 'Purchase Orders', role: 'purchasing' },
   { href: '/dashboard/purchasing/vendors', label: 'Vendor Scorecard', role: 'purchasing' },
+  { href: '/dashboard/payroll', label: 'Payroll & Salaries', role: 'payroll' },
 ]
 
 export type Roles = Record<RoleKey, boolean>

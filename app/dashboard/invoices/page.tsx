@@ -12,6 +12,7 @@ import { DonutChart } from '@/components/donut-chart'
 import { DollarSign, FileText, AlertTriangle, TrendingUp, Wallet, Clock } from 'lucide-react'
 import { SalesPageShell } from '@/components/theme-toggle'
 import { MultiSelect } from '@/components/multi-select'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { PageHeader } from '@/components/page-header'
 import { FilterCard } from '@/components/filter-card'
 import { PageSpinner, PageError } from '@/components/page-states'
@@ -25,13 +26,13 @@ interface InvoiceRow {
   invId: string; invNumber: string; prj: string; leadTime: number | null; customerId: string; customer: string; invoiceDate: string; dueDate: string
   amount: number; paid: number; outstanding: number; status: string; statusLabel: string
   daysOverdue: number; refName: string; remarks: string; completedDate: string; paymentDate: string
-  estPaymentDays: number | null; actualPaymentDays: number | null
+  estPaymentDays: number | null; actualPaymentDays: number | null; dueDateToPaymentDays: number | null
 }
 interface Option { value: string; label: string }
 interface InvoiceData {
   kpis: {
     totalInvoiced: number; totalPaid: number; totalOutstanding: number; overdueCount: number; overdueAmount: number;
-    collectionRate: number; invoiceCount: number; avgLeadTime: number; avgEstPaymentDays: number; avgActualPaymentDays: number
+    collectionRate: number; invoiceCount: number; avgLeadTime: number; avgEstPaymentDays: number; avgActualPaymentDays: number; avgDueToPayDays: number
   }
   statusBreakdown: { name: string; value: number }[]
   trend: { name: string; Invoice: number; Payment: number }[]
@@ -41,11 +42,24 @@ interface InvoiceData {
   leadTimeDistribution: { name: string; value: number }[]
   estPaymentDaysDistribution: { name: string; value: number }[]
   actualPaymentDaysDistribution: { name: string; value: number }[]
+  dueDateToPaymentDaysDistribution: { name: string; value: number }[]
   estPaymentSchedule: { name: string; outstanding: number }[]
-  customerSummary: { customer: string; totalInvoiced: number; totalPaid: number; outstanding: number; overdue: number }[]
+  customerSummary: {
+    customer: string
+    customerId: string
+    totalInvoiced: number
+    totalPaid: number
+    outstanding: number
+    overdue: number
+    avgInvoiceToPaymentDays: number | null
+    avgPoToInvoiceDays: number | null
+    totalPo: number
+    poMaterial: number
+    poService: number
+  }[]
   invoices: InvoiceRow[]
   totalRows: number
-  filterOptions: { customerList: Option[]; statusList: Option[]; projectStatusList: Option[] }
+  filterOptions: { customerList: Option[]; statusList: Option[]; projectStatusList: Option[]; projectFlagList: Option[] }
 }
 
 const trendConfig = { Invoice: { label: 'Invoice', color: 'var(--chart-1)' }, Payment: { label: 'Payment', color: 'var(--chart-2)' } }
@@ -67,11 +81,13 @@ export default function InvoicesPage() {
   const { chartFilter, setChartFilter, handleChartClick } = useChartFilter('invoices-table-section')
 
   const [dateFrom, setDateFrom] = useState(getYTD().from), [dateTo, setDateTo] = useState(getYTD().to)
-  const [cust, setCust] = useState<string[]>([]), [st, setSt] = useState<string[]>([]), [prjSt, setPrjSt] = useState<string[]>([])
+  const [cust, setCust] = useState<string[]>([]), [st, setSt] = useState<string[]>([]), [prjSt, setPrjSt] = useState<string[]>([]), [prjFlag, setPrjFlag] = useState<string[]>([])
+  const [dateType, setDateType] = useState('invoice')
   const [minAmount, setMinAmount] = useState<string>('')
   const [minPayment, setMinPayment] = useState<string>('')
   const [lFrom, setLFrom] = useState(dateFrom), [lTo, setLTo] = useState(dateTo)
-  const [lCust, setLCust] = useState<string[]>([]), [lSt, setLSt] = useState<string[]>([]), [lPrjSt, setLPrjSt] = useState<string[]>([])
+  const [lCust, setLCust] = useState<string[]>([]), [lSt, setLSt] = useState<string[]>([]), [lPrjSt, setLPrjSt] = useState<string[]>([]), [lPrjFlag, setLPrjFlag] = useState<string[]>([])
+  const [lDateType, setLDateType] = useState('invoice')
   const [lMinAmount, setLMinAmount] = useState<string>('')
   const [lMinPayment, setLMinPayment] = useState<string>('')
 
@@ -90,23 +106,23 @@ export default function InvoicesPage() {
   useEffect(() => {
     const fresh = firstLoad.current; firstLoad.current = false;
     doFetch({
-      dateFrom, dateTo,
-      customer: cust, status: st, projectStatus: prjSt,
+      dateFrom, dateTo, dateType,
+      customer: cust, status: st, projectStatus: prjSt, projectFlag: prjFlag,
       minAmount, minPayment,
       ...(chartFilter ? { cType: chartFilter.type, cVal: chartFilter.value } : {}),
       ...(fresh ? { fresh: '1' } : {})
     })
-  }, [doFetch, dateFrom, dateTo, cust, st, prjSt, minAmount, minPayment, chartFilter])
+  }, [doFetch, dateFrom, dateTo, dateType, cust, st, prjSt, prjFlag, minAmount, minPayment, chartFilter])
 
   const onApply = () => {
-    setDateFrom(lFrom); setDateTo(lTo); setCust(lCust); setSt(lSt); setPrjSt(lPrjSt)
+    setDateFrom(lFrom); setDateTo(lTo); setCust(lCust); setSt(lSt); setPrjSt(lPrjSt); setPrjFlag(lPrjFlag); setDateType(lDateType)
     setMinAmount(lMinAmount)
     setMinPayment(lMinPayment)
   }
   const onClear = () => {
     const d = getYTD();
-    setLFrom(d.from); setLTo(d.to); setLCust([]); setLSt([]); setLPrjSt([]); setLMinAmount(''); setLMinPayment('')
-    setDateFrom(d.from); setDateTo(d.to); setCust([]); setSt([]); setPrjSt([]); setMinAmount(''); setMinPayment(''); setChartFilter(null)
+    setLFrom(d.from); setLTo(d.to); setLCust([]); setLSt([]); setLPrjSt([]); setLPrjFlag([]); setLMinAmount(''); setLMinPayment(''); setLDateType('invoice')
+    setDateFrom(d.from); setDateTo(d.to); setCust([]); setSt([]); setPrjSt([]); setPrjFlag([]); setMinAmount(''); setMinPayment(''); setChartFilter(null); setDateType('invoice')
   }
 
   const tableRows = useMemo(() => {
@@ -118,10 +134,8 @@ export default function InvoicesPage() {
   }, [data, search])
   const invSort = useSort(tableRows, 'invoiceDate', 'desc')
   const invPage = useLoadMore(invSort.sorted)
-  const custSort = useSort(data?.customerSummary ?? [], 'outstanding', 'desc')
-  const custPage = useLoadMore(custSort.sorted)
 
-  const hasUnapplied = lFrom !== dateFrom || lTo !== dateTo || !sameSet(lCust, cust) || !sameSet(lSt, st) || !sameSet(lPrjSt, prjSt) || lMinAmount !== minAmount || lMinPayment !== minPayment
+  const hasUnapplied = lFrom !== dateFrom || lTo !== dateTo || !sameSet(lCust, cust) || !sameSet(lSt, st) || !sameSet(lPrjSt, prjSt) || !sameSet(lPrjFlag, prjFlag) || lDateType !== dateType || lMinAmount !== minAmount || lMinPayment !== minPayment
 
   if (loading && !data) return <PageSpinner />
   if (error && !data) return <PageError error={error} onRetry={onClear} />
@@ -133,13 +147,25 @@ export default function InvoicesPage() {
         <PageHeader title="Invoice Dashboard" subtitle="PT. Multi Daya Mitra" chartFilter={chartFilter} onClearFilter={() => setChartFilter(null)} />
 
         <FilterCard from={lFrom} to={lTo} onDateChange={(f, t) => { setLFrom(f); setLTo(t) }} onApply={onApply} onClear={onClear} hasUnapplied={hasUnapplied} loading={loading && !!data}>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-5 items-start">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-7 items-start">
+            <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Basis Tanggal</label>
+              <Select value={lDateType} onValueChange={setLDateType}>
+                <SelectTrigger className="w-full text-xs h-9 bg-background"><SelectValue>{lDateType === 'po' ? 'PO Date' : lDateType === 'payment' ? 'Payment Date' : 'Invoice Date'}</SelectValue></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="invoice">Invoice Date</SelectItem>
+                  <SelectItem value="po">PO Date</SelectItem>
+                  <SelectItem value="payment">Payment Date</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Customer</label>
               <MultiSelect allLabel="All Customers" selected={lCust} onChange={setLCust} options={data.filterOptions.customerList} /></div>
             <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Invoice Status</label>
               <MultiSelect allLabel="All Statuses" selected={lSt} onChange={setLSt} options={data.filterOptions.statusList} /></div>
             <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Project Status</label>
               <MultiSelect allLabel="All Project Statuses" selected={lPrjSt} onChange={setLPrjSt} options={data.filterOptions.projectStatusList} /></div>
+            <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Project Flag</label>
+              <MultiSelect allLabel="All Project Flags" selected={lPrjFlag} onChange={setLPrjFlag} options={data.filterOptions.projectFlagList} /></div>
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-muted-foreground">Min Invoice Amount</label>
               <input
@@ -165,10 +191,10 @@ export default function InvoicesPage() {
 
         {/* KPIs */}
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <KPICard title="Total Invoiced" value={fmtCurrency(data.kpis.totalInvoiced, 'IDR')} icon={<FileText className="h-4 w-4" />} tooltip="Total nominal kotor dari semua invoice yang diterbitkan: SUM(inv_amount) dalam filter terpilih." />
-          <KPICard title="Total Paid" value={fmtCurrency(data.kpis.totalPaid, 'IDR')} icon={<Wallet className="h-4 w-4" />} tooltip="Total dana tunai yang telah berhasil dikumpulkan: SUM(payment_details.pd_total_amount) dalam filter terpilih." />
-          <KPICard title="Total Outstanding" value={fmtCurrency(data.kpis.totalOutstanding, 'IDR')} icon={<DollarSign className="h-4 w-4" />} trend={{ value: `${data.kpis.collectionRate}%`, label: 'collected', positive: data.kpis.collectionRate >= 50 }} tooltip="Total sisa tagihan belum terbayar: SUM((1 - payment_percentage / 100) * inv_amount). Trend menampilkan rasio penagihan (Collection Rate): Total Invoiced / (Total Invoiced + Total Outstanding)." />
-          <KPICard title="Overdue" value={fmtCurrency(data.kpis.overdueAmount, 'IDR')} icon={<Clock className="h-4 w-4" />} trend={{ value: data.kpis.overdueCount, label: 'invoices', positive: false }} tooltip="Total tagihan belum terbayar yang telah melewati estimasi jatuh tempo: SUM(outstanding WHERE status='Overdue'). Trend menampilkan jumlah lembar invoice menunggak." />
+          <KPICard title="Total Invoiced" value={fmtCurrency(data.kpis.totalInvoiced, 'IDR')} icon={<FileText className="h-4 w-4" />} tooltip="Total gross amount from all invoices issued: SUM(inv_amount) within selected filters." />
+          <KPICard title="Total Paid" value={fmtCurrency(data.kpis.totalPaid, 'IDR')} icon={<Wallet className="h-4 w-4" />} tooltip="Total cash funds successfully collected: SUM(payment_details.pd_total_amount) within selected filters." />
+          <KPICard title="Total Outstanding" value={fmtCurrency(data.kpis.totalOutstanding, 'IDR')} icon={<DollarSign className="h-4 w-4" />} trend={{ value: `${data.kpis.collectionRate}%`, label: 'collected', positive: data.kpis.collectionRate >= 50 }} tooltip="Total unpaid invoices outstanding: SUM((1 - payment_percentage / 100) * inv_amount). Trend shows collection rate: Total Paid / Total Invoiced." />
+          <KPICard title="Overdue" value={fmtCurrency(data.kpis.overdueAmount, 'IDR')} icon={<Clock className="h-4 w-4" />} trend={{ value: data.kpis.overdueCount, label: 'invoices', positive: false }} tooltip="Total unpaid invoices past their estimated due date: SUM(outstanding WHERE status='Overdue'). Trend shows the number of overdue invoices." />
         </div>
 
         {/* Charts Row 1 */}
@@ -177,7 +203,7 @@ export default function InvoicesPage() {
             <CardHeader>
               <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
                 Status Breakdown
-                <InfoTooltip tooltip="Pembagian jumlah invoice berdasarkan status pembayarannya (Paid, Unpaid, Partial, Overdue)." align="right" />
+                <InfoTooltip tooltip="Invoice count breakdown by payment status (Paid, Unpaid, Partial, Overdue)." align="right" />
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -188,7 +214,7 @@ export default function InvoicesPage() {
             <CardHeader>
               <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
                 Invoice vs Payment Trend
-                <InfoTooltip tooltip="Perbandingan bulanan antara nilai invoice diterbitkan vs nominal pembayaran kas masuk (berdasarkan bulan transaksi masing-masing)." />
+                <InfoTooltip tooltip="Monthly comparison of invoice amounts issued vs cash payment received (by each transaction's month)." />
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -213,7 +239,7 @@ export default function InvoicesPage() {
             <CardHeader>
               <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
                 Invoice vs Payment Trend (By Invoice Date)
-                <InfoTooltip tooltip="Perbandingan total invoice yang diterbitkan vs total pembayaran yang diterima, diposisikan pada tanggal invoice tersebut dibuat." />
+                <InfoTooltip tooltip="Comparison of total invoices issued vs total payments received, plotted by the invoice creation date." />
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -238,7 +264,7 @@ export default function InvoicesPage() {
             <CardHeader>
               <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
                 Invoice vs Payment Trend (Filtered by Invoice Date)
-                <InfoTooltip tooltip="Grafik dinamis yang menampilkan penerbitan invoice vs penerimaan pembayaran kas masuk riil khusus untuk invoice yang ter-filter." />
+                <InfoTooltip tooltip="Dynamic chart showing invoice issuance vs actual cash payment arrival for the filtered invoices." />
               </CardTitle>
               <p className="text-xs text-muted-foreground">Timeline shows invoice issuance vs actual payment arrival for the filtered invoices</p>
             </CardHeader>
@@ -264,7 +290,7 @@ export default function InvoicesPage() {
             <CardHeader>
               <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
                 Aging Receivables
-                <InfoTooltip tooltip="Distribusi sisa piutang belum terbayar (outstanding) berdasarkan umur jatuh tempo invoice." />
+                <InfoTooltip tooltip="Distribution of outstanding receivables by invoice due date aging." />
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -284,7 +310,7 @@ export default function InvoicesPage() {
             <CardHeader>
               <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
                 Lead Time (Project End to Invoice)
-                <InfoTooltip tooltip="Rata-rata dan sebaran jumlah hari dari tanggal proyek selesai hingga invoice pertama diterbitkan." />
+                <InfoTooltip tooltip="Average and distribution of days from project completion date to first invoice issued." />
               </CardTitle>
               <p className="text-xs text-muted-foreground">Avg: {data.kpis.avgLeadTime} days</p>
             </CardHeader>
@@ -305,7 +331,7 @@ export default function InvoicesPage() {
             <CardHeader>
               <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
                 Outstanding by Due Date
-                <InfoTooltip tooltip="Rencana estimasi penerimaan kas berdasarkan bulan tanggal jatuh tempo invoice yang belum terbayar." align="right" />
+                <InfoTooltip tooltip="Estimated cash receipt schedule based on due date month of unpaid invoices." align="right" />
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -323,12 +349,12 @@ export default function InvoicesPage() {
         </div>
 
         {/* Payment Terms & Timelines Row */}
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           <Card className="overflow-visible">
             <CardHeader>
               <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
-                Payment Estimate Term (Invoice to Due Date)
-                <InfoTooltip tooltip="Rata-rata dan sebaran jumlah hari dari tanggal invoice diterbitkan hingga estimasi tanggal jatuh tempo." />
+                Payment Estimate Term
+                <InfoTooltip tooltip="Average and distribution of days from invoice issue date to estimated due date." />
               </CardTitle>
               <p className="text-xs text-muted-foreground">Avg: {data.kpis.avgEstPaymentDays} days</p>
             </CardHeader>
@@ -348,8 +374,8 @@ export default function InvoicesPage() {
           <Card className="overflow-visible">
             <CardHeader>
               <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
-                Payment Real Term (Invoice to Payment Date)
-                <InfoTooltip tooltip="Rata-rata dan sebaran jumlah hari dari tanggal invoice diterbitkan hingga tanggal pembayaran/pelunasan riil." align="right" />
+                Payment Real Term
+                <InfoTooltip tooltip="Average and distribution of days from invoice issue date to actual payment/settlement date." />
               </CardTitle>
               <p className="text-xs text-muted-foreground">Avg: {data.kpis.avgActualPaymentDays} days</p>
             </CardHeader>
@@ -365,12 +391,33 @@ export default function InvoicesPage() {
               </ChartContainer>
             </CardContent>
           </Card>
+
+          <Card className="overflow-visible">
+            <CardHeader>
+              <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
+                Due Date to Payment
+                <InfoTooltip tooltip="Average and distribution of days late (or early if negative) between due date and actual payment date." align="right" />
+              </CardTitle>
+              <p className="text-xs text-muted-foreground">Avg: {data.kpis.avgDueToPayDays} days</p>
+            </CardHeader>
+            <CardContent>
+              <ChartContainer config={{}} className="h-[220px] w-full">
+                <BarChart data={data.dueDateToPaymentDaysDistribution} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                  <XAxis dataKey="name" stroke="var(--muted-foreground)" tickLine={false} axisLine={{ stroke: 'var(--border)' }} className="text-xs" />
+                  <YAxis stroke="var(--muted-foreground)" tickLine={false} axisLine={false} className="text-xs" />
+                  <Tooltip cursor={{ fill: 'var(--muted)' }} contentStyle={{ background: 'var(--background)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }} />
+                  <Bar dataKey="value" fill="var(--chart-3)" radius={[4, 4, 0, 0]} onClick={(data) => handleChartClick('dueDateToPaymentDays', String(data.name ?? ''), `Due to Payment Days = ${data.name}`)} style={{ cursor: 'pointer' }} />
+                </BarChart>
+              </ChartContainer>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Invoices table */}
         <Card className="overflow-hidden" id="invoices-table-section">
           <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <CardTitle className="text-sm font-semibold">Invoices <span className="font-normal text-muted-foreground">({tableRows.length.toLocaleString('id-ID')}{tableRows.length !== data.totalRows ? ` of ${data.totalRows.toLocaleString('id-ID')}` : ''})</span></CardTitle>
+            <CardTitle className="text-sm font-semibold">Invoices <span className="font-normal text-muted-foreground">({tableRows.length.toLocaleString('en-US')}{tableRows.length !== data.totalRows ? ` of ${data.totalRows.toLocaleString('en-US')}` : ''})</span></CardTitle>
             <SearchInput value={search} onChange={setSearch} />
           </CardHeader>
           <CardContent className="p-0">
@@ -396,7 +443,7 @@ export default function InvoicesPage() {
                     <TableRow key={r.invId}>
                       <TableCell className="text-xs font-semibold text-primary">{r.invNumber}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">{r.prj}</TableCell>
-                      <TableCell>{r.customer}</TableCell>
+                      <TableCell className="text-xs whitespace-normal break-words max-w-[280px]">{r.customer}</TableCell>
                       <TableCell className="text-muted-foreground">{fmtDate(r.invoiceDate)}</TableCell>
                       <TableCell className="text-muted-foreground">{r.completedDate && r.completedDate !== '-' ? fmtDate(r.completedDate) : '-'}</TableCell>
                       <TableCell className="text-muted-foreground">{fmtDate(r.dueDate)}</TableCell>
@@ -415,36 +462,6 @@ export default function InvoicesPage() {
               </Table>
             </div>
             <LoadMore hasMore={invPage.hasMore} shown={invPage.shown} total={invPage.total} onClick={invPage.loadMore} onLoadAll={invPage.loadAll} onCollapse={invPage.collapse} />
-          </CardContent>
-        </Card>
-
-        {/* Customer summary */}
-        <Card className="overflow-hidden">
-          <CardHeader><CardTitle className="text-sm font-semibold">Customer Summary</CardTitle></CardHeader>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader><TableRow>
-                  <SortHead label="Customer" column="customer" sortKey={custSort.sortKey} sortDir={custSort.sortDir} onSort={custSort.toggle} />
-                  <SortHead label="Invoiced" column="totalInvoiced" sortKey={custSort.sortKey} sortDir={custSort.sortDir} onSort={custSort.toggle} className="text-right" />
-                  <SortHead label="Paid" column="totalPaid" sortKey={custSort.sortKey} sortDir={custSort.sortDir} onSort={custSort.toggle} className="text-right" />
-                  <SortHead label="Outstanding" column="outstanding" sortKey={custSort.sortKey} sortDir={custSort.sortDir} onSort={custSort.toggle} className="text-right" />
-                  <SortHead label="Overdue" column="overdue" sortKey={custSort.sortKey} sortDir={custSort.sortDir} onSort={custSort.toggle} className="text-right" />
-                </TableRow></TableHeader>
-                <TableBody>
-                  {custSort.sorted.length === 0 ? <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">No data</TableCell></TableRow> : custPage.visible.map(c => (
-                    <TableRow key={c.customer}>
-                      <TableCell className="font-medium">{c.customer}</TableCell>
-                      <TableCell className="text-right">{fmtRp(c.totalInvoiced)}</TableCell>
-                      <TableCell className="text-right chart-2">{fmtRp(c.totalPaid)}</TableCell>
-                      <TableCell className="text-right text-amber-600 dark:text-amber-400 font-medium">{fmtRp(c.outstanding)}</TableCell>
-                      <TableCell className="text-right text-red-600 dark:text-red-400 font-medium">{fmtRp(c.overdue)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-            <LoadMore hasMore={custPage.hasMore} shown={custPage.shown} total={custPage.total} onClick={custPage.loadMore} onLoadAll={custPage.loadAll} onCollapse={custPage.collapse} />
           </CardContent>
         </Card>
       </div>

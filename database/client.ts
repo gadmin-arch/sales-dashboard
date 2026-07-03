@@ -69,10 +69,22 @@ export async function fetchAllRows(
   return promise
 }
 
+const cacheClearCallbacks: (() => void)[] = []
+
+export function registerCacheClearCallback(cb: () => void) {
+  cacheClearCallbacks.push(cb)
+}
+
 /** Force the next reads to hit Google again (keeps lastGood for fallback). */
 export function clearSheetCache(spreadsheetId?: string, sheetName?: string): void {
-  if (spreadsheetId && sheetName) rowsCache.delete(`${spreadsheetId}::${sheetName}`)
-  else rowsCache.clear()
+  if (spreadsheetId && sheetName) {
+    rowsCache.delete(`${spreadsheetId}::${sheetName}`)
+  } else {
+    rowsCache.clear()
+    for (const cb of cacheClearCallbacks) {
+      try { cb() } catch (err) { console.error('Cache clear callback error:', err) }
+    }
+  }
 }
 
 export async function getSheetHeaders(

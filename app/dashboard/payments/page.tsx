@@ -97,10 +97,10 @@ export default function PaymentsPage() {
 
         {/* KPIs */}
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <KPICard title="Total Collected" value={fmtRp(data.kpis.totalCollected)} icon={<Wallet className="h-4 w-4" />} tooltip="Akumulasi nominal pembayaran yang telah diterima: SUM(pay_total_amount || pay_amount) dalam filter terpilih." />
-          <KPICard title="Collected This Month" value={fmtRp(data.kpis.paymentsThisMonth)} icon={<Calendar className="h-4 w-4" />} tooltip="Akumulasi nominal pembayaran yang diterima khusus pada bulan berjalan saat ini." />
-          <KPICard title="Payments" value={data.kpis.paymentCount.toLocaleString('id-ID')} icon={<Hash className="h-4 w-4" />} tooltip="Jumlah transaksi pembayaran yang tercatat dalam filter terpilih." />
-          <KPICard title="Avg Payment" value={fmtRp(data.kpis.avgPayment)} icon={<DollarSign className="h-4 w-4" />} tooltip="Rata-rata nominal per transaksi pembayaran diterima: Total Collected / Jumlah Transaksi." />
+          <KPICard title="Total Collected" value={fmtRp(data.kpis.totalCollected)} icon={<Wallet className="h-4 w-4" />} tooltip="Cumulative payment amount received: SUM(pay_total_amount || pay_amount) within selected filters." />
+          <KPICard title="Collected This Month" value={fmtRp(data.kpis.paymentsThisMonth)} icon={<Calendar className="h-4 w-4" />} tooltip="Cumulative payment amount received specifically during the current month." />
+          <KPICard title="Payments" value={data.kpis.paymentCount.toLocaleString('en-US')} icon={<Hash className="h-4 w-4" />} tooltip="Number of payment transactions recorded within the selected filters." />
+          <KPICard title="Avg Payment" value={fmtRp(data.kpis.avgPayment)} icon={<DollarSign className="h-4 w-4" />} tooltip="Average amount per payment transaction received: Total Collected / Number of Transactions." />
         </div>
 
         {/* Charts */}
@@ -109,7 +109,7 @@ export default function PaymentsPage() {
             <CardHeader>
               <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
                 Collection Trend
-                <InfoTooltip tooltip="Tren penerimaan dana pembayaran yang berhasil dicairkan per bulan." />
+                <InfoTooltip tooltip="Monthly trend of payment funds successfully collected." />
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -128,7 +128,7 @@ export default function PaymentsPage() {
             <CardHeader>
               <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
                 Top Customers
-                <InfoTooltip tooltip="Peringkat pelanggan berdasarkan total nilai pembayaran kas masuk yang disetor." align="right" />
+                <InfoTooltip tooltip="Customer ranking by total cash inflow payment value deposited." align="right" />
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -151,7 +151,7 @@ export default function PaymentsPage() {
         {/* Payments table */}
         <Card className="overflow-hidden" id="payments-table-section">
           <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <CardTitle className="text-sm font-semibold">Payments <span className="font-normal text-muted-foreground">({tableRows.length.toLocaleString('id-ID')}{tableRows.length !== data.totalRows ? ` of ${data.totalRows.toLocaleString('id-ID')}` : ''})</span></CardTitle>
+            <CardTitle className="text-sm font-semibold">Payments <span className="font-normal text-muted-foreground">({tableRows.length.toLocaleString('en-US')}{tableRows.length !== data.totalRows ? ` of ${data.totalRows.toLocaleString('en-US')}` : ''})</span></CardTitle>
             <SearchInput value={search} onChange={setSearch} />
           </CardHeader>
           <CardContent className="p-0">

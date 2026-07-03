@@ -150,12 +150,16 @@ export const GOOGLE_CONFIG = {
   },
 
   // Payroll / HR disbursements — payroll, employee loans, meal benefits.
-  // Three spreadsheets: the main payroll_db, plus the payroll-payments and
-  // meal-benefit-releases ledgers. `sheets` notes which spreadsheet each tab is in.
+  // Four spreadsheets: the main payroll_db, plus the payroll-payments,
+  // meal-benefit-releases, and meal-benefit-evidences ledgers.
   payroll: {
     spreadsheetId: '1KY_pc-ZNgYrdaozEPyqR0ti6wiU1aMYgQqqn2pKhUpc', // payroll_db
     paymentsSpreadsheetId: '1hBMkkUToY4Ep7qOFZPL080GGjAwxcaj0H7e-FQtdXfA', // payroll_payments_db
     mealReleasesSpreadsheetId: '1Ef2becB9JmB8CqTD7oXaVSY6FuItQfK43TGXIvt-ynA', // meal_benefit_releases_db
+    mealEvidencesSpreadsheetId: '1-Pkui0EliYHxC4dXBdsPW4M19kNrBxwMi5URjkkAAs4', // meal_benefit_evidences
+    travelSpreadsheetId: '1deEsKqfe2-gmM6haarhjGPy96zkQISmq8A7Gz3n-ipo', // travel_allowances
+    taxStatusSpreadsheetId: '1mgTN9QE4MWbDefk-9dfQMxkdSsLkvXsruR-fpy_lI9I', // user_ter_statuses
+    terSpreadsheetId: '1WNBGLClx9Jrxt954C5UY9l8c61fmadCjmZ0Ge25xTc4', // ters
     sheets: {
       // in payroll_db
       payroll: 'payroll',
@@ -175,6 +179,12 @@ export const GOOGLE_CONFIG = {
       // in meal_benefit_releases_db
       mealReleases: 'meal_benefit_releases',
       mbrTypes: 'mbr_types',
+      // in meal_benefit_evidences
+      mealEvidences: 'meal_benefit_evidences',
+      // external spreadsheets mapped to config names
+      travelAllowances: 'travel_allowances',
+      userTerStatuses: 'user_ter_statuses',
+      ters: 'ters',
     },
   },
 } as const
