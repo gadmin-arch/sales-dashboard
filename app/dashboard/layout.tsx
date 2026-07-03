@@ -36,9 +36,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const accessDenied = Boolean(user && currentItem && roles && !roles[currentItem.role])
   const firstAllowed = firstAllowedHref(roles)
 
+  // Redirect to login if user is not authenticated and loading is complete
+  useEffect(() => {
+    if (!isLoading && isValidated && !user) {
+      window.location.href = '/login'
+    }
+  }, [user, isLoading, isValidated])
+
   // Block the first paint until roles are confirmed against the server, so a stale
   // cached role can never briefly render a page the user is no longer allowed to see.
-  if (isLoading || !isValidated) {
+  // Also block rendering if there is no authenticated user.
+  if (isLoading || !isValidated || !user) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
