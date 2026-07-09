@@ -3,7 +3,8 @@ export { getSheetsClient, fetchSheet, fetchAllRows, getSheetHeaders } from './cl
 
 export { getAllAccessUsers, findAccessUserByEmail } from './repos/users'
 export { getAllSalesUsers, getSalesUserById, getSalesUserName } from './repos/sales-users'
-export { getAllOrders, getProjectOrders, getOrderTypeLabel, getFlagLabel, getProjectLogs, getBasts, getFinanceLogs, getAllOrderTypes, getOrdersSheetHeaders } from './repos/orders'
+export { getAllOrders, getProjectOrders, getOrderTypeLabel, getFlagLabel, getProjectLogs, getBasts, getFinanceLogs, getAllOrderTypes, getAllPeStatuses, getPeStatusLabelSync, getAllProjectLogs, getAllBasts, loadRefMaps as loadOrdersRefMaps } from './repos/orders'
+export { getAllReports } from './repos/reports'
 export { getAllQuotations, getQuotationsByOwner, getQuotationStatuses, getStatusLabel, getQuotationTypeLabel } from './repos/quotations'
 export { getAllCompanies } from './repos/companies'
 export {
@@ -33,6 +34,7 @@ export type {
   AccessUser,
   SalesUser, SalesRole, Departement,
   Order,
+  Report,
   OrderType, Flag, PeStatus,
   ProjectLog, Bast, BastLog, BastStatus,
   FinanceLog, FinanceStatus,

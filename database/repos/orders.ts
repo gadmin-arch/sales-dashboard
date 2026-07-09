@@ -171,6 +171,26 @@ export async function getBasts(prjId: string): Promise<Bast[]> {
   }))
 }
 
+// All project_log rows (no prj filter) — for cross-project delivery analytics.
+export async function getAllProjectLogs(): Promise<ProjectLog[]> {
+  const { rows } = await fetchAllRows(GOOGLE_CONFIG.orders.spreadsheetId, GOOGLE_CONFIG.orders.sheets.projectLog)
+  return rows.filter((r) => r[0] && r[0] !== 'pl_id').map((r) => ({
+    plId: r[0] || '', plPrjId: r[1] || '', plStatusOld: r[2] || '',
+    plStatusNew: r[3] || '', createdBy: r[4] || '', createdAt: r[5] || '',
+  }))
+}
+
+// All non-deleted BAST rows (no prj filter). deleted_at is column M (index 12).
+export async function getAllBasts(): Promise<Bast[]> {
+  const { rows } = await fetchAllRows(GOOGLE_CONFIG.orders.spreadsheetId, GOOGLE_CONFIG.orders.sheets.basts)
+  return rows.filter((r) => r[0] && r[0] !== 'bast_id' && !r[12]).map((r) => ({
+    bastId: r[0] || '', bastNumber: r[1] || '', bastPrjId: r[2] || '',
+    bastFile: r[3] || '', bastCreatedDate: r[4] || '', bastSubmitDate: r[5] || '',
+    bastReceivedDate: r[6] || '', bastStatus: r[7] || '', createdBy: r[8] || '',
+    createdAt: r[9] || '', updatedBy: r[10] || '', updatedAt: r[11] || '', deletedAt: r[12] || '',
+  }))
+}
+
 export async function getFinanceLogs(prjId: string): Promise<FinanceLog[]> {
   const { rows } = await fetchAllRows(GOOGLE_CONFIG.orders.spreadsheetId, GOOGLE_CONFIG.orders.sheets.financeLog)
   return rows.filter((r) => r[1] === prjId).map((r) => ({

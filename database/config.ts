@@ -187,4 +187,12 @@ export const GOOGLE_CONFIG = {
       ters: 'ters',
     },
   },
+
+  // Worker daily reports (field/site progress reports)
+  reports: {
+    spreadsheetId: '1mLwt4zNcZUjSu84_la8ZSZGFgdfD8Cww3dIG_g3Hehc',
+    sheets: {
+      reports: 'reports',
+    },
+  },
 } as const

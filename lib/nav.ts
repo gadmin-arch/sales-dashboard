@@ -18,6 +18,8 @@ export const NAV: NavMeta[] = [
   { href: '/dashboard/payments', label: 'Payments Collection', role: 'finance' },
   { href: '/dashboard/finance-ap', label: 'Finance AP & Reimburse', role: 'finance' },
   { href: '/dashboard/projects', label: 'Projects', role: 'project' },
+  { href: '/dashboard/delivery', label: 'Project Delivery', role: 'project' },
+  { href: '/dashboard/reports', label: 'Worker Reports', role: 'project' },
   { href: '/dashboard/purchasing/requests', label: 'Purchase Requests', role: 'purchasing' },
   { href: '/dashboard/purchasing/orders', label: 'Purchase Orders', role: 'purchasing' },
   { href: '/dashboard/purchasing/vendors', label: 'Vendor Scorecard', role: 'purchasing' },

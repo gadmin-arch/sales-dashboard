@@ -78,6 +78,21 @@ export interface Order {
   deletedAt?: string
 }
 
+// ── worker daily reports (reports2_db) ──
+export interface Report {
+  reportId: string
+  reportDate: string       // the day the work was for (M/D/YYYY)
+  reportPrjId: string      // joins orders.prjId
+  reportTime: number       // hours worked
+  reportOvertime: number   // overtime hours
+  reportProgress: string   // e.g. "55%"
+  reportRemarks: string
+  reportUser: string       // U-xxxx, joins sales users
+  reportScore: number      // raw score column (page recomputes from delay)
+  reportCreatedAt: string  // timestamp the report was actually submitted
+  deletedAt?: string
+}
+
 // ── reference sheets (orders spreadsheet) ──
 export interface OrderType {
   otId: string
