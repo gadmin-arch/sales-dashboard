@@ -14,6 +14,7 @@ const nextConfig = {
   turbopack: {
     root: __dirname,
   },
+  serverExternalPackages: ['googleapis'],
 }
 
 export default nextConfig
