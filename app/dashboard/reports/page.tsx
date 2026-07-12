@@ -24,7 +24,7 @@ interface Option { value: string; label: string }
 interface WorkerRow {
   userId: string; worker: string; reports: number; hours: number; overtime: number
   uniqueDays: number; avgDelayHours: number; sameDayPct: number; avgScore: number
-  uniqueProjectsCount: number; overdueProjectsCount: number
+  uniqueProjectsCount: number; overdueProjectsCount: number; overdueProjectsPct: number
   projectsWorked: Array<{ 
     projectId: string; project: string; 
     plannedStart: string; plannedEnd: string;
@@ -124,6 +124,7 @@ export default function WorkerReportsPage() {
     return {
       uniqueProjectsCount: Math.round(list.reduce((sum, w) => sum + w.uniqueProjectsCount, 0) / len * 10) / 10,
       overdueProjectsCount: Math.round(list.reduce((sum, w) => sum + w.overdueProjectsCount, 0) / len * 10) / 10,
+      overdueProjectsPct: Math.round(list.reduce((sum, w) => sum + w.overdueProjectsPct, 0) / len * 10) / 10,
       reports: Math.round(list.reduce((sum, w) => sum + w.reports, 0) / len * 10) / 10,
       hours: Math.round(list.reduce((sum, w) => sum + w.hours, 0) / len * 10) / 10,
       overtime: Math.round(list.reduce((sum, w) => sum + w.overtime, 0) / len * 10) / 10,
@@ -230,6 +231,7 @@ export default function WorkerReportsPage() {
                   <SortHead label="Worker" column="worker" sortKey={wSort.sortKey} sortDir={wSort.sortDir} onSort={wSort.toggle} />
                   <SortHead label="Projects Worked" column="uniqueProjectsCount" sortKey={wSort.sortKey} sortDir={wSort.sortDir} onSort={wSort.toggle} className="text-center w-[120px]" />
                   <SortHead label="Overdue Projs" column="overdueProjectsCount" sortKey={wSort.sortKey} sortDir={wSort.sortDir} onSort={wSort.toggle} className="text-center w-[100px]" />
+                  <SortHead label="Overdue %" column="overdueProjectsPct" sortKey={wSort.sortKey} sortDir={wSort.sortDir} onSort={wSort.toggle} className="text-center w-[100px]" />
                   <SortHead label="Reports" column="reports" sortKey={wSort.sortKey} sortDir={wSort.sortDir} onSort={wSort.toggle} className="text-right" />
                   <SortHead label="Hours" column="hours" sortKey={wSort.sortKey} sortDir={wSort.sortDir} onSort={wSort.toggle} className="text-right" />
                   <SortHead label="Overtime" column="overtime" sortKey={wSort.sortKey} sortDir={wSort.sortDir} onSort={wSort.toggle} className="text-right" />
@@ -239,7 +241,7 @@ export default function WorkerReportsPage() {
                   <SortHead label="Score" column="avgScore" sortKey={wSort.sortKey} sortDir={wSort.sortDir} onSort={wSort.toggle} className="text-right" />
                 </TableRow></TableHeader>
                 <TableBody>
-                  {wSort.sorted.length === 0 ? <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground py-8">No data found</TableCell></TableRow> : wPage.visible.map((w) => (
+                  {wSort.sorted.length === 0 ? <TableRow><TableCell colSpan={11} className="text-center text-muted-foreground py-8">No data found</TableCell></TableRow> : wPage.visible.map((w) => (
                     <TableRow 
                       key={w.userId}
                       className="cursor-pointer hover:bg-muted/50 transition-colors"
@@ -259,6 +261,15 @@ export default function WorkerReportsPage() {
                         {w.overdueProjectsCount > 0 ? (
                           <span className="text-rose-600 dark:text-rose-400 font-bold bg-rose-500/10 px-2 py-0.5 rounded-md text-xs">
                             {w.overdueProjectsCount}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-center text-xs font-mono">
+                        {w.overdueProjectsPct > 0 ? (
+                          <span className="text-rose-600 dark:text-rose-400 font-bold">
+                            {w.overdueProjectsPct}%
                           </span>
                         ) : (
                           <span className="text-muted-foreground">—</span>
@@ -287,6 +298,15 @@ export default function WorkerReportsPage() {
                         {avgRow.overdueProjectsCount > 0 ? (
                           <span className="text-rose-600 dark:text-rose-400 font-bold bg-rose-500/10 px-2 py-0.5 rounded-md text-xs">
                             {avgRow.overdueProjectsCount.toFixed(1)}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-center text-xs font-mono">
+                        {avgRow.overdueProjectsPct > 0 ? (
+                          <span className="text-rose-600 dark:text-rose-400 font-bold">
+                            {avgRow.overdueProjectsPct.toFixed(1)}%
                           </span>
                         ) : (
                           <span className="text-muted-foreground">—</span>

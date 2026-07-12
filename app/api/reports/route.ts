@@ -264,6 +264,7 @@ export async function GET(request: NextRequest) {
 
       const uniqueProjectsCount = w.projects.size
       const overdueProjectsCount = projectsWorked.filter(p => p.isOverdue).length
+      const overdueProjectsPct = uniqueProjectsCount ? Math.round((overdueProjectsCount / uniqueProjectsCount) * 100) : 0
 
       return {
         userId: id,
@@ -277,6 +278,7 @@ export async function GET(request: NextRequest) {
         avgScore: w.scores.length ? round1(avg(w.scores)) : 0,
         uniqueProjectsCount,
         overdueProjectsCount,
+        overdueProjectsPct,
         projectsWorked
       }
     }).sort((a, b) => b.hours - a.hours)
