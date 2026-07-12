@@ -25,7 +25,12 @@ interface WorkerRow {
   userId: string; worker: string; reports: number; hours: number; overtime: number
   uniqueDays: number; avgDelayHours: number; sameDayPct: number; avgScore: number
   uniqueProjectsCount: number; overdueProjectsCount: number
-  projectsWorked: Array<{ projectId: string; project: string; overdueStatus: string; isOverdue: boolean; overdueDays: number }>
+  projectsWorked: Array<{ 
+    projectId: string; project: string; 
+    plannedStart: string; plannedEnd: string;
+    actualStart: string; actualEnd: string;
+    overdueStatus: string; isOverdue: boolean; overdueDays: number 
+  }>
 }
 interface ProjectRow {
   projectId: string; project: string; hours: number; overtime: number
@@ -405,19 +410,41 @@ export default function WorkerReportsPage() {
                       <TableHeader className="bg-muted/40 sticky top-0 z-10">
                         <TableRow>
                           <TableHead className="py-2.5">Project Name & ID</TableHead>
+                          <TableHead className="py-2.5">Schedule (Plan)</TableHead>
+                          <TableHead className="py-2.5">Schedule (Actual/Log)</TableHead>
                           <TableHead className="py-2.5 text-right">Schedule Status</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {selectedWorker.projectsWorked.map((pw) => (
                           <TableRow key={pw.projectId} className="hover:bg-muted/30">
-                            <TableCell className="py-2.5 font-medium">
+                            <TableCell className="py-2.5 font-medium whitespace-normal break-words max-w-[240px]">
                               <div className="font-semibold text-foreground">{pw.project}</div>
                               <div className="text-[10px] text-muted-foreground uppercase font-mono mt-0.5">{pw.projectId}</div>
                             </TableCell>
+                            <TableCell className="py-2.5 text-left whitespace-nowrap">
+                              {pw.plannedStart || pw.plannedEnd ? (
+                                <div className="flex flex-col text-[10px] leading-tight">
+                                  <span className="text-muted-foreground">{pw.plannedStart || '-'}</span>
+                                  <span className="font-semibold text-foreground mt-0.5">{pw.plannedEnd || '-'}</span>
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="py-2.5 text-left whitespace-nowrap">
+                              {pw.actualStart || pw.actualEnd ? (
+                                <div className="flex flex-col text-[10px] leading-tight">
+                                  <span className="text-muted-foreground">{pw.actualStart || '-'}</span>
+                                  <span className="font-semibold text-foreground mt-0.5">{pw.actualEnd || '-'}</span>
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </TableCell>
                             <TableCell className="py-2.5 text-right">
-                              <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wide uppercase ${
-                                pw.isOverdue 
+                              <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wide uppercase ${
+                                pw.overdueStatus.startsWith('Overdue') 
                                   ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400' 
                                   : pw.overdueStatus === 'On Time' || pw.overdueStatus === 'On Track'
                                   ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'

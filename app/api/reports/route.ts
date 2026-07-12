@@ -210,6 +210,10 @@ export async function GET(request: NextRequest) {
     const projectMetaMap = new Map<string, {
       projectId: string
       project: string
+      plannedStart: string
+      plannedEnd: string
+      actualStart: string
+      actualEnd: string
       overdueStatus: string
       isOverdue: boolean
       overdueDays: number
@@ -218,6 +222,10 @@ export async function GET(request: NextRequest) {
       projectMetaMap.set(p.projectId, {
         projectId: p.projectId,
         project: p.project,
+        plannedStart: p.plannedStart,
+        plannedEnd: p.plannedEnd,
+        actualStart: p.actualStart,
+        actualEnd: p.actualEnd,
         overdueStatus: p.overdueStatus,
         isOverdue: p.isOverdue,
         overdueDays: p.overdueDays
@@ -244,6 +252,10 @@ export async function GET(request: NextRequest) {
         return meta || {
           projectId: pId,
           project: projectName(pId),
+          plannedStart: '',
+          plannedEnd: '',
+          actualStart: '',
+          actualEnd: '',
           overdueStatus: 'Active',
           isOverdue: false,
           overdueDays: 0
