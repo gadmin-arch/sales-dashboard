@@ -23,6 +23,7 @@ export async function getAllAccessUsers(): Promise<AccessUser[]> {
       project: parseBool(row[4]),
       purchasing: parseBool(row[5]),
       payroll: parseBool(row[6]), // users sheet col G
+      'cost control': parseBool(row[7]), // users sheet col H
     }))
 }
 

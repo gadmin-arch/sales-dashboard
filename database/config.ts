@@ -109,6 +109,7 @@ export const GOOGLE_CONFIG = {
     paymentRequestSpreadsheetId: '17IGDVtFew69_JV63aCEckpMCYqf2iyIdVPHXkwzI_tQ',
     paymentSpreadsheetId: '1c-WB5QsBtNYFL9LmGuPZSsM2rI9rp6mbFrYvvxEhkGU',
     reimburseSpreadsheetId: '1rcbBN00I7Ql5SIw_DqNPfeUURiuDCFHoml5m02Us9aM',
+    typesSpreadsheetId: '1UxiyfROclB1w0UOSlGKSpppSL2FCP84rEsgv9-rDW2s',
     sheets: {
       paymentRequests: 'payment_requests',
       paymentStatuses: 'payment_statuses',
@@ -116,6 +117,7 @@ export const GOOGLE_CONFIG = {
       payments: 'payments',
       reimburseCashIn: 'ReimburseCashIn',
       reimburseCashOut: 'ReimburseCashOut',
+      cashOutTypes: 'cash_out_types',
       reimburseFile: 'ReimburseFile',
       reimburseStatus: 'ReimburseStatus',
     },
@@ -191,8 +193,11 @@ export const GOOGLE_CONFIG = {
   // Worker daily reports (field/site progress reports)
   reports: {
     spreadsheetId: '1mLwt4zNcZUjSu84_la8ZSZGFgdfD8Cww3dIG_g3Hehc',
+    archiveSpreadsheetId: '1bkHV5VtoQaPwnfCQ-OogHEBTmYr0_lH-FhFsAjsVztQ',
+    overtimeSpreadsheetId: '1EipjDKsudJGnbyv1GB6c4wE9nvj8z425iueozKcIBYk',
     sheets: {
       reports: 'reports',
+      overtimes: 'overtimes',
     },
   },
 } as const

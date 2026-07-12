@@ -9,6 +9,7 @@ export interface AccessUser {
   project: boolean
   purchasing: boolean
   payroll: boolean
+  'cost control': boolean
 }
 
 // ── sales users sheet (employee directory) ──

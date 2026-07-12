@@ -107,8 +107,7 @@ export async function getOrdersWithHeaders(): Promise<{ headers: string[]; rows:
 }
 
 export async function getProjectOrders(): Promise<Order[]> {
-  const all = await getAllOrders()
-  return all.filter((o) => o.prjType === 'Project')
+  return getAllOrders()
 }
 
 export async function getOrderTypeLabel(otId: string): Promise<string> {

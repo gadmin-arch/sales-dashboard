@@ -55,7 +55,7 @@ export default function PayrollPage() {
   if (!data) return null
 
   // Ensure user has access
-  if (user && !(user.roles as any)?.['payroll']) {
+  if (!user || !(user.roles as any)?.['payroll']) {
     return <div className="flex items-center justify-center min-h-[80vh]"><p className="text-muted-foreground">You do not have access to Payroll & Salaries.</p></div>
   }
 

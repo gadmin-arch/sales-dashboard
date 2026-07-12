@@ -130,7 +130,7 @@ export default function CustomerScorecardPage() {
         <FilterCard from={lFrom} to={lTo} onDateChange={(f, t) => { setLFrom(f); setLTo(t) }} onApply={onApply} onClear={onClear} hasUnapplied={hasUnapplied} loading={loading && !!data}>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-5 items-start">
             <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Basis Tanggal</label>
-              <Select value={lDateType} onValueChange={setLDateType}>
+              <Select value={lDateType} onValueChange={(v) => setLDateType(v || '')}>
                 <SelectTrigger className="w-full text-xs h-9 bg-background"><SelectValue>{lDateType === 'po' ? 'PO Date' : lDateType === 'payment' ? 'Payment Date' : 'Invoice Date'}</SelectValue></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="invoice">Invoice Date</SelectItem>
@@ -152,9 +152,9 @@ export default function CustomerScorecardPage() {
 
         {/* KPIs Row */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <KPICard title="Total Customers" value={kpis.totalCustomers.toLocaleString('en-US')} icon={<Users className="h-4 w-4" />} description="Number of active customers" />
-          <KPICard title="Total PO Value" value={fmtRp(kpis.totalPO)} icon={<FileText className="h-4 w-4 text-sky-500" />} description="Cumulative PO contract value" />
-          <KPICard title="Outstanding Receivables" value={fmtRp(kpis.outstanding)} icon={<CreditCard className="h-4 w-4 text-amber-500" />} description="Remaining billing receivables" />
+          <KPICard title="Total Customers" value={kpis.totalCustomers.toLocaleString('en-US')} icon={<Users className="h-4 w-4" />} tooltip="Number of active customers" />
+          <KPICard title="Total PO Value" value={fmtRp(kpis.totalPO)} icon={<FileText className="h-4 w-4 text-sky-500" />} tooltip="Cumulative PO contract value" />
+          <KPICard title="Outstanding Receivables" value={fmtRp(kpis.outstanding)} icon={<CreditCard className="h-4 w-4 text-amber-500" />} tooltip="Remaining billing receivables" />
           <div className="rounded-xl border bg-card p-6 shadow-sm flex flex-col justify-between">
             <div className="flex items-center justify-between space-y-0 pb-2">
               <span className="text-xs font-medium text-muted-foreground">Avg. Performance Timeline</span>

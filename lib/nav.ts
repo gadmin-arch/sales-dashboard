@@ -7,7 +7,7 @@ export interface NavMeta {
   role: RoleKey
 }
 
-export type RoleKey = 'sales' | 'finance' | 'project' | 'purchasing' | 'payroll'
+export type RoleKey = 'sales' | 'finance' | 'project' | 'purchasing' | 'payroll' | 'cost control'
 
 export const NAV: NavMeta[] = [
   { href: '/dashboard/sales', label: 'Sales Overview', role: 'sales' },
@@ -24,6 +24,7 @@ export const NAV: NavMeta[] = [
   { href: '/dashboard/purchasing/orders', label: 'Purchase Orders', role: 'purchasing' },
   { href: '/dashboard/purchasing/vendors', label: 'Vendor Scorecard', role: 'purchasing' },
   { href: '/dashboard/payroll', label: 'Payroll & Salaries', role: 'payroll' },
+  { href: '/dashboard/cost-control', label: 'Cost Control', role: 'cost control' },
 ]
 
 export type Roles = Record<RoleKey, boolean>

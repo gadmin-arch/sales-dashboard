@@ -10,9 +10,10 @@ import type {
 } from '@/database/repos/finance-ap'
 import type {
   Payroll, PayrollPayment, PayrollListItem, Loan, Repayment,
-  MealBenefit, MealBenefitDetail, MealBenefitRelease, MealBenefitEvidence,
+  MealBenefit, MealBenefitDetail, MealBenefitRelease,
   TravelAllowance, UserTerStatus, TerRate, Occupation, SalesUser,
 } from '@/database'
+import type { MealBenefitEvidence } from '@/database/types'
 
 // ── Shared math ──
 export const sum = (a: number[]): number => a.reduce((s, n) => s + n, 0)
@@ -653,16 +654,20 @@ export function computePayroll(
     const taxCategory = taxStatusRecord?.terStatusId || 'A'
 
     // Filter travel allowances
-    const matchingTravel = travelAllowances.filter(ta => ta.userId === p.userId && sp && ep && parseDate(ta.date) >= sp && parseDate(ta.date) <= ep)
+    const matchingTravel = travelAllowances.filter(ta => {
+      const d = parseDate(ta.date)
+      return ta.userId === p.userId && sp && ep && d && d >= sp && d <= ep
+    })
     const totalTravel = sum(matchingTravel.map(ta => ta.amount * ta.totalDays))
 
     // Filter matching approved reimbursements with payroll = true
-    const matchingReimburse = reimburseCashOut.filter(r => 
-      r.reimburseUserIdFk === p.userId && 
+    const matchingReimburse = reimburseCashOut.filter(r => {
+      const d = parseDate(r.reimburseDate)
+      return r.reimburseUserIdFk === p.userId && 
       (r.reimbursePayroll === 'TRUE' || String(r.reimbursePayroll).toUpperCase() === 'TRUE' || String(r.reimbursePayroll) === '1') && 
       r.reimburseStatus === 'A' && 
-      sp && ep && parseDate(r.reimburseDate) >= sp && parseDate(r.reimburseDate) <= ep
-    )
+      sp && ep && d && d >= sp && d <= ep
+    })
     const totalReimburse = sum(matchingReimburse.map(r => r.reimburseAmount))
 
     // Filter meal benefit details (meal request)
@@ -892,7 +897,10 @@ export function computePayroll(
     }))
 
     // Map loans list details for rendering
-    const matchingLoansList = loans.filter(l => l.userId === p.userId && sp && ep && parseDate(l.date) >= sp && parseDate(l.date) <= ep)
+    const matchingLoansList = loans.filter(l => {
+      const d = parseDate(l.date)
+      return l.userId === p.userId && sp && ep && d && d >= sp && d <= ep
+    })
     const loansList = matchingLoansList.map(l => ({
       date: l.date,
       type: l.thp === 'P-7' || String(l.thp).toUpperCase() === 'TRUE' ? 'THP Loan' : 'Direct Loan',
@@ -1206,7 +1214,7 @@ export function computeMeal(
             amount: det.amount,
             approved: det.approved,
             date: det.date,
-            notes: det.remarks || det.notes || '-',
+            notes: det.projectId || '-',
           }
         }),
         releases: (releasesByMb[b.mbId] || []).map((rel) => ({

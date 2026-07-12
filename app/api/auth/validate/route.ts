@@ -28,6 +28,7 @@ export async function POST(request: NextRequest) {
         project: user.project,
         purchasing: user.purchasing,
         payroll: user.payroll,
+        'cost control': user['cost control'],
       },
     })
   } catch (error) {

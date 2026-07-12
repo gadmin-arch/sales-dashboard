@@ -16,5 +16,5 @@ export default function Page() {
     }
   }, [router])
 
-  return null
+  return <div className="min-h-screen bg-background" />
 }

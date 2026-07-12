@@ -149,7 +149,7 @@ export default function InvoicesPage() {
         <FilterCard from={lFrom} to={lTo} onDateChange={(f, t) => { setLFrom(f); setLTo(t) }} onApply={onApply} onClear={onClear} hasUnapplied={hasUnapplied} loading={loading && !!data}>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-7 items-start">
             <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Basis Tanggal</label>
-              <Select value={lDateType} onValueChange={setLDateType}>
+              <Select value={lDateType} onValueChange={(v) => setLDateType(v || '')}>
                 <SelectTrigger className="w-full text-xs h-9 bg-background"><SelectValue>{lDateType === 'po' ? 'PO Date' : lDateType === 'payment' ? 'Payment Date' : 'Invoice Date'}</SelectValue></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="invoice">Invoice Date</SelectItem>

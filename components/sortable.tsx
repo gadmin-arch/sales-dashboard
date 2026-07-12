@@ -16,9 +16,12 @@ function parseSortableDate(s: string): number | null {
 }
 
 function compareValues(a: unknown, b: unknown): number {
+  if (a == null && b == null) return 0
+  if (a == null) return 1
+  if (b == null) return -1
   if (typeof a === 'number' && typeof b === 'number') return a - b
-  const as = (a ?? '').toString().trim()
-  const bs = (b ?? '').toString().trim()
+  const as = a.toString().trim()
+  const bs = b.toString().trim()
   const ad = parseSortableDate(as)
   const bd = parseSortableDate(bs)
   if (ad !== null && bd !== null) return ad - bd

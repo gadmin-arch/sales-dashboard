@@ -10,7 +10,7 @@ import {
 import { getFinanceAPData, getPaymentLogs } from '@/database/repos/finance-ap'
 import { getSalesUserNamesMap } from '@/database/repos/sales-users'
 import { parseDashboardParams } from '@/lib/api-helpers'
-import { filterDataByDateRange } from '@/lib/utils-date-currency'
+import { filterDataByDateRange, parseDate } from '@/lib/utils-date-currency'
 import { makeProjectLabeler } from '@/lib/purchasing-helpers'
 import {
   computePoPayments, computePayroll, computeMeal, computeLoans, computeReimburse, computeOverview,
@@ -191,7 +191,7 @@ export async function GET(request: NextRequest) {
       }
       else if (cType === 'typeLabel') {
         filteredMeal = meal.filter((m) => getMbTypeLabel(m.type) === cVal)
-        filteredMealReleases = mealReleases.filter((m) => getMbTypeLabel(m.mbType) === cVal)
+        filteredMealReleases = mealReleases.filter((m) => getMbTypeLabel(m.type) === cVal)
       }
       else if (cType === 'loanMonth') {
         filteredLoans = loans.filter((l) => {
