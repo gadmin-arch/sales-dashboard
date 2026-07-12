@@ -111,6 +111,24 @@ export default function WorkerReportsPage() {
 
   const wSort = useSort(workerRows, 'hours', 'desc')
   const wPage = useLoadMore(wSort.sorted)
+
+  const avgRow = useMemo(() => {
+    const list = wSort.sorted
+    if (!list.length) return null
+    const len = list.length
+    return {
+      uniqueProjectsCount: Math.round(list.reduce((sum, w) => sum + w.uniqueProjectsCount, 0) / len * 10) / 10,
+      overdueProjectsCount: Math.round(list.reduce((sum, w) => sum + w.overdueProjectsCount, 0) / len * 10) / 10,
+      reports: Math.round(list.reduce((sum, w) => sum + w.reports, 0) / len * 10) / 10,
+      hours: Math.round(list.reduce((sum, w) => sum + w.hours, 0) / len * 10) / 10,
+      overtime: Math.round(list.reduce((sum, w) => sum + w.overtime, 0) / len * 10) / 10,
+      uniqueDays: Math.round(list.reduce((sum, w) => sum + w.uniqueDays, 0) / len * 10) / 10,
+      avgDelayHours: list.reduce((sum, w) => sum + w.avgDelayHours, 0) / len,
+      sameDayPct: Math.round(list.reduce((sum, w) => sum + w.sameDayPct, 0) / len * 10) / 10,
+      avgScore: list.reduce((sum, w) => sum + w.avgScore, 0) / len
+    }
+  }, [wSort.sorted])
+
   const pSort = useSort(projectRows, 'hours', 'desc')
   const pPage = useLoadMore(pSort.sorted)
 
@@ -250,6 +268,34 @@ export default function WorkerReportsPage() {
                       <TableCell className="text-right text-xs font-semibold"><ScoreBadge score={w.avgScore} /></TableCell>
                     </TableRow>
                   ))}
+                  {wSort.sorted.length > 0 && avgRow && (
+                    <TableRow className="bg-muted/40 font-semibold border-t hover:bg-muted/50 transition-colors">
+                      <TableCell className="font-bold text-xs py-2.5 text-foreground">
+                        Average
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-primary/5 text-primary border border-primary/10 rounded-md text-xs font-semibold font-mono">
+                          {avgRow.uniqueProjectsCount.toFixed(1)}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-center text-xs font-mono">
+                        {avgRow.overdueProjectsCount > 0 ? (
+                          <span className="text-rose-600 dark:text-rose-400 font-bold bg-rose-500/10 px-2 py-0.5 rounded-md text-xs">
+                            {avgRow.overdueProjectsCount.toFixed(1)}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right text-xs">{avgRow.reports.toFixed(1)}</TableCell>
+                      <TableCell className="text-right text-xs font-semibold text-primary">{avgRow.hours.toFixed(1)}h</TableCell>
+                      <TableCell className="text-right text-xs text-amber-600 dark:text-amber-400">{avgRow.overtime.toFixed(1)}h</TableCell>
+                      <TableCell className="text-right text-xs">{avgRow.uniqueDays.toFixed(1)}</TableCell>
+                      <TableCell className="text-right text-xs">{fmtDelay(avgRow.avgDelayHours)}</TableCell>
+                      <TableCell className="text-right text-xs">{avgRow.sameDayPct.toFixed(1)}%</TableCell>
+                      <TableCell className="text-right text-xs font-semibold"><ScoreBadge score={avgRow.avgScore} /></TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
             </div>
