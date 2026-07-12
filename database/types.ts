@@ -77,6 +77,8 @@ export interface Order {
   createdBy: string
   createdAt: string
   deletedAt?: string
+  prjPePic?: string
+  prjPeSiteId?: string
 }
 
 // ── worker daily reports (reports2_db) ──

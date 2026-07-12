@@ -17,6 +17,7 @@ export function FilterCard({
   hasUnapplied,
   loading,
   applyLabel = 'Apply Filters',
+  dateLabel,
   children,
 }: {
   from: string
@@ -27,6 +28,7 @@ export function FilterCard({
   hasUnapplied: boolean
   loading?: boolean
   applyLabel?: string
+  dateLabel?: string
   children?: ReactNode
 }) {
   return (
@@ -34,7 +36,7 @@ export function FilterCard({
       <CardContent className="pt-5">
         {children}
         <div className={children ? 'mt-4 border-t border-border pt-4' : ''}>
-          <DateRangeRow from={from} to={to} onChange={onDateChange} />
+          <DateRangeRow from={from} to={to} onChange={onDateChange} label={dateLabel} />
         </div>
         <div className="mt-4 flex justify-end gap-2 border-t border-border pt-3">
           <Button variant="outline" size="sm" onClick={onClear}>Clear</Button>

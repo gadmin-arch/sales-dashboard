@@ -16,8 +16,9 @@ import { LoadMore, useLoadMore } from '@/components/load-more'
 import { useSort, SortHead } from '@/components/sortable'
 import { DonutChart } from '@/components/donut-chart'
 import { ChartContainer } from '@/components/ui/chart'
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts'
 import { buildQuery, sameSet, getYTD, fmtShortDate } from '@/lib/sales-helpers'
+import { useChartFilter } from '@/hooks/use-chart-filter'
 
 interface Option { value: string; label: string }
 interface ProjectRow {
@@ -61,6 +62,7 @@ export default function ProjectDeliveryPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
+  const { chartFilter, setChartFilter, handleChartClick } = useChartFilter('delivery-table-section')
 
   const [dateFrom, setDateFrom] = useState(getYTD().from), [dateTo, setDateTo] = useState(getYTD().to)
   const [dateType, setDateType] = useState('due')
@@ -81,14 +83,18 @@ export default function ProjectDeliveryPage() {
 
   useEffect(() => {
     const fresh = firstLoad.current; firstLoad.current = false
-    doFetch({ dateFrom, dateTo, dateType, status, owner, type, delivery, ...(fresh ? { fresh: '1' } : {}) })
-  }, [doFetch, dateFrom, dateTo, dateType, status, owner, type, delivery])
+    doFetch({
+      dateFrom, dateTo, dateType, status, owner, type, delivery,
+      ...(chartFilter ? { cType: chartFilter.type, cVal: chartFilter.value } : {}),
+      ...(fresh ? { fresh: '1' } : {}),
+    })
+  }, [doFetch, dateFrom, dateTo, dateType, status, owner, type, delivery, chartFilter])
 
   const onApply = () => { setDateFrom(lFrom); setDateTo(lTo); setDateType(lDateType); setStatus(lStatus); setOwner(lOwner); setType(lType); setDelivery(lDelivery) }
   const onClear = () => {
     const d = getYTD()
     setLFrom(d.from); setLTo(d.to); setLDateType('due'); setLStatus([]); setLOwner([]); setLType([]); setLDelivery([])
-    setDateFrom(d.from); setDateTo(d.to); setDateType('due'); setStatus([]); setOwner([]); setType([]); setDelivery([])
+    setDateFrom(d.from); setDateTo(d.to); setDateType('due'); setStatus([]); setOwner([]); setType([]); setDelivery([]); setChartFilter(null)
   }
   const hasUnapplied = lFrom !== dateFrom || lTo !== dateTo || lDateType !== dateType || !sameSet(lStatus, status) || !sameSet(lOwner, owner) || !sameSet(lType, type) || !sameSet(lDelivery, delivery)
 
@@ -110,7 +116,7 @@ export default function ProjectDeliveryPage() {
   return (
     <SalesPageShell>
       <div className="space-y-6">
-        <PageHeader title="Project Delivery" subtitle={`PT. Multi Daya Mitra — plan vs actual & BAST timeliness (filtered by ${DATE_LABELS[data.dateType] || 'Due Date'})`} />
+        <PageHeader title="Project Delivery" subtitle={`PT. Multi Daya Mitra — plan vs actual & BAST timeliness (filtered by ${DATE_LABELS[data.dateType] || 'Due Date'})`} chartFilter={chartFilter} onClearFilter={() => setChartFilter(null)} />
 
         <FilterCard from={lFrom} to={lTo} onDateChange={(f, t) => { setLFrom(f); setLTo(t) }} onApply={onApply} onClear={onClear} hasUnapplied={hasUnapplied} loading={loading && !!data}>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-5 items-start">
@@ -149,11 +155,11 @@ export default function ProjectDeliveryPage() {
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <Card>
             <CardHeader><CardTitle className="text-sm font-semibold">Delivery Timeliness (BAST vs Due)</CardTitle></CardHeader>
-            <CardContent><DonutChart data={data.deliveryBreakdown} height={260} /></CardContent>
+            <CardContent><DonutChart data={data.deliveryBreakdown} height={260} onSliceClick={(name) => handleChartClick('delivery', name, `Delivery = ${name}`)} /></CardContent>
           </Card>
           <Card>
             <CardHeader><CardTitle className="text-sm font-semibold">Project Status <span className="font-normal text-muted-foreground">(by {DATE_LABELS[data.dateType]})</span></CardTitle></CardHeader>
-            <CardContent><DonutChart data={data.statusBreakdown} height={260} /></CardContent>
+            <CardContent><DonutChart data={data.statusBreakdown} height={260} onSliceClick={(name) => handleChartClick('status', name, `Status = ${name}`)} /></CardContent>
           </Card>
         </div>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -161,13 +167,13 @@ export default function ProjectDeliveryPage() {
             <CardHeader><CardTitle className="text-sm font-semibold">New Projects per Month <span className="font-normal text-muted-foreground">(by created date)</span></CardTitle></CardHeader>
             <CardContent>
               <ChartContainer config={{}} className="h-[260px] w-full">
-                <LineChart data={data.newProjectsTrend} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+                <BarChart data={data.newProjectsTrend} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                   <XAxis dataKey="name" {...axis} axisLine={{ stroke: 'var(--border)' }} />
                   <YAxis {...axis} axisLine={false} allowDecimals={false} />
-                  <Tooltip contentStyle={{ background: 'var(--background)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }} />
-                  <Line dataKey="value" name="New projects" stroke="var(--chart-2)" strokeWidth={2} dot={false} />
-                </LineChart>
+                  <Tooltip contentStyle={{ background: 'var(--background)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }} cursor={{ fill: 'var(--muted)' }} />
+                  <Bar dataKey="value" name="New projects" fill="var(--chart-2)" radius={[4, 4, 0, 0]} onClick={(d: any) => handleChartClick('createdMonth', String(d.name ?? ''), `Created = ${d.name}`)} style={{ cursor: 'pointer' }} />
+                </BarChart>
               </ChartContainer>
             </CardContent>
           </Card>
@@ -180,7 +186,7 @@ export default function ProjectDeliveryPage() {
                   <XAxis dataKey="name" {...axis} axisLine={{ stroke: 'var(--border)' }} />
                   <YAxis {...axis} axisLine={false} allowDecimals={false} />
                   <Tooltip contentStyle={{ background: 'var(--background)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }} />
-                  <Bar dataKey="value" fill="var(--chart-4)" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="value" fill="var(--chart-4)" radius={[4, 4, 0, 0]} onClick={(d: any) => handleChartClick('lateness', String(d.name ?? ''), `Lateness = ${d.name}`)} style={{ cursor: 'pointer' }} />
                 </BarChart>
               </ChartContainer>
             </CardContent>
@@ -217,7 +223,7 @@ export default function ProjectDeliveryPage() {
         )}
 
         {/* Delivery detail */}
-        <Card className="overflow-hidden">
+        <Card className="overflow-hidden" id="delivery-table-section">
           <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle className="text-sm font-semibold">Project Delivery Detail <span className="font-normal text-muted-foreground">({rows.length.toLocaleString('en-US')})</span></CardTitle>
             <SearchInput value={search} onChange={setSearch} />

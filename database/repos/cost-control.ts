@@ -1,10 +1,12 @@
 import { fetchAllRows } from '../client'
 import { GOOGLE_CONFIG } from '../config'
 import { parseNum } from '../mappers/orders'
+import { parseDate } from '@/lib/utils-date-currency'
 import { getAllOrders } from './orders'
 import { getAllPoLines, getAllPurchaseOrders } from './procurement'
 import { getFinanceAPData } from './finance-ap'
 import { getAllReports } from './reports'
+import { getAllSalesUsers, getTeamNameSync } from './sales-users'
 
 export interface ProjectCostControl {
   prjId: string
@@ -30,11 +32,20 @@ export interface ProjectCostControl {
   overtimeHours: number
   reportCount: number
   reportHours: number
+  
+  pePicName: string
+  peTeamName: string
+  purchasingItems: Array<{ date: string; description: string; type: 'Material' | 'Service'; poNumber: string; vendor: string; amount: number }>
+  reimburseItems: Array<{ date: string; description: string; type: 'Material' | 'Service'; requestor: string; amount: number }>
+  overtimeItems: Array<{ date: string; hours: number; workerName: string; reason: string }>
+  reportItems: Array<{ date: string; hours: number; workerName: string; remarks: string }>
 }
 
-// Map from cash_out_types and item_types where M- is material, everything else is service.
+// Material = type id 'M' / 'M-*', everything else service. Reimburse cash_out_types
+// use 'M-1'..'M-9'; procurement POLists use bare letters M/S/C/T.
 export function isMaterial(typeId: string): boolean {
-  return typeId?.toUpperCase().startsWith('M-') || false
+  const t = (typeId || '').toUpperCase()
+  return t === 'M' || t.startsWith('M-')
 }
 
 export interface CostControlFilter {
@@ -45,6 +56,8 @@ export interface CostControlFilter {
   projectStatus?: string[]
   invoiceStatus?: string[]
   projectFlag?: string[]
+  pePic?: string[]
+  peTeam?: string[]
 }
 
 export async function getCostControlData(f: CostControlFilter = {}): Promise<ProjectCostControl[]> {
@@ -56,7 +69,8 @@ export async function getCostControlData(f: CostControlFilter = {}): Promise<Pro
     reports,
     overtimeRes,
     mbdRes,
-    mbRes
+    mbRes,
+    salesUsers
   ] = await Promise.all([
     getAllOrders(),
     getAllPurchaseOrders(),
@@ -66,19 +80,25 @@ export async function getCostControlData(f: CostControlFilter = {}): Promise<Pro
     fetchAllRows(GOOGLE_CONFIG.reports.overtimeSpreadsheetId, GOOGLE_CONFIG.reports.sheets.overtimes),
     fetchAllRows(GOOGLE_CONFIG.payroll.spreadsheetId, 'meal_benefit_details'),
     fetchAllRows(GOOGLE_CONFIG.payroll.spreadsheetId, 'meal_benefits'),
+    getAllSalesUsers(),
   ])
 
   // Filter projects
+  const fromTime = f.dateFrom ? parseDate(f.dateFrom)?.getTime() : undefined
+  const toTime = f.dateTo ? parseDate(f.dateTo)?.getTime() : undefined
   const projects = allProjects.filter(p => {
-    // Basic date fallback
-    const targetDate = p.prjPoDate || p.createdAt || ''
-    if (f.dateFrom && targetDate < f.dateFrom) return false
-    if (f.dateTo && targetDate > f.dateTo) return false
+    // Sheet dates aren't ISO, so parse before comparing (PO date, created_at fallback)
+    const targetTime = (parseDate(p.prjPoDate) || parseDate(p.createdAt))?.getTime()
+    if ((fromTime !== undefined || toTime !== undefined) && targetTime === undefined) return false
+    if (fromTime !== undefined && targetTime! < fromTime) return false
+    if (toTime !== undefined && targetTime! > toTime) return false
     if (f.salesUser?.length && !f.salesUser.includes(p.prjOwner)) return false
     if (f.orderType?.length && !f.orderType.includes(p.prjOtId)) return false
     if (f.projectStatus?.length && !f.projectStatus.includes(p.prjPeStatus)) return false
     if (f.invoiceStatus?.length && !f.invoiceStatus.includes(p.prjFStatus)) return false
     if (f.projectFlag?.length && !f.projectFlag.includes(p.prjFlag)) return false
+    if (f.pePic?.length && !f.pePic.includes(p.prjPePic || '')) return false
+    if (f.peTeam?.length && !f.peTeam.some(team => (p.prjPeSiteId || '').split(',').map(s => s.trim()).includes(team))) return false
     return true
   })
 
@@ -111,40 +131,63 @@ export async function getCostControlData(f: CostControlFilter = {}): Promise<Pro
   // Aggregate Overtimes per project
   // overtime_time (6), overtime_status (9), overtime_deleted_at (13), overtime_prj (14)
   const overtimeByPrj = new Map<string, number>()
+  const overtimeItemsByPrj = new Map<string, Array<{ date: string; hours: number; workerName: string; reason: string }>>()
   for (const r of overtimeRes.rows) {
     if (!r[0] || r[0] === 'overtime_id' || r[13]) continue // deleted
-    const status = (r[9] || '').toLowerCase()
-    if (status !== 'approved' && status !== 'pending') continue
-    
+    const status = (r[9] || '').trim().toUpperCase() // A=Approved P=Pending R=Rejected
+    if (status !== 'A' && status !== 'P') continue
+
     const prjId = r[14]
     if (!prjId) continue
 
     const hours = parseNum(r[6])
     overtimeByPrj.set(prjId, (overtimeByPrj.get(prjId) || 0) + hours)
+
+    const userId = r[8] || ''
+    const workerUser = userId ? salesUsers.find(u => u.userId === userId) : null
+    const workerName = workerUser ? workerUser.name : userId || '-'
+
+    if (!overtimeItemsByPrj.has(prjId)) overtimeItemsByPrj.set(prjId, [])
+    overtimeItemsByPrj.get(prjId)!.push({
+      date: r[2] || '', // overtime_date
+      hours,
+      workerName,
+      reason: r[7] || '' // overtime_reason
+    })
   }
 
   // Aggregate Reports per project
   const reportCountByPrj = new Map<string, number>()
   const reportHoursByPrj = new Map<string, number>()
+  const reportItemsByPrj = new Map<string, Array<{ date: string; hours: number; workerName: string; remarks: string }>>()
   for (const r of reports) {
     const prjId = r.reportPrjId
     if (!prjId) continue
     
     reportCountByPrj.set(prjId, (reportCountByPrj.get(prjId) || 0) + 1)
     reportHoursByPrj.set(prjId, (reportHoursByPrj.get(prjId) || 0) + r.reportTime)
+
+    const userId = r.reportUser || ''
+    const workerUser = userId ? salesUsers.find(u => u.userId === userId) : null
+    const workerName = workerUser ? workerUser.name : userId || '-'
+
+    if (!reportItemsByPrj.has(prjId)) reportItemsByPrj.set(prjId, [])
+    reportItemsByPrj.get(prjId)!.push({
+      date: r.reportDate || '',
+      hours: r.reportTime,
+      workerName,
+      remarks: r.reportRemarks || ''
+    })
   }
 
   // Aggregate Purchasing POs
   // We need to know which PO is approved/valid. 
   // Let's assume all poLines whose parent PO is not soft-deleted and status != 'Cancelled' are valid.
   // We already filter soft-deleted POs in getAllPurchaseOrders.
-  const validPos = new Set<string>()
+  const validPos = new Map<string, { date: string; vendor: string }>()
   for (const po of pos) {
-    // Only count if it's not cancelled or rejected, or just take all for now?
-    // Usually status 'Approved' or 'Completed'. Let's say all that are not 'Cancelled'/'Rejected'.
-    // We will just include all since it's "spent" unless cancelled.
     if (!po.poStatus.toLowerCase().includes('cancel') && !po.poStatus.toLowerCase().includes('reject')) {
-      validPos.add(po.poNumber)
+      validPos.set(po.poNumber, { date: po.poDate || '', vendor: po.poCompanyName || '' })
     }
   }
 
@@ -152,18 +195,32 @@ export async function getCostControlData(f: CostControlFilter = {}): Promise<Pro
   const purSvcByPrj = new Map<string, number>()
   const countPurMatByPrj = new Map<string, number>()
   const countPurSvcByPrj = new Map<string, number>()
+  const purchasingItemsByPrj = new Map<string, Array<{ date: string; description: string; type: 'Material' | 'Service'; poNumber: string; vendor: string; amount: number }>>()
+
   for (const pol of polines) {
-    if (!validPos.has(pol.polPoNumber)) continue
+    const poInfo = validPos.get(pol.polPoNumber)
+    if (!poInfo) continue
     const prjId = pol.polPrjId
     if (!prjId) continue
 
-    if (isMaterial(pol.polItemTypeId)) {
+    const type = isMaterial(pol.polItemTypeId) ? 'Material' : 'Service'
+    if (type === 'Material') {
       purMatByPrj.set(prjId, (purMatByPrj.get(prjId) || 0) + pol.polTotal)
       countPurMatByPrj.set(prjId, (countPurMatByPrj.get(prjId) || 0) + 1)
     } else {
       purSvcByPrj.set(prjId, (purSvcByPrj.get(prjId) || 0) + pol.polTotal)
       countPurSvcByPrj.set(prjId, (countPurSvcByPrj.get(prjId) || 0) + 1)
     }
+
+    if (!purchasingItemsByPrj.has(prjId)) purchasingItemsByPrj.set(prjId, [])
+    purchasingItemsByPrj.get(prjId)!.push({
+      date: poInfo.date,
+      description: pol.polItemName || '',
+      type,
+      poNumber: pol.polPoNumber,
+      vendor: poInfo.vendor,
+      amount: pol.polTotal
+    })
   }
 
   // Aggregate Reimburse (Cash Out)
@@ -171,19 +228,31 @@ export async function getCostControlData(f: CostControlFilter = {}): Promise<Pro
   const reimSvcByPrj = new Map<string, number>()
   const countReimMatByPrj = new Map<string, number>()
   const countReimSvcByPrj = new Map<string, number>()
+  const reimburseItemsByPrj = new Map<string, Array<{ date: string; description: string; type: 'Material' | 'Service'; requestor: string; amount: number }>>()
+
   for (const rem of financeAP.reimburseCashOut) {
-    // Only approved and not deleted
-    if (rem.reimburseStatus.toLowerCase() !== 'approved') continue
+    // Only approved (status codes: A=Approve P=Pending R=Rejected)
+    if ((rem.reimburseStatus || '').trim().toUpperCase() !== 'A') continue
     const prjId = rem.reimbursePrjIdFk
     if (!prjId) continue
 
-    if (isMaterial(rem.reimburseTypeIdFk)) {
+    const type = isMaterial(rem.reimburseTypeIdFk) ? 'Material' : 'Service'
+    if (type === 'Material') {
       reimMatByPrj.set(prjId, (reimMatByPrj.get(prjId) || 0) + rem.reimburseAmount)
       countReimMatByPrj.set(prjId, (countReimMatByPrj.get(prjId) || 0) + 1)
     } else {
       reimSvcByPrj.set(prjId, (reimSvcByPrj.get(prjId) || 0) + rem.reimburseAmount)
       countReimSvcByPrj.set(prjId, (countReimSvcByPrj.get(prjId) || 0) + 1)
     }
+
+    if (!reimburseItemsByPrj.has(prjId)) reimburseItemsByPrj.set(prjId, [])
+    reimburseItemsByPrj.get(prjId)!.push({
+      date: rem.reimburseDate || '',
+      description: rem.reimburseDescription || '',
+      type,
+      requestor: rem.reimburseUserName || '',
+      amount: rem.reimburseAmount
+    })
   }
 
   // Final mapping
@@ -194,6 +263,10 @@ export async function getCostControlData(f: CostControlFilter = {}): Promise<Pro
     const purSvc = purSvcByPrj.get(pId) || 0
     const reimSvc = reimSvcByPrj.get(pId) || 0
     const meal = mealByPrj.get(pId) || 0
+
+    const peUser = prj.prjPePic ? salesUsers.find(u => u.userId === prj.prjPePic) : null
+    const pePicName = peUser ? peUser.name : prj.prjPePic || ''
+    const peTeamName = prj.prjPeSiteId || ''
 
     return {
       prjId: pId,
@@ -219,10 +292,15 @@ export async function getCostControlData(f: CostControlFilter = {}): Promise<Pro
       overtimeHours: overtimeByPrj.get(pId) || 0,
       reportCount: reportCountByPrj.get(pId) || 0,
       reportHours: reportHoursByPrj.get(pId) || 0,
+      
+      pePicName,
+      peTeamName,
+      purchasingItems: purchasingItemsByPrj.get(pId) || [],
+      reimburseItems: reimburseItemsByPrj.get(pId) || [],
+      overtimeItems: overtimeItemsByPrj.get(pId) || [],
+      reportItems: reportItemsByPrj.get(pId) || [],
     }
   })
 
-  // Optionally sort by something (e.g. recent projects or largest budget)
-  // return result.sort((a, b) => (b.budgetMaterial + b.budgetService) - (a.budgetMaterial + a.budgetService))
   return result.filter(r => (r.budgetMaterial + r.budgetService) > 0 || (r.spentMaterial + r.spentService) > 0)
 }

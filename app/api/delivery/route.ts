@@ -4,7 +4,7 @@ import {
   loadOrdersRefMaps, getPeStatusLabelSync,
 } from '@/database'
 import { getSalesUserNamesMap } from '@/database/repos/sales-users'
-import { parseDashboardParams } from '@/lib/api-helpers'
+import { parseDashboardParams, applyChartFilter } from '@/lib/api-helpers'
 import { parseDate, formatMonth, sortByPeriod, parseMulti } from '@/lib/utils-date-currency'
 import {
   benchmarkStart, benchmarkEnd, buildLogMaps, actualStart, actualEnd, dayVariance,
@@ -96,6 +96,27 @@ export async function GET(request: NextRequest) {
     if (type.length) filtered = filtered.filter((r) => type.includes(r.type))
     if (delivery.length) filtered = filtered.filter((r) => delivery.includes(r.delivery))
 
+    // Lateness bucket for a delivered project (null = pending, excluded from the chart).
+    const bucketOf = (r: (typeof enriched)[number]): string | null => {
+      if (r.delivery === 'pending') return null
+      const v = r.endVariance
+      if (v == null) return r.delivery === 'overtime' ? '1–7d late' : 'On time'
+      if (v < 0) return 'Early'
+      if (v === 0) return 'On time'
+      if (v <= 7) return '1–7d late'
+      if (v <= 30) return '8–30d late'
+      return '>30d late'
+    }
+
+    // Chart cross-filter (cType/cVal from a chart click) — same semantics as sales overview:
+    // applied after the standard filters so KPIs, charts, and tables all reflect the click.
+    filtered = applyChartFilter(searchParams, filtered, {
+      delivery: (r, v) => r.deliveryLabel === v,
+      status: (r, v) => r.statusLabel === v,
+      createdMonth: (r, v) => formatMonth(r.createdAt) === v,
+      lateness: (r, v) => bucketOf(r) === v,
+    })
+
     // ── KPIs ──
     const totalProjects = filtered.length
     const onTime = filtered.filter((r) => r.delivery === 'onTime').length
@@ -120,17 +141,10 @@ export async function GET(request: NextRequest) {
     const statusBreakdown = Object.entries(statusAgg).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value)
 
     // ── Lateness distribution (BAST submit − due, for delivered projects) ──
-    const buckets = { Early: 0, 'On time': 0, '1–7d late': 0, '8–30d late': 0, '>30d late': 0 }
+    const buckets: Record<string, number> = { Early: 0, 'On time': 0, '1–7d late': 0, '8–30d late': 0, '>30d late': 0 }
     for (const r of filtered) {
-      if (r.delivery === 'pending') continue
-      const v = r.endVariance
-      // fall back to delivery status when endVariance can't be computed
-      if (v == null) { if (r.delivery === 'overtime') buckets['1–7d late']++; else buckets['On time']++; continue }
-      if (v < 0) buckets.Early++
-      else if (v === 0) buckets['On time']++
-      else if (v <= 7) buckets['1–7d late']++
-      else if (v <= 30) buckets['8–30d late']++
-      else buckets['>30d late']++
+      const b = bucketOf(r)
+      if (b) buckets[b]++
     }
     const latenessDist = Object.entries(buckets).map(([name, value]) => ({ name, value }))
 

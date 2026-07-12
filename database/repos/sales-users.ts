@@ -6,11 +6,13 @@ import type { SalesUser, SalesRole, Departement } from '../types'
 let userCache: Map<string, SalesUser> | null = null
 let roleCache: Map<string, string> | null = null
 let deptCache: Map<string, string> | null = null
+let teamCache: Map<string, string> | null = null
 
 registerCacheClearCallback(() => {
   userCache = null
   roleCache = null
   deptCache = null
+  teamCache = null
 })
 
 async function loadCache() {
@@ -19,10 +21,11 @@ async function loadCache() {
   const ssId = GOOGLE_CONFIG.salesUsers.spreadsheetId
   const s = GOOGLE_CONFIG.salesUsers.sheets
 
-  const [userRows, roleRows, deptRows] = await Promise.all([
+  const [userRows, roleRows, deptRows, teamRows] = await Promise.all([
     fetchAllRows(ssId, s.users),
     fetchAllRows(ssId, s.roles),
     fetchAllRows(ssId, s.departements),
+    fetchAllRows(ssId, s.teams || 'teams'),
   ])
 
   userCache = new Map()
@@ -42,6 +45,17 @@ async function loadCache() {
     const d = mapDepartement(row)
     if (d.departementId) deptCache.set(d.departementId, d.departementName)
   }
+
+  teamCache = new Map()
+  for (const row of teamRows.rows) {
+    const id = row[0] || ''
+    const name = row[1] || ''
+    if (id) teamCache.set(id, name)
+  }
+}
+
+export function getTeamNameSync(teamId: string): string {
+  return teamCache?.get(teamId) || teamId
 }
 
 export async function getSalesUserNamesMap(userIds: Set<string>): Promise<Map<string, string>> {

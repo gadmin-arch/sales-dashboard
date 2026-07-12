@@ -6,6 +6,7 @@ import { getAllPoLines, getAllPurchaseOrders } from './procurement'
 import { getFinanceAPData } from './finance-ap'
 import { getAllReports } from './reports'
 import { isMaterial, CostControlFilter } from './cost-control'
+import { getAllSalesUsers, getTeamNameSync } from './sales-users'
 
 export interface ProjectDashboardData {
   prjId: string
@@ -21,6 +22,9 @@ export interface ProjectDashboardData {
   overtimeHours: number
   reportCount: number
   reportHours: number
+
+  pePicName: string
+  peTeamName: string
 }
 
 export async function getProjectDashboardData(f: CostControlFilter = {}): Promise<ProjectDashboardData[]> {
@@ -32,7 +36,8 @@ export async function getProjectDashboardData(f: CostControlFilter = {}): Promis
     reports,
     overtimeRes,
     mbdRes,
-    mbRes
+    mbRes,
+    salesUsers
   ] = await Promise.all([
     getAllOrders(),
     getAllPurchaseOrders(),
@@ -42,6 +47,7 @@ export async function getProjectDashboardData(f: CostControlFilter = {}): Promis
     fetchAllRows(GOOGLE_CONFIG.reports.overtimeSpreadsheetId, GOOGLE_CONFIG.reports.sheets.overtimes),
     fetchAllRows(GOOGLE_CONFIG.payroll.spreadsheetId, 'meal_benefit_details'),
     fetchAllRows(GOOGLE_CONFIG.payroll.spreadsheetId, 'meal_benefits'),
+    getAllSalesUsers(),
   ])
 
   // Apply filters to projects first
@@ -61,6 +67,12 @@ export async function getProjectDashboardData(f: CostControlFilter = {}): Promis
   if (f.projectFlag && f.projectFlag.length > 0) {
     projects = projects.filter(p => f.projectFlag!.includes(p.prjFlag))
   }
+  if (f.pePic && f.pePic.length > 0) {
+    projects = projects.filter(p => f.pePic!.includes(p.prjPePic || ''))
+  }
+  if (f.peTeam && f.peTeam.length > 0) {
+    projects = projects.filter(p => f.peTeam!.some(team => (p.prjPeSiteId || '').split(',').map(s => s.trim()).includes(team)))
+  }
   if (f.dateFrom && f.dateTo) {
     const fromTime = new Date(f.dateFrom).getTime()
     const toTime = new Date(f.dateTo).getTime()
@@ -75,26 +87,27 @@ export async function getProjectDashboardData(f: CostControlFilter = {}): Promis
 
   const validMbs = new Set<string>()
   for (const r of mbRes.rows) {
-    if (!r[0] || r[0] === 'mb_id' || r[15]) continue // deleted
+    if (!r[0] || r[0] === 'mb_id' || r[27]) continue // deleted_at is col 27
     validMbs.add(r[0])
   }
 
   // Aggregate Meals
+  // mbd cols: 1 mbd_mb_id, 2 mbd_start_date, 6 mbd_approved, 7 mbd_project_id,
+  // 8 mbd_notes, 10 mbd_date, 14 mbd_user_name, 20 deleted_at
   const mealItemsByPrj = new Map<string, Array<{ date: string; description: string; requestor: string; amount: number }>>()
   for (const r of mbdRes.rows) {
-    if (!r[0] || r[0] === 'mbd_id' || r[8]) continue // deleted
-    if ((r[9] || '').toLowerCase() !== 'approved') continue
+    if (!r[0] || r[0] === 'mbd_id' || r[20]) continue // deleted
     const mbId = r[1]
     if (!validMbs.has(mbId)) continue
-    
+
     const prjId = r[7]
     if (!prjId) continue
 
     if (!mealItemsByPrj.has(prjId)) mealItemsByPrj.set(prjId, [])
     mealItemsByPrj.get(prjId)!.push({
-      date: r[4] || '',
-      description: r[3] || 'Meal Benefit',
-      requestor: r[2] || '',
+      date: r[10] || r[2] || '',
+      description: r[8] || 'Meal Benefit',
+      requestor: r[14] || '',
       amount: parseNum(r[6])
     })
   }
@@ -103,8 +116,8 @@ export async function getProjectDashboardData(f: CostControlFilter = {}): Promis
   const overtimeByPrj = new Map<string, number>()
   for (const r of overtimeRes.rows) {
     if (!r[0] || r[0] === 'overtime_id' || r[13]) continue
-    const status = (r[9] || '').toLowerCase()
-    if (status !== 'approved' && status !== 'pending') continue
+    const status = (r[9] || '').trim().toUpperCase() // A=Approved P=Pending R=Rejected
+    if (status !== 'A' && status !== 'P') continue
     const prjId = r[14]
     if (!prjId) continue
     overtimeByPrj.set(prjId, (overtimeByPrj.get(prjId) || 0) + parseNum(r[6]))
@@ -147,7 +160,7 @@ export async function getProjectDashboardData(f: CostControlFilter = {}): Promis
   // Aggregate Reimburse
   const reimburseItemsByPrj = new Map<string, Array<{ date: string; description: string; type: string; requestor: string; amount: number }>>()
   for (const rem of financeAP.reimburseCashOut) {
-    if (rem.reimburseStatus.toLowerCase() !== 'approved') continue
+    if ((rem.reimburseStatus || '').trim().toUpperCase() !== 'A') continue // A=Approve
     const prjId = rem.reimbursePrjIdFk
     if (!prjId) continue
 
@@ -177,6 +190,10 @@ export async function getProjectDashboardData(f: CostControlFilter = {}): Promis
     const spentTotal = purTotal + remTotal + mTotal
     const utilizationPct = budgetTotal > 0 ? (spentTotal / budgetTotal) * 100 : (spentTotal > 0 ? 100 : 0)
 
+    const peUser = prj.prjPePic ? salesUsers.find(u => u.userId === prj.prjPePic) : null
+    const pePicName = peUser ? peUser.name : prj.prjPePic || ''
+    const peTeamName = prj.prjPeSiteId || ''
+
     // Omit amount fields for the frontend so it's impossible to show them by mistake
     const safePurItems = purItems.map(i => ({ date: i.date, description: i.description, type: i.type, poNumber: i.poNumber }))
     const safeRemItems = remItems.map(i => ({ date: i.date, description: i.description, type: i.type, requestor: i.requestor }))
@@ -194,6 +211,8 @@ export async function getProjectDashboardData(f: CostControlFilter = {}): Promis
       overtimeHours: overtimeByPrj.get(pId) || 0,
       reportCount: reportCountByPrj.get(pId) || 0,
       reportHours: reportHoursByPrj.get(pId) || 0,
+      pePicName,
+      peTeamName,
     }
   })
 

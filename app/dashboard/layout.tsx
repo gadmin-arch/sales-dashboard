@@ -4,7 +4,7 @@ import { useAuth } from '@/lib/auth-context'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState, type ReactNode } from 'react'
 import Link from 'next/link'
-import { BarChart3, FileText, CreditCard, FolderOpen, LogOut, Menu, X, ListTodo, Users, Lock, ClipboardList, ShoppingCart, Store, Loader2, CalendarClock, ClipboardCheck } from 'lucide-react'
+import { BarChart3, FileText, CreditCard, FolderOpen, LogOut, Menu, X, ListTodo, Users, Lock, ClipboardList, ShoppingCart, Store, Loader2, CalendarClock, ClipboardCheck, Banknote, Gauge } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { NAV, navItemForPath, firstAllowedHref, type Roles } from '@/lib/nav'
 
@@ -23,6 +23,8 @@ const ICONS: Record<string, ReactNode> = {
   '/dashboard/purchasing/requests': <ClipboardList className="h-4 w-4" />,
   '/dashboard/purchasing/orders': <ShoppingCart className="h-4 w-4" />,
   '/dashboard/purchasing/vendors': <Store className="h-4 w-4" />,
+  '/dashboard/payroll': <Banknote className="h-4 w-4" />,
+  '/dashboard/cost-control': <Gauge className="h-4 w-4" />,
 }
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {

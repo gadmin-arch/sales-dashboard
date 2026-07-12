@@ -49,6 +49,8 @@ export function mapOrder(row: string[]): Order {
     createdBy: row[42] || '',
     createdAt: row[43] || '',
     deletedAt: row[46] || '',
+    prjPePic: row[30] || '',
+    prjPeSiteId: row[29] || '',
   }
 }
 

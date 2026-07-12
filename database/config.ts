@@ -23,6 +23,7 @@ export const GOOGLE_CONFIG = {
       users: 'users',
       roles: 'roles',
       departements: 'departements',
+      teams: 'teams',
     },
   },
 

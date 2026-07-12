@@ -3,8 +3,8 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { KPICard } from '@/components/kpi-card'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table'
-import { FileText, Clock, Users, Timer, Star, CalendarCheck } from 'lucide-react'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { FileText, Clock, Users, Timer, Star, CalendarCheck, Briefcase, X } from 'lucide-react'
 import { SalesPageShell } from '@/components/theme-toggle'
 import { MultiSelect } from '@/components/multi-select'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -18,18 +18,29 @@ import { DonutChart } from '@/components/donut-chart'
 import { ChartContainer, ChartLegend, ChartLegendContent } from '@/components/ui/chart'
 import { ComposedChart, Bar, Line, BarChart, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts'
 import { buildQuery, sameSet, getYTD } from '@/lib/sales-helpers'
+import { useChartFilter } from '@/hooks/use-chart-filter'
 
 interface Option { value: string; label: string }
 interface WorkerRow {
   userId: string; worker: string; reports: number; hours: number; overtime: number
   uniqueDays: number; avgDelayHours: number; sameDayPct: number; avgScore: number
+  uniqueProjectsCount: number; overdueProjectsCount: number
+  projectsWorked: Array<{ projectId: string; project: string; overdueStatus: string; isOverdue: boolean; overdueDays: number }>
 }
 interface ProjectRow {
   projectId: string; project: string; hours: number; overtime: number
   reports: number; workers: number; latestProgress: number | null
+  plannedStart: string; plannedEnd: string
+  actualStart: string; actualEnd: string
+  overdueStatus: string; isOverdue: boolean; overdueDays: number
 }
 interface ReportsData {
-  kpis: { totalReports: number; totalHours: number; totalOvertime: number; activeWorkers: number; avgDelayHours: number; medianDelayHours: number; sameDayRate: number; avgScore: number }
+  kpis: { 
+    totalReports: number; totalHours: number; totalOvertime: number; 
+    activeWorkers: number; avgDelayHours: number; medianDelayHours: number; 
+    sameDayRate: number; avgScore: number; uniqueProjects: number;
+    overdueProjectsPct: number; overdueProjectsCount: number;
+  }
   scoreBreakdown: { name: string; value: number }[]
   monthlyTrend: { name: string; reports: number; hours: number }[]
   topWorkers: { name: string; value: number }[]
@@ -48,6 +59,8 @@ export default function WorkerReportsPage() {
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [projSearch, setProjSearch] = useState('')
+  const { chartFilter, setChartFilter, handleChartClick } = useChartFilter('worker-table-section')
+  const [selectedWorker, setSelectedWorker] = useState<WorkerRow | null>(null)
 
   const [dateFrom, setDateFrom] = useState(getYTD().from), [dateTo, setDateTo] = useState(getYTD().to)
   const [dateType, setDateType] = useState('report')
@@ -68,14 +81,18 @@ export default function WorkerReportsPage() {
 
   useEffect(() => {
     const fresh = firstLoad.current; firstLoad.current = false
-    doFetch({ dateFrom, dateTo, dateType, worker, project, ...(fresh ? { fresh: '1' } : {}) })
-  }, [doFetch, dateFrom, dateTo, dateType, worker, project])
+    doFetch({
+      dateFrom, dateTo, dateType, worker, project,
+      ...(chartFilter ? { cType: chartFilter.type, cVal: chartFilter.value } : {}),
+      ...(fresh ? { fresh: '1' } : {}),
+    })
+  }, [doFetch, dateFrom, dateTo, dateType, worker, project, chartFilter])
 
   const onApply = () => { setDateFrom(lFrom); setDateTo(lTo); setDateType(lDateType); setWorker(lWorker); setProject(lProject) }
   const onClear = () => {
     const d = getYTD()
     setLFrom(d.from); setLTo(d.to); setLDateType('report'); setLWorker([]); setLProject([])
-    setDateFrom(d.from); setDateTo(d.to); setDateType('report'); setWorker([]); setProject([])
+    setDateFrom(d.from); setDateTo(d.to); setDateType('report'); setWorker([]); setProject([]); setChartFilter(null)
   }
   const hasUnapplied = lFrom !== dateFrom || lTo !== dateTo || lDateType !== dateType || !sameSet(lWorker, worker) || !sameSet(lProject, project)
 
@@ -105,7 +122,7 @@ export default function WorkerReportsPage() {
   return (
     <SalesPageShell>
       <div className="space-y-6">
-        <PageHeader title="Worker Reports" subtitle="PT. Multi Daya Mitra — field & site daily reports" />
+        <PageHeader title="Worker Reports" subtitle="PT. Multi Daya Mitra — field & site daily reports" chartFilter={chartFilter} onClearFilter={() => setChartFilter(null)} />
 
         <FilterCard from={lFrom} to={lTo} onDateChange={(f, t) => { setLFrom(f); setLTo(t) }} onApply={onApply} onClear={onClear} hasUnapplied={hasUnapplied} loading={loading && !!data}>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 items-start">
@@ -126,10 +143,11 @@ export default function WorkerReportsPage() {
         </FilterCard>
 
         {/* KPIs */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-6">
           <KPICard title="Total Reports" value={k.totalReports.toLocaleString('en-US')} icon={<FileText className="h-4 w-4" />} />
           <KPICard title="Total Hours" value={`${k.totalHours.toLocaleString('en-US')}h`} icon={<Clock className="h-4 w-4 text-sky-500" />} trend={{ value: `${k.totalOvertime.toLocaleString('en-US')}h OT`, label: 'overtime', positive: false }} />
           <KPICard title="Active Workers" value={k.activeWorkers.toLocaleString('en-US')} icon={<Users className="h-4 w-4 text-violet-500" />} />
+          <KPICard title="Unique Projects" value={k.uniqueProjects.toLocaleString('en-US')} icon={<Briefcase className="h-4 w-4 text-indigo-500" />} trend={{ value: `${k.overdueProjectsPct}% Overdue`, label: `(${k.overdueProjectsCount} projs)`, positive: false }} />
           <KPICard title="Avg. Reporting Delay" value={fmtDelay(k.avgDelayHours)} icon={<Timer className="h-4 w-4 text-amber-500" />} tooltip="Time from end of the report day to when it was submitted. Floored at 0 (same-day = 0)." trend={{ value: `${k.sameDayRate}%`, label: 'same-day', positive: true }} />
           <KPICard title="Avg. Discipline Score" value={`${k.avgScore.toFixed(2)} / 4`} icon={<Star className="h-4 w-4 text-emerald-500" />} tooltip="From reporting delay: ≤2d=4, 2–7d=3, 7–30d=2, >30d=1." />
         </div>
@@ -147,7 +165,7 @@ export default function WorkerReportsPage() {
                   <YAxis yAxisId="right" orientation="right" {...axis} axisLine={false} />
                   <Tooltip contentStyle={{ background: 'var(--background)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }} />
                   <ChartLegend content={<ChartLegendContent />} />
-                  <Bar yAxisId="left" dataKey="hours" fill="var(--color-hours)" radius={[4, 4, 0, 0]} />
+                  <Bar yAxisId="left" dataKey="hours" fill="var(--color-hours)" radius={[4, 4, 0, 0]} onClick={(d: any) => handleChartClick('month', String(d.name ?? ''), `Month = ${d.name}`)} style={{ cursor: 'pointer' }} />
                   <Line yAxisId="right" dataKey="reports" stroke="var(--color-reports)" strokeWidth={2} dot={false} />
                 </ComposedChart>
               </ChartContainer>
@@ -156,7 +174,7 @@ export default function WorkerReportsPage() {
           <Card>
             <CardHeader><CardTitle className="text-sm font-semibold">Discipline Score Mix</CardTitle></CardHeader>
             <CardContent>
-              <DonutChart data={data.scoreBreakdown} height={280} />
+              <DonutChart data={data.scoreBreakdown} height={280} onSliceClick={(name) => handleChartClick('score', name, `Score = ${name}`)} />
             </CardContent>
           </Card>
         </div>
@@ -170,14 +188,14 @@ export default function WorkerReportsPage() {
                 <XAxis type="number" {...axis} axisLine={false} />
                 <YAxis type="category" dataKey="name" {...axis} width={130} axisLine={false} />
                 <Tooltip contentStyle={{ background: 'var(--background)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }} formatter={(v: any) => [`${Number(v).toLocaleString('en-US')}h`, 'Hours']} />
-                <Bar dataKey="value" fill="var(--chart-1)" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="value" fill="var(--chart-1)" radius={[0, 4, 4, 0]} onClick={(d: any) => handleChartClick('worker', String(d.name ?? ''), `Worker = ${d.name}`)} style={{ cursor: 'pointer' }} />
               </BarChart>
             </ChartContainer>
           </CardContent>
         </Card>
 
         {/* Worker leaderboard */}
-        <Card className="overflow-hidden">
+        <Card className="overflow-hidden" id="worker-table-section">
           <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle className="text-sm font-semibold">Worker Leaderboard <span className="font-normal text-muted-foreground">({workerRows.length.toLocaleString('en-US')})</span></CardTitle>
             <SearchInput value={search} onChange={setSearch} />
@@ -187,6 +205,8 @@ export default function WorkerReportsPage() {
               <Table>
                 <TableHeader><TableRow>
                   <SortHead label="Worker" column="worker" sortKey={wSort.sortKey} sortDir={wSort.sortDir} onSort={wSort.toggle} />
+                  <SortHead label="Projects Worked" column="uniqueProjectsCount" sortKey={wSort.sortKey} sortDir={wSort.sortDir} onSort={wSort.toggle} className="text-center w-[120px]" />
+                  <SortHead label="Overdue Projs" column="overdueProjectsCount" sortKey={wSort.sortKey} sortDir={wSort.sortDir} onSort={wSort.toggle} className="text-center w-[100px]" />
                   <SortHead label="Reports" column="reports" sortKey={wSort.sortKey} sortDir={wSort.sortDir} onSort={wSort.toggle} className="text-right" />
                   <SortHead label="Hours" column="hours" sortKey={wSort.sortKey} sortDir={wSort.sortDir} onSort={wSort.toggle} className="text-right" />
                   <SortHead label="Overtime" column="overtime" sortKey={wSort.sortKey} sortDir={wSort.sortDir} onSort={wSort.toggle} className="text-right" />
@@ -196,9 +216,31 @@ export default function WorkerReportsPage() {
                   <SortHead label="Score" column="avgScore" sortKey={wSort.sortKey} sortDir={wSort.sortDir} onSort={wSort.toggle} className="text-right" />
                 </TableRow></TableHeader>
                 <TableBody>
-                  {wSort.sorted.length === 0 ? <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">No data found</TableCell></TableRow> : wPage.visible.map((w) => (
-                    <TableRow key={w.userId}>
-                      <TableCell className="font-medium text-xs">{w.worker}<span className="text-muted-foreground ml-1">({w.userId})</span></TableCell>
+                  {wSort.sorted.length === 0 ? <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground py-8">No data found</TableCell></TableRow> : wPage.visible.map((w) => (
+                    <TableRow 
+                      key={w.userId}
+                      className="cursor-pointer hover:bg-muted/50 transition-colors"
+                      onClick={() => setSelectedWorker(w)}
+                    >
+                      <TableCell className="font-medium text-xs py-2.5">
+                        <div className="font-semibold text-foreground">{w.worker}</div>
+                        <div className="text-[10px] text-muted-foreground mt-0.5">{w.userId}</div>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-primary/5 text-primary border border-primary/10 rounded-md text-xs font-semibold font-mono">
+                          <Briefcase className="h-3 w-3 text-primary/70" />
+                          {w.uniqueProjectsCount}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-center text-xs font-mono">
+                        {w.overdueProjectsCount > 0 ? (
+                          <span className="text-rose-600 dark:text-rose-400 font-bold bg-rose-500/10 px-2 py-0.5 rounded-md text-xs">
+                            {w.overdueProjectsCount}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
                       <TableCell className="text-right text-xs">{w.reports.toLocaleString('en-US')}</TableCell>
                       <TableCell className="text-right text-xs font-semibold text-primary">{w.hours.toLocaleString('en-US')}h</TableCell>
                       <TableCell className="text-right text-xs text-amber-600 dark:text-amber-400">{w.overtime.toLocaleString('en-US')}h</TableCell>
@@ -226,6 +268,9 @@ export default function WorkerReportsPage() {
               <Table>
                 <TableHeader><TableRow>
                   <SortHead label="Project" column="project" sortKey={pSort.sortKey} sortDir={pSort.sortDir} onSort={pSort.toggle} />
+                  <SortHead label="Schedule (Plan)" column="plannedEnd" sortKey={pSort.sortKey} sortDir={pSort.sortDir} onSort={pSort.toggle} className="text-left w-[140px]" />
+                  <SortHead label="Schedule (Actual/Log)" column="actualEnd" sortKey={pSort.sortKey} sortDir={pSort.sortDir} onSort={pSort.toggle} className="text-left w-[140px]" />
+                  <SortHead label="Schedule Status" column="overdueStatus" sortKey={pSort.sortKey} sortDir={pSort.sortDir} onSort={pSort.toggle} className="text-right w-[130px]" />
                   <SortHead label="Hours" column="hours" sortKey={pSort.sortKey} sortDir={pSort.sortDir} onSort={pSort.toggle} className="text-right" />
                   <SortHead label="Overtime" column="overtime" sortKey={pSort.sortKey} sortDir={pSort.sortDir} onSort={pSort.toggle} className="text-right" />
                   <SortHead label="Reports" column="reports" sortKey={pSort.sortKey} sortDir={pSort.sortDir} onSort={pSort.toggle} className="text-right" />
@@ -233,9 +278,43 @@ export default function WorkerReportsPage() {
                   <SortHead label="Latest Progress" column="latestProgress" sortKey={pSort.sortKey} sortDir={pSort.sortDir} onSort={pSort.toggle} className="text-right" />
                 </TableRow></TableHeader>
                 <TableBody>
-                  {pSort.sorted.length === 0 ? <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No data found</TableCell></TableRow> : pPage.visible.map((p) => (
+                  {pSort.sorted.length === 0 ? <TableRow><TableCell colSpan={9} className="text-center text-muted-foreground py-8">No data found</TableCell></TableRow> : pPage.visible.map((p) => (
                     <TableRow key={p.projectId}>
-                      <TableCell className="font-medium text-xs whitespace-normal break-words max-w-[240px]">{p.project}<span className="text-muted-foreground ml-1">({p.projectId})</span></TableCell>
+                      <TableCell className="font-medium text-xs whitespace-normal break-words max-w-[200px]">
+                        <div className="font-semibold text-foreground">{p.project}</div>
+                        <div className="text-[10px] text-muted-foreground uppercase font-mono mt-0.5">{p.projectId}</div>
+                      </TableCell>
+                      <TableCell className="text-left text-xs whitespace-nowrap">
+                        {p.plannedStart || p.plannedEnd ? (
+                          <div className="flex flex-col text-[10px] leading-tight">
+                            <span className="text-muted-foreground">{p.plannedStart || '-'}</span>
+                            <span className="font-semibold text-foreground mt-0.5">{p.plannedEnd || '-'}</span>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-left text-xs whitespace-nowrap">
+                        {p.actualStart || p.actualEnd ? (
+                          <div className="flex flex-col text-[10px] leading-tight">
+                            <span className="text-muted-foreground">{p.actualStart || '-'}</span>
+                            <span className="font-semibold text-foreground mt-0.5">{p.actualEnd || '-'}</span>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right text-xs">
+                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wide uppercase ${
+                          p.overdueStatus.startsWith('Overdue') 
+                            ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400' 
+                            : p.overdueStatus === 'On Time' || p.overdueStatus === 'On Track'
+                            ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                            : 'bg-muted text-muted-foreground'
+                        }`}>
+                          {p.overdueStatus} {p.isOverdue && p.overdueDays > 0 ? `(${p.overdueDays}d)` : ''}
+                        </span>
+                      </TableCell>
                       <TableCell className="text-right text-xs font-semibold text-primary">{p.hours.toLocaleString('en-US')}h</TableCell>
                       <TableCell className="text-right text-xs text-amber-600 dark:text-amber-400">{p.overtime.toLocaleString('en-US')}h</TableCell>
                       <TableCell className="text-right text-xs">{p.reports.toLocaleString('en-US')}</TableCell>
@@ -249,6 +328,82 @@ export default function WorkerReportsPage() {
             <LoadMore hasMore={pPage.hasMore} shown={pPage.shown} total={pPage.total} onClick={pPage.loadMore} onLoadAll={pPage.loadAll} onCollapse={pPage.collapse} />
           </CardContent>
         </Card>
+
+        {/* Worker Projects Modal */}
+        {selectedWorker && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-background border shadow-2xl rounded-2xl max-w-4xl w-full max-h-[85vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+              {/* Header */}
+              <div className="flex items-center justify-between px-6 py-4 border-b">
+                <div>
+                  <h2 className="text-base font-bold text-foreground">
+                    Projects Worked by {selectedWorker.worker}
+                  </h2>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    User ID: {selectedWorker.userId} • Total Unique Projects: {selectedWorker.uniqueProjectsCount}
+                  </p>
+                </div>
+                <button 
+                  onClick={() => setSelectedWorker(null)} 
+                  className="p-1.5 hover:bg-muted rounded-full transition-colors text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {/* Table */}
+              <div className="p-6 overflow-y-auto flex-1">
+                {selectedWorker.projectsWorked && selectedWorker.projectsWorked.length > 0 ? (
+                  <div className="border rounded-xl overflow-hidden bg-card">
+                    <Table className="text-xs">
+                      <TableHeader className="bg-muted/40 sticky top-0 z-10">
+                        <TableRow>
+                          <TableHead className="py-2.5">Project Name & ID</TableHead>
+                          <TableHead className="py-2.5 text-right">Schedule Status</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {selectedWorker.projectsWorked.map((pw) => (
+                          <TableRow key={pw.projectId} className="hover:bg-muted/30">
+                            <TableCell className="py-2.5 font-medium">
+                              <div className="font-semibold text-foreground">{pw.project}</div>
+                              <div className="text-[10px] text-muted-foreground uppercase font-mono mt-0.5">{pw.projectId}</div>
+                            </TableCell>
+                            <TableCell className="py-2.5 text-right">
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wide uppercase ${
+                                pw.isOverdue 
+                                  ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400' 
+                                  : pw.overdueStatus === 'On Time' || pw.overdueStatus === 'On Track'
+                                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                                  : 'bg-muted text-muted-foreground'
+                              }`}>
+                                {pw.overdueStatus} {pw.isOverdue && pw.overdueDays > 0 ? `(${pw.overdueDays}d)` : ''}
+                              </span>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ) : (
+                  <div className="text-center py-12 text-muted-foreground border border-dashed rounded-xl bg-muted/10 text-sm">
+                    No projects found for this worker
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="px-6 py-3 border-t bg-muted/20 flex justify-end">
+                <button
+                  onClick={() => setSelectedWorker(null)}
+                  className="px-4 py-1.5 bg-secondary text-secondary-foreground rounded-lg hover:bg-secondary/80 text-xs font-semibold transition-colors"
+                >
+                  Close Details
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </SalesPageShell>
   )
