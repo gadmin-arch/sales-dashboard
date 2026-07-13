@@ -73,6 +73,8 @@ export interface Order {
   prjFStatus: string
   prjInvPercent?: number
   prjPayPercent?: number
+  prjInvAmount?: number
+  prjPayAmount?: number
   prjOwner: string
   createdBy: string
   createdAt: string

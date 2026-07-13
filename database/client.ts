@@ -48,6 +48,33 @@ export async function fetchAllRows(
   if (hit && Date.now() - hit.at < SHEET_TTL_MS) return hit.promise
 
   const promise = (async (): Promise<SheetRows> => {
+    // 1. Try to fetch from Neon Postgres database cache first (only in Node.js server environment)
+    if (typeof window === 'undefined') {
+      try {
+        const { query } = require('./db')
+        const { initDatabase } = require('./init')
+        await initDatabase()
+        
+        const { rows: dbRows } = await query(
+          'SELECT headers, rows FROM sheets_cache WHERE key = $1 LIMIT 1',
+          [key]
+        )
+        
+        if (dbRows.length > 0) {
+          const parsed = {
+            headers: (typeof dbRows[0].headers === 'string' ? JSON.parse(dbRows[0].headers) : dbRows[0].headers) as string[],
+            rows: (typeof dbRows[0].rows === 'string' ? JSON.parse(dbRows[0].rows) : dbRows[0].rows) as string[][]
+          }
+          lastGood.set(key, parsed)
+          return parsed
+        }
+        console.warn(`[sheets] "${sheetName}" not found in database cache. Falling back to Google Sheets API fetch.`)
+      } catch (dbErr) {
+        console.error('[sheets] Error querying database cache, falling back to Google Sheets API:', dbErr)
+      }
+    }
+
+    // 2. Fallback to direct Google Sheets API fetch
     try {
       const data = await fetchSheet(spreadsheetId, `${sheetName}!A:ZZZ`)
       const parsed: SheetRows = data.length < 1 ? { headers: [], rows: [] } : { headers: data[0], rows: data.slice(1) }

@@ -45,6 +45,8 @@ export function mapOrder(row: string[]): Order {
     prjFStatus: row[33] || '',
     prjInvPercent: parseNum(row[34]),
     prjPayPercent: parseNum(row[36]),
+    prjInvAmount: parseNum(row[35]),
+    prjPayAmount: parseNum(row[37]),
     prjOwner: row[41] || '',
     createdBy: row[42] || '',
     createdAt: row[43] || '',

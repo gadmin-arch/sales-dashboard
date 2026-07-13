@@ -31,6 +31,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const { user, isLoading, isValidated, logout } = useAuth()
   const pathname = usePathname()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [syncing, setSyncing] = useState(false)
+  const [lastSynced, setLastSynced] = useState<string | null>(null)
 
   const roles = user?.roles as Roles | undefined
   const visibleNavItems = roles ? NAV.filter((item) => roles[item.role]) : []
@@ -40,12 +42,58 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const accessDenied = Boolean(user && currentItem && roles && !roles[currentItem.role])
   const firstAllowed = firstAllowedHref(roles)
 
+  const fetchSyncStatus = async () => {
+    try {
+      const res = await fetch('/api/sync/status')
+      const data = await res.json()
+      if (data.success && data.lastSyncTime) {
+        const date = new Date(data.lastSyncTime)
+        setLastSynced(date.toLocaleString('en-US', {
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit'
+        }))
+      }
+    } catch (e) {
+      console.error('Failed to fetch sync status', e)
+    }
+  }
+
   // Redirect to login if user is not authenticated and loading is complete
   useEffect(() => {
     if (!isLoading && isValidated && !user) {
       window.location.href = '/login'
     }
   }, [user, isLoading, isValidated])
+
+  useEffect(() => {
+    if (user) {
+      fetchSyncStatus()
+    }
+  }, [user])
+
+  const handleManualSync = async () => {
+    if (syncing) return
+    setSyncing(true)
+    try {
+      const res = await fetch('/api/sync/manual', { method: 'POST' })
+      const data = await res.json()
+      if (data.success) {
+        await fetchSyncStatus()
+        window.location.reload()
+      } else {
+        alert('Sync failed: ' + (data.error || 'Unknown error'))
+      }
+    } catch (e) {
+      console.error(e)
+      alert('Sync failed. Please check connection.')
+    } finally {
+      setSyncing(false)
+    }
+  }
 
   // Block the first paint until roles are confirmed against the server, so a stale
   // cached role can never briefly render a page the user is no longer allowed to see.
@@ -80,14 +128,64 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     </nav>
   )
 
+  const syncPanel = (
+    <div className="border-t border-border px-4 py-3 bg-muted/20">
+      <div className="flex flex-col gap-1.5">
+        <button
+          onClick={handleManualSync}
+          disabled={syncing}
+          className={cn(
+            "flex items-center justify-center gap-2 rounded-lg py-2 px-3 text-xs font-semibold shadow-sm transition-all border border-primary/10",
+            syncing
+              ? "bg-muted text-muted-foreground cursor-not-allowed"
+              : "bg-primary text-primary-foreground hover:bg-primary/95 hover:shadow cursor-pointer"
+          )}
+        >
+          {syncing ? (
+            <>
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Syncing...
+            </>
+          ) : (
+            <>
+              <CalendarClock className="h-3 w-3" />
+              Sync Google Sheets
+            </>
+          )}
+        </button>
+        {lastSynced && (
+          <span className="text-[10px] text-muted-foreground text-center font-medium mt-0.5">
+            Last updated: {lastSynced}
+          </span>
+        )}
+      </div>
+    </div>
+  )
+
   return (
-    <div className="flex h-screen bg-background overflow-hidden">
+    <div className="flex h-screen bg-background overflow-hidden relative">
+      {/* Syncing Backdrop Overlay */}
+      {syncing && (
+        <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm transition-all duration-300">
+          <div className="flex flex-col items-center gap-4 p-6 rounded-2xl bg-card border border-border shadow-2xl max-w-sm text-center">
+            <Loader2 className="h-10 w-10 animate-spin text-primary" />
+            <div>
+              <h3 className="font-semibold text-lg text-foreground">Syncing Google Sheets</h3>
+              <p className="text-sm text-muted-foreground mt-1">
+                Downloading latest data to Neon PostgreSQL. Dashboard will reload automatically when finished.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Sidebar — desktop */}
       <aside className="hidden lg:flex w-60 flex-col border-r border-border bg-card shrink-0">
         <div className="flex h-16 items-center border-b border-border px-5 shrink-0">
           <h1 className="text-lg font-semibold text-foreground">Dashboard</h1>
         </div>
         {navList()}
+        {syncPanel}
         <div className="border-t border-border p-3 shrink-0">
           <div className="flex items-center gap-3 px-2 py-2">
             {user?.picture ? (
@@ -126,6 +224,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <h1 className="text-lg font-semibold text-foreground">Dashboard</h1>
             </div>
             {navList(() => setSidebarOpen(false))}
+            {syncPanel}
             <div className="border-t border-border p-3 shrink-0">
               <button onClick={() => { logout(); setSidebarOpen(false) }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
                 <LogOut className="h-4 w-4" />

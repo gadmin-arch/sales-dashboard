@@ -268,11 +268,36 @@ export async function getCostControlData(f: CostControlFilter = {}): Promise<Pro
     const pePicName = peUser ? peUser.name : prj.prjPePic || ''
     const peTeamName = prj.prjPeSiteId || ''
 
+    const poTotal = (prj.prjPoMaterial || 0) + (prj.prjPoService || 0)
+    let budgetBase = prj.prjPoTotal || poTotal
+
+    if (prj.prjInvPercent === 100 && prj.prjInvAmount) {
+      budgetBase = prj.prjInvAmount
+    } else if (prj.prjPayPercent === 100 && prj.prjPayAmount) {
+      budgetBase = prj.prjPayAmount
+    } else if (prj.prjInvPercent && prj.prjInvPercent > 0 && prj.prjInvAmount) {
+      budgetBase = prj.prjInvAmount / (prj.prjInvPercent / 100)
+    } else if (prj.prjPayPercent && prj.prjPayPercent > 0 && prj.prjPayAmount) {
+      budgetBase = prj.prjPayAmount / (prj.prjPayPercent / 100)
+    }
+
+    let budgetMaterial = prj.prjPoMaterial || 0
+    let budgetService = prj.prjPoService || 0
+
+    if (poTotal > 0) {
+      const factor = budgetBase / poTotal
+      budgetMaterial = (prj.prjPoMaterial || 0) * factor
+      budgetService = (prj.prjPoService || 0) * factor
+    } else if (budgetBase > 0) {
+      budgetMaterial = budgetBase
+      budgetService = 0
+    }
+
     return {
       prjId: pId,
       prjName: prj.prjName,
-      budgetMaterial: prj.prjPoMaterial,
-      budgetService: prj.prjPoService,
+      budgetMaterial,
+      budgetService,
       spentMaterial: purMat + reimMat,
       spentService: purSvc + reimSvc + meal, // meal is part of service cost
       spentMeal: meal,

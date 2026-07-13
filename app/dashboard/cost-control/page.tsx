@@ -441,6 +441,7 @@ export default function CostControlPage() {
                     <SortHead label="Service Budget" column="budgetService" sortKey={sort.sortKey} sortDir={sort.sortDir} onSort={sort.toggle} className="text-right w-[110px]" />
                     <SortHead label="Service Spent" column="spentService" sortKey={sort.sortKey} sortDir={sort.sortDir} onSort={sort.toggle} className="text-right w-[110px]" />
                     <SortHead label="Svc %" column="svcPct" sortKey={sort.sortKey} sortDir={sort.sortDir} onSort={sort.toggle} className="text-right w-[70px]" />
+                    <SortHead label="Meal Spent" column="spentMeal" sortKey={sort.sortKey} sortDir={sort.sortDir} onSort={sort.toggle} className="text-right w-[110px]" />
 
                     <SortHead label="Total Budget" column="budgetTotal" sortKey={sort.sortKey} sortDir={sort.sortDir} onSort={sort.toggle} className="text-right w-[110px]" />
                     <SortHead label="Total Spent" column="spentTotal" sortKey={sort.sortKey} sortDir={sort.sortDir} onSort={sort.toggle} className="text-right w-[110px]" />
@@ -450,7 +451,7 @@ export default function CostControlPage() {
                 <TableBody>
                   {sort.sorted.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={13} className="text-center text-muted-foreground py-8">No projects found</TableCell>
+                      <TableCell colSpan={14} className="text-center text-muted-foreground py-8">No projects found</TableCell>
                     </TableRow>
                   ) : (
                     page.visible.map((d) => {
@@ -494,6 +495,7 @@ export default function CostControlPage() {
                               {d.svcPct > 0 ? `${d.svcPct.toFixed(0)}%` : '-'}
                             </span>
                           </TableCell>
+                          <TableCell className="text-right font-mono font-medium text-foreground">{d.spentMeal > 0 ? fmtRp(d.spentMeal) : '-'}</TableCell>
 
                           {/* Total */}
                           <TableCell className="text-right font-mono text-muted-foreground bg-muted/10 font-semibold">{fmtRp(d.budgetTotal)}</TableCell>

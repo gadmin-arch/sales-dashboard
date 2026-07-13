@@ -11,13 +11,13 @@ import { getAllSalesUsers, getTeamNameSync } from './sales-users'
 export interface ProjectDashboardData {
   prjId: string
   prjName: string
-  budgetTotal: number
-  spentTotal: number
-  utilizationPct: number
+  reimburseMaterialSpent: number
+  reimburseServiceSpent: number
+  mealSpent: number
   
   purchasingItems: Array<{ date: string; description: string; type: string; poNumber: string }>
-  reimburseItems: Array<{ date: string; description: string; type: string; requestor: string }>
-  mealItems: Array<{ date: string; description: string; requestor: string }>
+  reimburseItems: Array<{ date: string; description: string; type: string; requestor: string; amount: number }>
+  mealItems: Array<{ date: string; description: string; requestor: string; amount: number }>
 
   overtimeHours: number
   reportCount: number
@@ -181,30 +181,31 @@ export async function getProjectDashboardData(f: CostControlFilter = {}): Promis
     const remItems = reimburseItemsByPrj.get(pId) || []
     const mItems = mealItemsByPrj.get(pId) || []
     
-    const budgetTotal = (prj.prjPoMaterial || 0) + (prj.prjPoService || 0)
-    
-    const purTotal = purItems.reduce((sum, item) => sum + item.amount, 0)
-    const remTotal = remItems.reduce((sum, item) => sum + item.amount, 0)
-    const mTotal = mItems.reduce((sum, item) => sum + item.amount, 0)
-    
-    const spentTotal = purTotal + remTotal + mTotal
-    const utilizationPct = budgetTotal > 0 ? (spentTotal / budgetTotal) * 100 : (spentTotal > 0 ? 100 : 0)
+    const reimburseMaterialSpent = remItems
+      .filter(item => item.type === 'Material')
+      .reduce((sum, item) => sum + item.amount, 0)
+    const reimburseServiceSpent = remItems
+      .filter(item => item.type === 'Service')
+      .reduce((sum, item) => sum + item.amount, 0)
+    const mealSpent = mItems.reduce((sum, item) => sum + item.amount, 0)
 
     const peUser = prj.prjPePic ? salesUsers.find(u => u.userId === prj.prjPePic) : null
     const pePicName = peUser ? peUser.name : prj.prjPePic || ''
     const peTeamName = prj.prjPeSiteId || ''
 
-    // Omit amount fields for the frontend so it's impossible to show them by mistake
+    // Omit amount fields for purchasing POs so they are never exposed
     const safePurItems = purItems.map(i => ({ date: i.date, description: i.description, type: i.type, poNumber: i.poNumber }))
-    const safeRemItems = remItems.map(i => ({ date: i.date, description: i.description, type: i.type, requestor: i.requestor }))
-    const safeMealItems = mItems.map(i => ({ date: i.date, description: i.description, requestor: i.requestor }))
+    
+    // Keep amounts for reimbursements and meals as requested
+    const safeRemItems = remItems.map(i => ({ date: i.date, description: i.description, type: i.type, requestor: i.requestor, amount: i.amount }))
+    const safeMealItems = mItems.map(i => ({ date: i.date, description: i.description, requestor: i.requestor, amount: i.amount }))
 
     return {
       prjId: pId,
       prjName: prj.prjName,
-      budgetTotal,
-      spentTotal,
-      utilizationPct,
+      reimburseMaterialSpent,
+      reimburseServiceSpent,
+      mealSpent,
       purchasingItems: safePurItems,
       reimburseItems: safeRemItems,
       mealItems: safeMealItems,
@@ -216,5 +217,11 @@ export async function getProjectDashboardData(f: CostControlFilter = {}): Promis
     }
   })
 
-  return result.filter(r => r.budgetTotal > 0 || r.spentTotal > 0)
+  return result.filter(r => 
+    r.reimburseMaterialSpent > 0 || 
+    r.reimburseServiceSpent > 0 || 
+    r.mealSpent > 0 || 
+    r.overtimeHours > 0 || 
+    r.reportCount > 0
+  )
 }
