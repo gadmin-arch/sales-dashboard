@@ -11,11 +11,16 @@ import { getAllSalesUsers, getTeamNameSync } from './sales-users'
 export interface ProjectDashboardData {
   prjId: string
   prjName: string
+  budgetMaterial: number
+  budgetService: number
+  budgetTotal: number
+  spentMaterial: number
+  spentService: number
+  spentMeal: number
   reimburseMaterialSpent: number
   reimburseServiceSpent: number
-  mealSpent: number
   
-  purchasingItems: Array<{ date: string; description: string; type: string; poNumber: string }>
+  purchasingItems: Array<{ date: string; description: string; type: string; poNumber: string; pctOfOrder: number }>
   reimburseItems: Array<{ date: string; description: string; type: string; requestor: string; amount: number }>
   mealItems: Array<{ date: string; description: string; requestor: string; amount: number }>
 
@@ -135,40 +140,66 @@ export async function getProjectDashboardData(f: CostControlFilter = {}): Promis
 
   // Aggregate Purchasing POs
   const validPos = new Map<string, string>() // poNumber -> poDate
+  const poInfoByNumber = new Map<string, { vendor: string }>()
   for (const po of pos) {
     if (!po.poStatus.toLowerCase().includes('cancel') && !po.poStatus.toLowerCase().includes('reject')) {
       validPos.set(po.poNumber, po.poDate)
+      poInfoByNumber.set(po.poNumber, { vendor: po.poVendorName })
     }
   }
 
+  const purMatByPrj = new Map<string, number>()
+  const purSvcByPrj = new Map<string, number>()
   const purchasingItemsByPrj = new Map<string, Array<{ date: string; description: string; type: string; poNumber: string; amount: number }>>()
+  
   for (const pol of polines) {
     if (!validPos.has(pol.polPoNumber)) continue
     const prjId = pol.polPrjId
     if (!prjId) continue
+
+    const amount = pol.polTotal
+    const isMat = isMaterial(pol.polItemTypeId)
+    const type = isMat ? 'Material' : 'Service'
+
+    if (isMat) {
+      purMatByPrj.set(prjId, (purMatByPrj.get(prjId) || 0) + amount)
+    } else {
+      purSvcByPrj.set(prjId, (purSvcByPrj.get(prjId) || 0) + amount)
+    }
     
     if (!purchasingItemsByPrj.has(prjId)) purchasingItemsByPrj.set(prjId, [])
     purchasingItemsByPrj.get(prjId)!.push({
       date: validPos.get(pol.polPoNumber) || '',
       description: pol.polItemName || '',
-      type: isMaterial(pol.polItemTypeId) ? 'Material' : 'Service',
+      type,
       poNumber: pol.polPoNumber,
-      amount: pol.polTotal
+      amount
     })
   }
 
   // Aggregate Reimburse
+  const reimMatByPrj = new Map<string, number>()
+  const reimSvcByPrj = new Map<string, number>()
   const reimburseItemsByPrj = new Map<string, Array<{ date: string; description: string; type: string; requestor: string; amount: number }>>()
   for (const rem of financeAP.reimburseCashOut) {
     if ((rem.reimburseStatus || '').trim().toUpperCase() !== 'A') continue // A=Approve
     const prjId = rem.reimbursePrjIdFk
     if (!prjId) continue
 
+    const isMat = isMaterial(rem.reimburseTypeIdFk)
+    const type = isMat ? 'Material' : 'Service'
+
+    if (isMat) {
+      reimMatByPrj.set(prjId, (reimMatByPrj.get(prjId) || 0) + rem.reimburseAmount)
+    } else {
+      reimSvcByPrj.set(prjId, (reimSvcByPrj.get(prjId) || 0) + rem.reimburseAmount)
+    }
+
     if (!reimburseItemsByPrj.has(prjId)) reimburseItemsByPrj.set(prjId, [])
     reimburseItemsByPrj.get(prjId)!.push({
       date: rem.reimburseDate || '',
       description: rem.reimburseDescription || '',
-      type: isMaterial(rem.reimburseTypeIdFk) ? 'Material' : 'Service',
+      type,
       requestor: rem.reimburseUserName || '',
       amount: rem.reimburseAmount
     })
@@ -177,35 +208,73 @@ export async function getProjectDashboardData(f: CostControlFilter = {}): Promis
   // Final mapping
   const result: ProjectDashboardData[] = projects.map(prj => {
     const pId = prj.prjId
+    const purMat = purMatByPrj.get(pId) || 0
+    const reimMat = reimMatByPrj.get(pId) || 0
+    const purSvc = purSvcByPrj.get(pId) || 0
+    const reimSvc = reimSvcByPrj.get(pId) || 0
+    const meal = mealByPrj.get(pId) || 0
+
     const purItems = purchasingItemsByPrj.get(pId) || []
     const remItems = reimburseItemsByPrj.get(pId) || []
     const mItems = mealItemsByPrj.get(pId) || []
     
-    const reimburseMaterialSpent = remItems
-      .filter(item => item.type === 'Material')
-      .reduce((sum, item) => sum + item.amount, 0)
-    const reimburseServiceSpent = remItems
-      .filter(item => item.type === 'Service')
-      .reduce((sum, item) => sum + item.amount, 0)
-    const mealSpent = mItems.reduce((sum, item) => sum + item.amount, 0)
+    const reimburseMaterialSpent = reimMat
+    const reimburseServiceSpent = reimSvc
 
     const peUser = prj.prjPePic ? salesUsers.find(u => u.userId === prj.prjPePic) : null
     const pePicName = peUser ? peUser.name : prj.prjPePic || ''
     const peTeamName = prj.prjPeSiteId || ''
 
-    // Omit amount fields for purchasing POs so they are never exposed
-    const safePurItems = purItems.map(i => ({ date: i.date, description: i.description, type: i.type, poNumber: i.poNumber }))
+    const poTotal = (prj.prjPoMaterial || 0) + (prj.prjPoService || 0)
+    let budgetBase = prj.prjPoTotal || poTotal
+
+    if (prj.prjInvPercent === 100 && prj.prjInvAmount) {
+      budgetBase = prj.prjInvAmount
+    } else if (prj.prjPayPercent === 100 && prj.prjPayAmount) {
+      budgetBase = prj.prjPayAmount
+    } else if (prj.prjInvPercent && prj.prjInvPercent > 0 && prj.prjInvAmount) {
+      budgetBase = prj.prjInvAmount / (prj.prjInvPercent / 100)
+    } else if (prj.prjPayPercent && prj.prjPayPercent > 0 && prj.prjPayAmount) {
+      budgetBase = prj.prjPayAmount / (prj.prjPayPercent / 100)
+    }
+
+    let budgetMaterial = prj.prjPoMaterial || 0
+    let budgetService = prj.prjPoService || 0
+
+    if (poTotal > 0) {
+      const factor = budgetBase / poTotal
+      budgetMaterial = (prj.prjPoMaterial || 0) * factor
+      budgetService = (prj.prjPoService || 0) * factor
+    } else if (budgetBase > 0) {
+      budgetMaterial = budgetBase
+      budgetService = 0
+    }
+    const budgetTotal = budgetMaterial + budgetService
+
+    // Omit amount fields for purchasing POs so they are never exposed, returning only pctOfOrder
+    const safePurItems = purItems.map(i => ({
+      date: i.date,
+      description: i.description,
+      type: i.type,
+      poNumber: i.poNumber,
+      pctOfOrder: budgetTotal > 0 ? (i.amount / budgetTotal) * 100 : 0
+    }))
     
-    // Keep amounts for reimbursements and meals as requested
+    // Keep amounts for reimbursements and meals
     const safeRemItems = remItems.map(i => ({ date: i.date, description: i.description, type: i.type, requestor: i.requestor, amount: i.amount }))
     const safeMealItems = mItems.map(i => ({ date: i.date, description: i.description, requestor: i.requestor, amount: i.amount }))
 
     return {
       prjId: pId,
       prjName: prj.prjName,
+      budgetMaterial,
+      budgetService,
+      budgetTotal,
+      spentMaterial: purMat + reimMat,
+      spentService: purSvc + reimSvc + meal,
+      spentMeal: meal,
       reimburseMaterialSpent,
       reimburseServiceSpent,
-      mealSpent,
       purchasingItems: safePurItems,
       reimburseItems: safeRemItems,
       mealItems: safeMealItems,
@@ -217,11 +286,5 @@ export async function getProjectDashboardData(f: CostControlFilter = {}): Promis
     }
   })
 
-  return result.filter(r => 
-    r.reimburseMaterialSpent > 0 || 
-    r.reimburseServiceSpent > 0 || 
-    r.mealSpent > 0 || 
-    r.overtimeHours > 0 || 
-    r.reportCount > 0
-  )
+  return result.filter(r => (r.budgetMaterial + r.budgetService) > 0 || (r.spentMaterial + r.spentService) > 0)
 }
