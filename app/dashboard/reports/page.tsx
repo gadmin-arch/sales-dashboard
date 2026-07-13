@@ -51,7 +51,7 @@ interface ReportsData {
   topWorkers: { name: string; value: number }[]
   workers: WorkerRow[]
   projectHours: ProjectRow[]
-  filterOptions: { workerList: Option[]; projectList: Option[]; userSiteList?: Option[]; jobStatusList?: Option[] }
+  filterOptions: { workerList: Option[]; projectList: Option[]; userSiteList?: Option[]; jobStatusList?: Option[]; orderTypeList?: Option[] }
 }
 
 const axis = { stroke: 'var(--muted-foreground)', tickLine: false, className: 'text-xs' } as const
@@ -72,6 +72,7 @@ export default function WorkerReportsPage() {
   const [worker, setWorker] = useState<string[]>([]), [project, setProject] = useState<string[]>([])
   const [userSite, setUserSite] = useState<string[]>([])
   const [jobStatus, setJobStatus] = useState<string[]>([])
+  const [orderType, setOrderType] = useState<string[]>([])
   const [overdueMethod, setOverdueMethod] = useState<'project' | 'worker'>('project')
 
   const [lFrom, setLFrom] = useState(dateFrom), [lTo, setLTo] = useState(dateTo)
@@ -79,6 +80,7 @@ export default function WorkerReportsPage() {
   const [lWorker, setLWorker] = useState<string[]>([]), [lProject, setLProject] = useState<string[]>([])
   const [lUserSite, setLUserSite] = useState<string[]>([])
   const [lJobStatus, setLJobStatus] = useState<string[]>([])
+  const [lOrderType, setLOrderType] = useState<string[]>([])
 
   const doFetch = useCallback(async (params: any) => {
     try {
@@ -92,19 +94,19 @@ export default function WorkerReportsPage() {
   useEffect(() => {
     const fresh = firstLoad.current; firstLoad.current = false
     doFetch({
-      dateFrom, dateTo, dateType, worker, project, userSite, jobStatus, overdueMethod,
+      dateFrom, dateTo, dateType, worker, project, userSite, jobStatus, orderType, overdueMethod,
       ...(chartFilter ? { cType: chartFilter.type, cVal: chartFilter.value } : {}),
       ...(fresh ? { fresh: '1' } : {}),
     })
-  }, [doFetch, dateFrom, dateTo, dateType, worker, project, userSite, jobStatus, overdueMethod, chartFilter])
+  }, [doFetch, dateFrom, dateTo, dateType, worker, project, userSite, jobStatus, orderType, overdueMethod, chartFilter])
 
-  const onApply = () => { setDateFrom(lFrom); setDateTo(lTo); setDateType(lDateType); setWorker(lWorker); setProject(lProject); setUserSite(lUserSite); setJobStatus(lJobStatus) }
+  const onApply = () => { setDateFrom(lFrom); setDateTo(lTo); setDateType(lDateType); setWorker(lWorker); setProject(lProject); setUserSite(lUserSite); setJobStatus(lJobStatus); setOrderType(lOrderType) }
   const onClear = () => {
     const d = getYTD()
-    setLFrom(d.from); setLTo(d.to); setLDateType('report'); setLWorker([]); setLProject([]); setLUserSite([]); setLJobStatus([])
-    setDateFrom(d.from); setDateTo(d.to); setDateType('report'); setWorker([]); setProject([]); setUserSite([]); setJobStatus([]); setOverdueMethod('project'); setChartFilter(null)
+    setLFrom(d.from); setLTo(d.to); setLDateType('report'); setLWorker([]); setLProject([]); setLUserSite([]); setLJobStatus([]); setLOrderType([])
+    setDateFrom(d.from); setDateTo(d.to); setDateType('report'); setWorker([]); setProject([]); setUserSite([]); setJobStatus([]); setOrderType([]); setOverdueMethod('project'); setChartFilter(null)
   }
-  const hasUnapplied = lFrom !== dateFrom || lTo !== dateTo || lDateType !== dateType || !sameSet(lWorker, worker) || !sameSet(lProject, project) || !sameSet(lUserSite, userSite) || !sameSet(lJobStatus, jobStatus)
+  const hasUnapplied = lFrom !== dateFrom || lTo !== dateTo || lDateType !== dateType || !sameSet(lWorker, worker) || !sameSet(lProject, project) || !sameSet(lUserSite, userSite) || !sameSet(lJobStatus, jobStatus) || !sameSet(lOrderType, orderType)
 
   const workerRows = useMemo(() => {
     const raw = data?.workers ?? []
@@ -154,7 +156,7 @@ export default function WorkerReportsPage() {
         <PageHeader title="Worker Reports" subtitle="PT. Multi Daya Mitra — field & site daily reports" chartFilter={chartFilter} onClearFilter={() => setChartFilter(null)} />
 
         <FilterCard from={lFrom} to={lTo} onDateChange={(f, t) => { setLFrom(f); setLTo(t) }} onApply={onApply} onClear={onClear} hasUnapplied={hasUnapplied} loading={loading && !!data}>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 lg:grid-cols-5 items-start">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 lg:grid-cols-6 items-start">
             <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Date Basis</label>
               <Select value={lDateType} onValueChange={(v) => setLDateType(v ?? 'report')}>
                 <SelectTrigger className="w-full text-xs h-9 bg-background"><SelectValue>{lDateType === 'created' ? 'Submitted Date' : 'Report Date'}</SelectValue></SelectTrigger>
@@ -172,6 +174,8 @@ export default function WorkerReportsPage() {
               <MultiSelect allLabel="All Sites" selected={lUserSite} onChange={setLUserSite} options={data.filterOptions.userSiteList || []} /></div>
             <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Job Status</label>
               <MultiSelect allLabel="All Job Statuses" selected={lJobStatus} onChange={setLJobStatus} options={data.filterOptions.jobStatusList || []} /></div>
+            <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Order Type</label>
+              <MultiSelect allLabel="All Order Types" selected={lOrderType} onChange={setLOrderType} options={data.filterOptions.orderTypeList || []} /></div>
           </div>
         </FilterCard>
 

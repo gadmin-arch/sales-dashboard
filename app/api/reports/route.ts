@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAllReports, getAllOrders, getAllProjectLogs, getAllBasts } from '@/database'
+import { getAllReports, getAllOrders, getAllProjectLogs, getAllBasts, getAllOrderTypes } from '@/database'
 import { getSalesUserNamesMap, getAllSalesUsers } from '@/database/repos/sales-users'
 import { parseDashboardParams, applyChartFilter } from '@/lib/api-helpers'
 import { parseDate, formatMonth, sortByPeriod, parseMulti, filterDataByDateRange } from '@/lib/utils-date-currency'
@@ -26,14 +26,16 @@ export async function GET(request: NextRequest) {
     const project = parseMulti(searchParams, 'project')
     const userSite = parseMulti(searchParams, 'userSite')
     const jobStatus = parseMulti(searchParams, 'jobStatus')
+    const orderType = parseMulti(searchParams, 'orderType')
     const overdueMethod = searchParams.get('overdueMethod') || 'project' // 'project' | 'worker'
 
-    const [reports, orders, logs, basts, salesUsers] = await Promise.all([
+    const [reports, orders, logs, basts, salesUsers, orderTypes] = await Promise.all([
       getAllReports(),
       getAllOrders(),
       getAllProjectLogs(),
       getAllBasts(),
-      getAllSalesUsers()
+      getAllSalesUsers(),
+      getAllOrderTypes()
     ])
 
     const { nsToIp, ipToD } = buildLogMaps(logs)
@@ -47,6 +49,7 @@ export async function GET(request: NextRequest) {
     const userName = (id: string) => userNames.get(id) || id || '(unknown)'
     const projName = new Map(orders.map((o) => [o.prjId, o.prjName]))
     const projectName = (id: string) => projName.get(id) || id || '-'
+    const projectOrderTypeMap = new Map(orders.map((o) => [o.prjId, o.prjOtId || '']))
 
     const userSiteMap = new Map(salesUsers.map((u) => [u.userId, u.siteId]))
     const userJobStatusMap = new Map(salesUsers.map((u) => [u.userId, u.jobStatus || '']))
@@ -77,6 +80,12 @@ export async function GET(request: NextRequest) {
       filtered = filtered.filter((r) => {
         const js = userJobStatusMap.get(r.reportUser) || ''
         return jobStatus.includes(js)
+      })
+    }
+    if (orderType.length) {
+      filtered = filtered.filter((r) => {
+        const otId = projectOrderTypeMap.get(r.reportPrjId) || ''
+        return orderType.includes(otId)
       })
     }
 
@@ -390,6 +399,7 @@ export async function GET(request: NextRequest) {
     const jobStatusList = [...new Set(salesUsers.map((u) => u.jobStatus).filter(Boolean))]
       .map((js) => ({ value: js, label: js === 'Int' ? 'Internal (Int)' : js === 'Ext' ? 'External (Ext)' : js }))
       .sort((a, b) => a.label.localeCompare(b.label))
+    const orderTypeList = orderTypes.map((t) => ({ value: t.otId, label: t.otDescription }))
 
     const totalProjectsCount = projectHours.length
     const overdueProjectsCount = projectHours.filter((p) => p.isOverdue).length
@@ -406,7 +416,7 @@ export async function GET(request: NextRequest) {
       topWorkers,
       workers,
       projectHours,
-      filterOptions: { workerList, projectList, userSiteList, jobStatusList },
+      filterOptions: { workerList, projectList, userSiteList, jobStatusList, orderTypeList },
     })
   } catch (error) {
     console.error('Worker reports API error:', error)
