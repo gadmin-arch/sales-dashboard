@@ -22,7 +22,7 @@ import { useChartFilter } from '@/hooks/use-chart-filter'
 
 interface Option { value: string; label: string }
 interface ProjectRow {
-  prjId: string; project: string; type: string; owner: string; statusLabel: string
+  prjId: string; project: string; type: string; owner: string; statusLabel: string; pePicName: string
   benchmarkStart: string; benchmarkEnd: string; actualStart: string; actualEnd: string; bastSubmit: string
   startVariance: number | null; endVariance: number | null; durationDays: number | null
   delivery: string; deliveryLabel: string; overduePending: boolean; daysOverdue?: number | null
@@ -36,7 +36,7 @@ interface DeliveryData {
   projects: ProjectRow[]
   atRisk: ProjectRow[]
   dateType: string
-  filterOptions: { statusList: Option[]; ownerList: Option[]; typeList: Option[]; deliveryList: Option[] }
+  filterOptions: { statusList: Option[]; ownerList: Option[]; typeList: Option[]; deliveryList: Option[]; pePicList?: Option[] }
 }
 
 const axis = { stroke: 'var(--muted-foreground)', tickLine: false, className: 'text-xs' } as const
@@ -67,10 +67,12 @@ export default function ProjectDeliveryPage() {
   const [dateFrom, setDateFrom] = useState(getYTD().from), [dateTo, setDateTo] = useState(getYTD().to)
   const [dateType, setDateType] = useState('due')
   const [status, setStatus] = useState<string[]>([]), [owner, setOwner] = useState<string[]>([]), [type, setType] = useState<string[]>([]), [delivery, setDelivery] = useState<string[]>([])
+  const [pePic, setPePic] = useState<string[]>([])
 
   const [lFrom, setLFrom] = useState(dateFrom), [lTo, setLTo] = useState(dateTo)
   const [lDateType, setLDateType] = useState('due')
   const [lStatus, setLStatus] = useState<string[]>([]), [lOwner, setLOwner] = useState<string[]>([]), [lType, setLType] = useState<string[]>([]), [lDelivery, setLDelivery] = useState<string[]>([])
+  const [lPePic, setLPePic] = useState<string[]>([])
 
   const doFetch = useCallback(async (params: any) => {
     try {
@@ -84,19 +86,19 @@ export default function ProjectDeliveryPage() {
   useEffect(() => {
     const fresh = firstLoad.current; firstLoad.current = false
     doFetch({
-      dateFrom, dateTo, dateType, status, owner, type, delivery,
+      dateFrom, dateTo, dateType, status, owner, type, delivery, pePic,
       ...(chartFilter ? { cType: chartFilter.type, cVal: chartFilter.value } : {}),
       ...(fresh ? { fresh: '1' } : {}),
     })
-  }, [doFetch, dateFrom, dateTo, dateType, status, owner, type, delivery, chartFilter])
+  }, [doFetch, dateFrom, dateTo, dateType, status, owner, type, delivery, pePic, chartFilter])
 
-  const onApply = () => { setDateFrom(lFrom); setDateTo(lTo); setDateType(lDateType); setStatus(lStatus); setOwner(lOwner); setType(lType); setDelivery(lDelivery) }
+  const onApply = () => { setDateFrom(lFrom); setDateTo(lTo); setDateType(lDateType); setStatus(lStatus); setOwner(lOwner); setType(lType); setDelivery(lDelivery); setPePic(lPePic) }
   const onClear = () => {
     const d = getYTD()
-    setLFrom(d.from); setLTo(d.to); setLDateType('due'); setLStatus([]); setLOwner([]); setLType([]); setLDelivery([])
-    setDateFrom(d.from); setDateTo(d.to); setDateType('due'); setStatus([]); setOwner([]); setType([]); setDelivery([]); setChartFilter(null)
+    setLFrom(d.from); setLTo(d.to); setLDateType('due'); setLStatus([]); setLOwner([]); setLType([]); setLDelivery([]); setLPePic([])
+    setDateFrom(d.from); setDateTo(d.to); setDateType('due'); setStatus([]); setOwner([]); setType([]); setDelivery([]); setPePic([]); setChartFilter(null)
   }
-  const hasUnapplied = lFrom !== dateFrom || lTo !== dateTo || lDateType !== dateType || !sameSet(lStatus, status) || !sameSet(lOwner, owner) || !sameSet(lType, type) || !sameSet(lDelivery, delivery)
+  const hasUnapplied = lFrom !== dateFrom || lTo !== dateTo || lDateType !== dateType || !sameSet(lStatus, status) || !sameSet(lOwner, owner) || !sameSet(lType, type) || !sameSet(lDelivery, delivery) || !sameSet(lPePic, pePic)
 
   const rows = useMemo(() => {
     const raw = data?.projects ?? []
@@ -119,7 +121,7 @@ export default function ProjectDeliveryPage() {
         <PageHeader title="Project Delivery" subtitle={`PT. Multi Daya Mitra — plan vs actual & BAST timeliness (filtered by ${DATE_LABELS[data.dateType] || 'Due Date'})`} chartFilter={chartFilter} onClearFilter={() => setChartFilter(null)} />
 
         <FilterCard from={lFrom} to={lTo} onDateChange={(f, t) => { setLFrom(f); setLTo(t) }} onApply={onApply} onClear={onClear} hasUnapplied={hasUnapplied} loading={loading && !!data}>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-5 items-start">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 lg:grid-cols-6 items-start">
             <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Date Basis</label>
               <Select value={lDateType} onValueChange={(v) => setLDateType(v ?? 'due')}>
                 <SelectTrigger className="w-full text-xs h-9 bg-background"><SelectValue>{DATE_LABELS[lDateType]}</SelectValue></SelectTrigger>
@@ -139,6 +141,8 @@ export default function ProjectDeliveryPage() {
               <MultiSelect allLabel="All Owners" selected={lOwner} onChange={setLOwner} options={data.filterOptions.ownerList} /></div>
             <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Type</label>
               <MultiSelect allLabel="All Types" selected={lType} onChange={setLType} options={data.filterOptions.typeList} /></div>
+            <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">PE PIC</label>
+              <MultiSelect allLabel="All PE PICs" selected={lPePic} onChange={setLPePic} options={data.filterOptions.pePicList || []} /></div>
           </div>
         </FilterCard>
 
@@ -234,6 +238,7 @@ export default function ProjectDeliveryPage() {
                 <TableHeader><TableRow>
                   <SortHead label="Project" column="project" sortKey={sort.sortKey} sortDir={sort.sortDir} onSort={sort.toggle} />
                   <SortHead label="Status" column="statusLabel" sortKey={sort.sortKey} sortDir={sort.sortDir} onSort={sort.toggle} />
+                  <SortHead label="PE PIC" column="pePicName" sortKey={sort.sortKey} sortDir={sort.sortDir} onSort={sort.toggle} />
                   <SortHead label="Bench. Start" column="benchmarkStart" sortKey={sort.sortKey} sortDir={sort.sortDir} onSort={sort.toggle} className="text-right" />
                   <SortHead label="Actual Start" column="actualStart" sortKey={sort.sortKey} sortDir={sort.sortDir} onSort={sort.toggle} className="text-right" />
                   <SortHead label="Δ Start" column="startVariance" sortKey={sort.sortKey} sortDir={sort.sortDir} onSort={sort.toggle} className="text-right" />
@@ -244,10 +249,11 @@ export default function ProjectDeliveryPage() {
                   <SortHead label="Delivery" column="delivery" sortKey={sort.sortKey} sortDir={sort.sortDir} onSort={sort.toggle} />
                 </TableRow></TableHeader>
                 <TableBody>
-                  {sort.sorted.length === 0 ? <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground py-8">No data found</TableCell></TableRow> : page.visible.map((r) => (
+                  {sort.sorted.length === 0 ? <TableRow><TableCell colSpan={11} className="text-center text-muted-foreground py-8">No data found</TableCell></TableRow> : page.visible.map((r) => (
                     <TableRow key={r.prjId}>
                       <TableCell className="font-medium text-xs whitespace-normal break-words max-w-[220px]">{r.project}<span className="text-muted-foreground ml-1">({r.prjId})</span></TableCell>
                       <TableCell className="text-xs">{r.statusLabel}</TableCell>
+                      <TableCell className="text-xs">{r.pePicName || '-'}</TableCell>
                       <TableCell className="text-right text-xs text-muted-foreground">{fmtShortDate(r.benchmarkStart)}</TableCell>
                       <TableCell className="text-right text-xs">{fmtShortDate(r.actualStart)}</TableCell>
                       <TableCell className="text-right text-xs"><Variance v={r.startVariance} /></TableCell>

@@ -29,6 +29,7 @@ export async function GET(request: NextRequest) {
     const owner = parseMulti(searchParams, 'owner')
     const type = parseMulti(searchParams, 'type')
     const delivery = parseMulti(searchParams, 'delivery')
+    const pePic = parseMulti(searchParams, 'pePic')
 
     const [orders, logs, basts] = await Promise.all([getAllOrders(), getAllProjectLogs(), getAllBasts()])
     await loadOrdersRefMaps()
@@ -37,9 +38,13 @@ export async function GET(request: NextRequest) {
     const bastSubmitMap = buildBastSubmitMap(basts)
     const today = new Date()
 
-    // Resolve owner / creator names
+    // Resolve owner / creator / PE PIC names
     const userIds = new Set<string>()
-    for (const o of orders) { if (o.prjOwner) userIds.add(o.prjOwner); if (o.createdBy) userIds.add(o.createdBy) }
+    for (const o of orders) {
+      if (o.prjOwner) userIds.add(o.prjOwner)
+      if (o.createdBy) userIds.add(o.createdBy)
+      if (o.prjPePic) userIds.add(o.prjPePic)
+    }
     const userNames = await getSalesUserNamesMap(userIds)
     const userName = (id: string) => userNames.get(id) || id || '-'
 
@@ -68,6 +73,8 @@ export async function GET(request: NextRequest) {
         ownerId: o.prjOwner, owner: userName(o.prjOwner),
         creatorId: o.createdBy, creator: userName(o.createdBy),
         statusCode: o.prjPeStatus, statusLabel: getPeStatusLabelSync(o.prjPeStatus) || o.prjPeStatus || '(blank)',
+        pePicId: o.prjPePic || '',
+        pePicName: o.prjPePic ? userName(o.prjPePic) : '',
         benchmarkStart: bStart, benchmarkEnd: bEnd,
         actualStart: iso(aStart), actualEnd: iso(aEnd),
         bastSubmit: iso(bastSubmit),
@@ -95,6 +102,7 @@ export async function GET(request: NextRequest) {
     if (owner.length) filtered = filtered.filter((r) => owner.includes(r.ownerId))
     if (type.length) filtered = filtered.filter((r) => type.includes(r.type))
     if (delivery.length) filtered = filtered.filter((r) => delivery.includes(r.delivery))
+    if (pePic.length) filtered = filtered.filter((r) => pePic.includes(r.pePicId))
 
     // Lateness bucket for a delivered project (null = pending, excluded from the chart).
     const bucketOf = (r: (typeof enriched)[number]): string | null => {
@@ -171,6 +179,8 @@ export async function GET(request: NextRequest) {
     const typeList = [...new Set(orders.map((o) => o.prjType).filter(Boolean))]
       .map((t) => ({ value: t, label: t })).sort((a, b) => a.label.localeCompare(b.label))
     const deliveryList = (['onTime', 'overtime', 'pending'] as DeliveryStatus[]).map((k) => ({ value: k, label: DELIVERY_LABELS[k] }))
+    const pePicList = [...new Set(orders.map((o) => o.prjPePic).filter(Boolean))]
+      .map((id) => ({ value: id, label: userName(id) })).sort((a, b) => a.label.localeCompare(b.label))
 
     return NextResponse.json({
       kpis: {
@@ -185,7 +195,7 @@ export async function GET(request: NextRequest) {
       atRisk,
       totalRows: filtered.length,
       dateType,
-      filterOptions: { statusList, ownerList, typeList, deliveryList },
+      filterOptions: { statusList, ownerList, typeList, deliveryList, pePicList },
     })
   } catch (error) {
     console.error('Project delivery API error:', error)
