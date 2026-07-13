@@ -14,6 +14,10 @@ import { Badge } from '@/components/ui/badge'
 
 const fmtRp = (v: number) => fmtCurrency(v, 'IDR')
 
+// Workforce Pricing Calculator disembunyikan sementara (menunggu izin).
+// Ubah ke true untuk memunculkannya kembali.
+const SHOW_WORKFORCE_CALCULATOR = false
+
 interface ProjectDashboardData {
   prjId: string
   prjName: string
@@ -218,8 +222,8 @@ export default function ProjectsDashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Side: Filter Card (Col span 2) */}
-        <div className="lg:col-span-2 bg-card border rounded-lg p-4 shadow-sm space-y-4">
+        {/* Left Side: Filter Card (Col span 2, full width while calculator is hidden) */}
+        <div className={`${SHOW_WORKFORCE_CALCULATOR ? 'lg:col-span-2' : 'lg:col-span-3'} bg-card border rounded-lg p-4 shadow-sm space-y-4`}>
           <div className="flex flex-wrap gap-3">
             <MultiSelect allLabel="Sales User" options={salesUserOpts} selected={lSu} onChange={setLSu} />
             <MultiSelect allLabel="Project Executor PIC" options={pePicOpts} selected={lPePic} onChange={setLPePic} />
@@ -247,6 +251,7 @@ export default function ProjectsDashboardPage() {
         </div>
 
         {/* Right Side: Pricing Calculator Card (Col span 1) */}
+        {SHOW_WORKFORCE_CALCULATOR && (
         <Card className="border shadow-sm">
           <CardHeader className="pb-3 flex flex-row items-center gap-2">
             <Settings2 className="h-4 w-4 text-primary" />
@@ -311,6 +316,7 @@ export default function ProjectsDashboardPage() {
             )}
           </CardContent>
         </Card>
+        )}
       </div>
 
       {insights.length > 0 && (
