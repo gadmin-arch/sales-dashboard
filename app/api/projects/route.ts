@@ -101,7 +101,10 @@ export async function GET(request: NextRequest) {
       .map(t => ({ id: t, name: t }))
       .sort((a, b) => a.name.localeCompare(b.name))
 
-    const orderTypeList = orderTypes
+    const orderTypeList = [
+      { otId: 'Project', otDescription: 'Project' },
+      { otId: 'Internal', otDescription: 'Internal' }
+    ]
     const projectStatusList = peStatuses
     const invoiceStatusList = financeStatuses
     const projectFlagList = [

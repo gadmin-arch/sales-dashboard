@@ -174,8 +174,8 @@ export default function WorkerReportsPage() {
               <MultiSelect allLabel="All Sites" selected={lUserSite} onChange={setLUserSite} options={data.filterOptions.userSiteList || []} /></div>
             <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Job Status</label>
               <MultiSelect allLabel="All Job Statuses" selected={lJobStatus} onChange={setLJobStatus} options={data.filterOptions.jobStatusList || []} /></div>
-            <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Order Type</label>
-              <MultiSelect allLabel="All Order Types" selected={lOrderType} onChange={setLOrderType} options={data.filterOptions.orderTypeList || []} /></div>
+            <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Project Type</label>
+              <MultiSelect allLabel="All Project Types" selected={lOrderType} onChange={setLOrderType} options={data.filterOptions.orderTypeList || []} /></div>
           </div>
         </FilterCard>
 

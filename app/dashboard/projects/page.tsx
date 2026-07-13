@@ -224,7 +224,7 @@ export default function ProjectsDashboardPage() {
             <MultiSelect allLabel="Sales User" options={salesUserOpts} selected={lSu} onChange={setLSu} />
             <MultiSelect allLabel="Project Executor PIC" options={pePicOpts} selected={lPePic} onChange={setLPePic} />
             <MultiSelect allLabel="Project Executor Team" options={peTeamOpts} selected={lPeTeam} onChange={setLPeTeam} />
-            <MultiSelect allLabel="Order Type" options={typeOpts} selected={lOt} onChange={setLOt} />
+            <MultiSelect allLabel="Project Type" options={typeOpts} selected={lOt} onChange={setLOt} />
             <MultiSelect allLabel="Project Status" options={psOpts} selected={lPs} onChange={setLPs} />
             <MultiSelect allLabel="Invoice Status" options={invOpts} selected={lInv} onChange={setLInv} />
             <MultiSelect allLabel="Project Flag" options={flagOpts} selected={lPrjFlag} onChange={setLPrjFlag} />

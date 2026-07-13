@@ -93,7 +93,7 @@ export async function getCostControlData(f: CostControlFilter = {}): Promise<Pro
     if (fromTime !== undefined && targetTime! < fromTime) return false
     if (toTime !== undefined && targetTime! > toTime) return false
     if (f.salesUser?.length && !f.salesUser.includes(p.prjOwner)) return false
-    if (f.orderType?.length && !f.orderType.includes(p.prjOtId)) return false
+    if (f.orderType?.length && !f.orderType.includes(p.prjType)) return false
     if (f.projectStatus?.length && !f.projectStatus.includes(p.prjPeStatus)) return false
     if (f.invoiceStatus?.length && !f.invoiceStatus.includes(p.prjFStatus)) return false
     if (f.projectFlag?.length && !f.projectFlag.includes(p.prjFlag)) return false

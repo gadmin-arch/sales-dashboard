@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
     const userName = (id: string) => userNames.get(id) || id || '(unknown)'
     const projName = new Map(orders.map((o) => [o.prjId, o.prjName]))
     const projectName = (id: string) => projName.get(id) || id || '-'
-    const projectOrderTypeMap = new Map(orders.map((o) => [o.prjId, o.prjOtId || '']))
+    const projectOrderTypeMap = new Map(orders.map((o) => [o.prjId, o.prjType || '']))
 
     const userSiteMap = new Map(salesUsers.map((u) => [u.userId, u.siteId]))
     const userJobStatusMap = new Map(salesUsers.map((u) => [u.userId, u.jobStatus || '']))
@@ -399,7 +399,10 @@ export async function GET(request: NextRequest) {
     const jobStatusList = [...new Set(salesUsers.map((u) => u.jobStatus).filter(Boolean))]
       .map((js) => ({ value: js, label: js === 'Int' ? 'Internal (Int)' : js === 'Ext' ? 'External (Ext)' : js }))
       .sort((a, b) => a.label.localeCompare(b.label))
-    const orderTypeList = orderTypes.map((t) => ({ value: t.otId, label: t.otDescription }))
+    const orderTypeList = [
+      { value: 'Project', label: 'Project' },
+      { value: 'Internal', label: 'Internal' }
+    ]
 
     const totalProjectsCount = projectHours.length
     const overdueProjectsCount = projectHours.filter((p) => p.isOverdue).length

@@ -256,8 +256,8 @@ export default function CostControlPage() {
               <MultiSelect allLabel="All PE PICs" selected={lPePic} onChange={setLPePic} options={pePicOpts} /></div>
             <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Project Executor Team</label>
               <MultiSelect allLabel="All PE Teams" selected={lPeTeam} onChange={setLPeTeam} options={peTeamOpts} /></div>
-            <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Order Type</label>
-              <MultiSelect allLabel="All Order Types" selected={lOt} onChange={setLOt} options={typeOpts} /></div>
+            <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Project Type</label>
+              <MultiSelect allLabel="All Project Types" selected={lOt} onChange={setLOt} options={typeOpts} /></div>
             <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Project Status</label>
               <MultiSelect allLabel="All Project Statuses" selected={lPs} onChange={setLPs} options={psOpts} /></div>
             <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Invoice Status</label>

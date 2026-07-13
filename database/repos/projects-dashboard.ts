@@ -69,7 +69,7 @@ export async function getProjectDashboardData(f: CostControlFilter = {}): Promis
     projects = projects.filter(p => f.invoiceStatus!.includes(p.prjFStatus))
   }
   if (f.orderType && f.orderType.length > 0) {
-    projects = projects.filter(p => f.orderType!.includes(p.prjOtId))
+    projects = projects.filter(p => f.orderType!.includes(p.prjType))
   }
   if (f.projectFlag && f.projectFlag.length > 0) {
     projects = projects.filter(p => f.projectFlag!.includes(p.prjFlag))
