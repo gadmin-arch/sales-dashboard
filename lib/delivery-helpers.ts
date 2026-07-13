@@ -13,10 +13,12 @@ export const benchmarkEnd = (o: Order) => o.prjDueDatePlan?.trim() || o.prjDueDa
 
 // ── Actual dates ──
 // Build actual-date maps from project_log status transitions:
-//   earliest NS→IP = actual start, earliest IP→D = actual end.
+//   earliest NS→IP = actual start, earliest IP→D = actual end,
+//   earliest *→D (any old status) = project "Done" event.
 export function buildLogMaps(logs: ProjectLog[]) {
   const nsToIp = new Map<string, Date>()
   const ipToD = new Map<string, Date>()
+  const doneAt = new Map<string, Date>()
   for (const l of logs) {
     const pid = l.plPrjId
     if (!pid) continue
@@ -27,8 +29,11 @@ export function buildLogMaps(logs: ProjectLog[]) {
     } else if (l.plStatusOld === 'IP' && l.plStatusNew === 'D') {
       const cur = ipToD.get(pid); if (!cur || d < cur) ipToD.set(pid, d)
     }
+    if (l.plStatusNew === 'D') {
+      const cur = doneAt.get(pid); if (!cur || d < cur) doneAt.set(pid, d)
+    }
   }
-  return { nsToIp, ipToD }
+  return { nsToIp, ipToD, doneAt }
 }
 
 // Actual dates: actual columns (Z/AA) first, else the project_log fallback.
@@ -46,6 +51,12 @@ export function dayVariance(benchmark: string, actual: Date | null): number | nu
   return Math.round((startOfDay(actual).getTime() - startOfDay(b).getTime()) / MS_PER_DAY)
 }
 
+// Whole-day difference between two dates. Null if either missing.
+export function daysBetween(from: Date | null, to: Date | null): number | null {
+  if (!from || !to) return null
+  return Math.round((startOfDay(to).getTime() - startOfDay(from).getTime()) / MS_PER_DAY)
+}
+
 // ── BAST-based delivery timeliness (base layer = due date) ──
 // Earliest BAST submit date per project.
 export function buildBastSubmitMap(basts: Bast[]) {
@@ -59,10 +70,21 @@ export function buildBastSubmitMap(basts: Bast[]) {
 }
 
 export type DeliveryStatus = 'onTime' | 'overtime' | 'pending'
-export const DELIVERY_LABELS: Record<DeliveryStatus, string> = {
+// BAST-based judging adds a fourth state: projects that are Completed or fully
+// invoiced (payment percentage ≥ 100) never file a BAST, so they are exempt
+// rather than forever-pending.
+export type BastDeliveryStatus = DeliveryStatus | 'noBast'
+export const DELIVERY_LABELS: Record<BastDeliveryStatus, string> = {
   onTime: 'On Time',
   overtime: 'Overtime',
   pending: 'Pending (no BAST)',
+  noBast: 'No BAST Required',
+}
+// Same statuses judged against the project_log "Done" date instead of the BAST submit.
+export const DONE_LABELS: Record<DeliveryStatus, string> = {
+  onTime: 'On Time',
+  overtime: 'Overtime',
+  pending: 'Pending (not done)',
 }
 
 // BAST submit date vs project due date:

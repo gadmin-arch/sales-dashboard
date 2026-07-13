@@ -49,6 +49,9 @@ interface ReportsData {
   scoreBreakdown: { name: string; value: number }[]
   monthlyTrend: { name: string; reports: number; hours: number }[]
   topWorkers: { name: string; value: number }[]
+  projectStatusMix: { name: string; value: number }[]
+  timeStatusSchedule: { name: string; value: number }[]
+  timeStatusWorker: { name: string; value: number }[]
   workers: WorkerRow[]
   projectHours: ProjectRow[]
   filterOptions: { workerList: Option[]; projectList: Option[]; userSiteList?: Option[]; jobStatusList?: Option[]; orderTypeList?: Option[] }
@@ -212,6 +215,29 @@ export default function WorkerReportsPage() {
             <CardHeader><CardTitle className="text-sm font-semibold">Discipline Score Mix</CardTitle></CardHeader>
             <CardContent>
               <DonutChart data={data.scoreBreakdown} height={280} onSliceClick={(name) => handleChartClick('score', name, `Score = ${name}`)} />
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Status donuts: PE status mix + time status on two bases (schedule vs worker logs),
+            all over the unique projects appearing in the filtered reports */}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <Card>
+            <CardHeader><CardTitle className="text-sm font-semibold">Project Status</CardTitle></CardHeader>
+            <CardContent>
+              <DonutChart data={data.projectStatusMix} height={280} onSliceClick={(name) => handleChartClick('prjStatus', name, `Project Status = ${name}`)} />
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader><CardTitle className="text-sm font-semibold">Time Status — Project Schedule</CardTitle></CardHeader>
+            <CardContent>
+              <DonutChart data={data.timeStatusSchedule} height={280} />
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader><CardTitle className="text-sm font-semibold">Time Status — Worker Logs</CardTitle></CardHeader>
+            <CardContent>
+              <DonutChart data={data.timeStatusWorker} height={280} />
             </CardContent>
           </Card>
         </div>

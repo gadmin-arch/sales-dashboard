@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cachedRoute } from '@/lib/route-cache'
 import { getAllReports, getAllOrders, getAllProjectLogs, getAllBasts, getAllOrderTypes } from '@/database'
+import { getPeStatusLabelSync, loadRefMaps as loadOrderRefMaps } from '@/database/repos/orders'
 import { getSalesUserNamesMap, getAllSalesUsers } from '@/database/repos/sales-users'
 import { parseDashboardParams, applyChartFilter } from '@/lib/api-helpers'
 import { parseDate, formatMonth, sortByPeriod, parseMulti, filterDataByDateRange } from '@/lib/utils-date-currency'
@@ -36,6 +37,7 @@ async function compute(searchParams: URLSearchParams) {
       getAllSalesUsers(),
       getAllOrderTypes()
     ])
+    await loadOrderRefMaps() // pe status id -> label
 
     const { nsToIp, ipToD } = buildLogMaps(logs)
     const bastSubmitMap = buildBastSubmitMap(basts)
@@ -65,8 +67,17 @@ async function compute(searchParams: URLSearchParams) {
       }
     })
 
+    const orderMap = new Map(orders.map((o) => [o.prjId, o]))
+    const prjStatusLabel = (prjId: string) => {
+      const ord = orderMap.get(prjId)
+      return ord ? (getPeStatusLabelSync(ord.prjPeStatus) || ord.prjPeStatus || '(none)') : '(unknown)'
+    }
+
     // ── Filter ──
-    let filtered = filterDataByDateRange(enriched, (r) => r.dateBasis, dateFrom, dateTo)
+    // Kept separate from the rest of the chain: the Project filter options follow
+    // the date range only, so picking a project doesn't collapse the dropdown.
+    const dateFiltered = filterDataByDateRange(enriched, (r) => r.dateBasis, dateFrom, dateTo)
+    let filtered = dateFiltered
     if (worker.length) filtered = filtered.filter((r) => worker.includes(r.reportUser))
     if (project.length) filtered = filtered.filter((r) => project.includes(r.reportPrjId))
     if (userSite.length) {
@@ -95,6 +106,7 @@ async function compute(searchParams: URLSearchParams) {
       month: (r, v) => formatMonth(r.reportDate) === v,
       score: (r, v) => r.score != null && r.score === scoreByLabel.get(v),
       worker: (r, v) => userName(r.reportUser) === v,
+      prjStatus: (r, v) => prjStatusLabel(r.reportPrjId) === v,
     })
 
     // ── KPIs ──
@@ -154,7 +166,6 @@ async function compute(searchParams: URLSearchParams) {
       perProject.set(r.reportPrjId, p)
     }
 
-    const orderMap = new Map(orders.map((o) => [o.prjId, o]))
     const formatDateOnly = (d: Date | null) => d ? `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}` : ''
 
     const projectHours = [...perProject.entries()].map(([id, p]) => {
@@ -247,6 +258,53 @@ async function compute(searchParams: URLSearchParams) {
         overdueDays
       }
     }).sort((a, b) => b.hours - a.hours)
+
+    // ── Status donuts over the unique projects in the filtered reports ──
+    // Project Status: PE status mix. Time Status (2 basis): done projects are
+    // judged by their completion date vs planned end, ongoing ones by today
+    // (schedule basis) or by the latest worker report date (worker-log basis).
+    const projectStatusAgg: Record<string, number> = {}
+    const timeScheduleAgg: Record<string, number> = {}
+    const timeWorkerAgg: Record<string, number> = {}
+    for (const [pId, p] of perProject) {
+      const ord = orderMap.get(pId)
+      const statusCode = (ord?.prjPeStatus || '').trim().toUpperCase()
+      const statusLabel = prjStatusLabel(pId)
+      projectStatusAgg[statusLabel] = (projectStatusAgg[statusLabel] || 0) + 1
+
+      if (!ord || statusCode === 'CC') continue // cancelled: no time status
+      const plannedEnd = parseDate(benchmarkEnd(ord))
+      if (!plannedEnd) continue // no schedule to judge against
+      const pe = startOfDay(plannedEnd).getTime()
+
+      const aEnd = actualEnd(ord, ipToD)
+      const bast = bastSubmitMap.get(pId) || null
+      const isDone = statusCode === 'D' || statusCode === 'C' || !!aEnd || !!bast
+      const maxReportTime = p.reportDates.length ? Math.max(...p.reportDates) : null
+      const latestReport = maxReportTime ? new Date(maxReportTime) : null
+
+      // Basis A — project schedule: actual completion from project data
+      const compDate = bast || aEnd || latestReport
+      const catA = isDone
+        ? (compDate && startOfDay(compDate).getTime() > pe ? 'Overdue' : 'On Time')
+        : (startOfDay(today).getTime() > pe ? 'Overdue (On Going)' : 'On Going')
+      timeScheduleAgg[catA] = (timeScheduleAgg[catA] || 0) + 1
+
+      // Basis B — worker logs: actual from the latest worker report date
+      const catB = isDone
+        ? (latestReport && startOfDay(latestReport).getTime() > pe ? 'Overdue' : 'On Time')
+        : (latestReport && startOfDay(latestReport).getTime() > pe ? 'Overdue (On Going)' : 'On Going')
+      timeWorkerAgg[catB] = (timeWorkerAgg[catB] || 0) + 1
+    }
+
+    // Fixed order keeps slice colors consistent across both time donuts.
+    const TIME_ORDER = ['On Time', 'Overdue', 'On Going', 'Overdue (On Going)']
+    const toTimeSeries = (agg: Record<string, number>) => TIME_ORDER.map((name) => ({ name, value: agg[name] || 0 }))
+    const timeStatusSchedule = toTimeSeries(timeScheduleAgg)
+    const timeStatusWorker = toTimeSeries(timeWorkerAgg)
+    const projectStatusMix = Object.entries(projectStatusAgg)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
 
     // Build project metadata mapping for worker lookup
     const projectMetaMap = new Map<string, {
@@ -388,9 +446,13 @@ async function compute(searchParams: URLSearchParams) {
     const topWorkers = workers.slice(0, 12).map((w) => ({ name: w.worker, value: w.hours }))
 
     // ── Filter options ──
+    // Worker: only currently-active workers (users sheet user_status_id === 'A').
+    const userStatusMap = new Map(salesUsers.map((u) => [u.userId, u.statusId]))
     const workerList = [...new Set(reports.map((r) => r.reportUser).filter(Boolean))]
+      .filter((id) => userStatusMap.get(id) === 'A')
       .map((id) => ({ value: id, label: userName(id) })).sort((a, b) => a.label.localeCompare(b.label))
-    const projectList = [...new Set(reports.map((r) => r.reportPrjId).filter(Boolean))]
+    // Project: only projects with reports in the selected date range.
+    const projectList = [...new Set(dateFiltered.map((r) => r.reportPrjId).filter(Boolean))]
       .map((id) => ({ value: id, label: projectName(id) })).sort((a, b) => a.label.localeCompare(b.label))
     const userSiteList = [...new Set(salesUsers.map((u) => u.siteId).filter(Boolean))]
       .map((site) => ({ value: site, label: site }))
@@ -404,8 +466,12 @@ async function compute(searchParams: URLSearchParams) {
     ]
 
     const totalProjectsCount = projectHours.length
-    const overdueProjectsCount = projectHours.filter((p) => p.isOverdue).length
-    const overdueProjectsPct = totalProjectsCount ? Math.round((overdueProjectsCount / totalProjectsCount) * 100) : 0
+    // Derive overdue count from the same pool used by the Time Status chart
+    // (only projects with order data + planned end, excluding cancelled)
+    const chartOverdue = (timeScheduleAgg['Overdue'] || 0) + (timeScheduleAgg['Overdue (On Going)'] || 0)
+    const chartTotal = Object.values(timeScheduleAgg).reduce((s, v) => s + v, 0)
+    const overdueProjectsCount = chartOverdue
+    const overdueProjectsPct = chartTotal ? Math.round((chartOverdue / chartTotal) * 100) : 0
 
     return ({
       kpis: {
@@ -416,13 +482,17 @@ async function compute(searchParams: URLSearchParams) {
       scoreBreakdown,
       monthlyTrend,
       topWorkers,
+      projectStatusMix,
+      timeStatusSchedule,
+      timeStatusWorker,
       workers,
       projectHours,
       filterOptions: { workerList, projectList, userSiteList, jobStatusList, orderTypeList },
     })
 }
 
-const getData = cachedRoute('reports', compute)
+// v2: payload gained the status/time-status donut series (cache outlives deploys).
+const getData = cachedRoute('reports-v2', compute)
 
 export async function GET(request: NextRequest) {
   try {
