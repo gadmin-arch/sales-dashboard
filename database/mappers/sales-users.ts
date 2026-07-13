@@ -21,6 +21,7 @@ export function mapSalesUser(row: string[]): SalesUser {
     nik: row[11] || '',
     formalEmail: row[19] || '',
     photo: row[20] || '',
+    jobStatus: row[22] || '',
   }
 }
 

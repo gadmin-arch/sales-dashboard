@@ -25,6 +25,8 @@ export async function GET(request: NextRequest) {
     const worker = parseMulti(searchParams, 'worker')
     const project = parseMulti(searchParams, 'project')
     const userSite = parseMulti(searchParams, 'userSite')
+    const jobStatus = parseMulti(searchParams, 'jobStatus')
+    const overdueMethod = searchParams.get('overdueMethod') || 'project' // 'project' | 'worker'
 
     const [reports, orders, logs, basts, salesUsers] = await Promise.all([
       getAllReports(),
@@ -47,6 +49,7 @@ export async function GET(request: NextRequest) {
     const projectName = (id: string) => projName.get(id) || id || '-'
 
     const userSiteMap = new Map(salesUsers.map((u) => [u.userId, u.siteId]))
+    const userJobStatusMap = new Map(salesUsers.map((u) => [u.userId, u.jobStatus || '']))
 
     // ── Per-report derived ──
     const enriched = reports.map((r) => {
@@ -68,6 +71,12 @@ export async function GET(request: NextRequest) {
       filtered = filtered.filter((r) => {
         const site = userSiteMap.get(r.reportUser) || ''
         return userSite.includes(site)
+      })
+    }
+    if (jobStatus.length) {
+      filtered = filtered.filter((r) => {
+        const js = userJobStatusMap.get(r.reportUser) || ''
+        return jobStatus.includes(js)
       })
     }
 
@@ -164,33 +173,48 @@ export async function GET(request: NextRequest) {
         const aEnd = actualEnd(ord, ipToD)
         const bastSubmit = bastSubmitMap.get(ord.prjId) || null
 
-        // Determine if project is complete/done
-        const isDone = (ord.prjPeStatus || '').trim().toUpperCase() === 'DONE' || 
-                       (ord.prjPeStatus || '').trim().toUpperCase() === 'COMPLETED' || 
-                       !!aEnd || !!bastSubmit
+        if (overdueMethod === 'worker') {
+          // Method 2: Worker Report Logs basis
+          actualStartStr = formatDateOnly(firstReportDate)
+          actualEndStr = formatDateOnly(latestReportDate)
 
-        // Actual start is actualStart date or fallback to first daily report log date
-        actualStartStr = aStart ? formatDateOnly(aStart) : formatDateOnly(firstReportDate)
-        
-        // Actual end / delivery date is BAST submit date, or actualDone date, or fallback to latest daily report log date
-        const compDate = bastSubmit || aEnd
-        actualEndStr = compDate ? formatDateOnly(compDate) : formatDateOnly(latestReportDate)
-
-        const targetEndDate = parseDate(plannedEndStr)
-
-        if (targetEndDate) {
-          const benchmarkDate = isDone ? (compDate || latestReportDate || new Date()) : new Date()
-
-          if (startOfDay(benchmarkDate).getTime() > startOfDay(targetEndDate).getTime()) {
-            isOverdue = true
-            const diffTime = Math.abs(startOfDay(benchmarkDate).getTime() - startOfDay(targetEndDate).getTime())
-            overdueDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-            overdueStatus = isDone ? 'Overdue (Done)' : 'Overdue (Active)'
+          const targetEndDate = parseDate(plannedEndStr)
+          if (targetEndDate && latestReportDate) {
+            if (startOfDay(latestReportDate).getTime() > startOfDay(targetEndDate).getTime()) {
+              isOverdue = true
+              const diffTime = Math.abs(startOfDay(latestReportDate).getTime() - startOfDay(targetEndDate).getTime())
+              overdueDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+              overdueStatus = 'Overdue (Log)'
+            } else {
+              overdueStatus = 'On Track (Log)'
+            }
           } else {
-            overdueStatus = isDone ? 'On Time' : 'On Track'
+            overdueStatus = 'Active'
           }
         } else {
-          overdueStatus = isDone ? 'Completed' : 'Active'
+          // Method 1: Project Schedule basis (default)
+          const isDone = (ord.prjPeStatus || '').trim().toUpperCase() === 'DONE' || 
+                         (ord.prjPeStatus || '').trim().toUpperCase() === 'COMPLETED' || 
+                         !!aEnd || !!bastSubmit
+
+          actualStartStr = aStart ? formatDateOnly(aStart) : formatDateOnly(firstReportDate)
+          const compDate = bastSubmit || aEnd
+          actualEndStr = compDate ? formatDateOnly(compDate) : formatDateOnly(latestReportDate)
+
+          const targetEndDate = parseDate(plannedEndStr)
+          if (targetEndDate) {
+            const benchmarkDate = isDone ? (compDate || latestReportDate || new Date()) : new Date()
+            if (startOfDay(benchmarkDate).getTime() > startOfDay(targetEndDate).getTime()) {
+              isOverdue = true
+              const diffTime = Math.abs(startOfDay(benchmarkDate).getTime() - startOfDay(targetEndDate).getTime())
+              overdueDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+              overdueStatus = isDone ? 'Overdue (Done)' : 'Overdue (Active)'
+            } else {
+              overdueStatus = isDone ? 'On Time' : 'On Track'
+            }
+          } else {
+            overdueStatus = isDone ? 'Completed' : 'Active'
+          }
         }
       } else {
         actualStartStr = formatDateOnly(firstReportDate)
@@ -242,6 +266,22 @@ export async function GET(request: NextRequest) {
       })
     }
 
+    // Group min and max report dates per (workerId, projectId)
+    const workerProjectDates = new Map<string, { first: Date; latest: Date }>()
+    for (const r of filtered) {
+      if (!r.reportUser || !r.reportPrjId) continue
+      const key = `${r.reportUser}::${r.reportPrjId}`
+      const d = parseDate(r.reportDate)
+      if (!d) continue
+      const existing = workerProjectDates.get(key)
+      if (!existing) {
+        workerProjectDates.set(key, { first: d, latest: d })
+      } else {
+        if (d.getTime() < existing.first.getTime()) existing.first = d
+        if (d.getTime() > existing.latest.getTime()) existing.latest = d
+      }
+    }
+
     // ── Worker leaderboard ──
     type W = { hours: number; ot: number; reports: number; days: Set<string>; delays: number[]; scores: number[]; projects: Set<string> }
     const perWorker = new Map<string, W>()
@@ -259,16 +299,59 @@ export async function GET(request: NextRequest) {
     const workers = [...perWorker.entries()].map(([id, w]) => {
       const projectsWorked = [...w.projects].map(pId => {
         const meta = projectMetaMap.get(pId)
-        return meta || {
+        const key = `${id}::${pId}`
+        const wDates = workerProjectDates.get(key)
+        
+        const workerActualStart = wDates ? wDates.first : null
+        const workerActualEnd = wDates ? wDates.latest : null
+        
+        const ord = orderMap.get(pId)
+        const pStartStr = ord ? benchmarkStart(ord) : ''
+        const pEndStr = ord ? benchmarkEnd(ord) : ''
+        
+        let isOverdue = false
+        let overdueDays = 0
+        let overdueStatus = 'Active'
+        let actualStartStr = ''
+        let actualEndStr = ''
+
+        if (overdueMethod === 'worker') {
+          actualStartStr = formatDateOnly(workerActualStart)
+          actualEndStr = formatDateOnly(workerActualEnd)
+          
+          const targetEndDate = parseDate(pEndStr)
+          if (targetEndDate && workerActualEnd) {
+            const targetTime = startOfDay(targetEndDate).getTime()
+            const lastReportTime = startOfDay(workerActualEnd).getTime()
+            if (lastReportTime > targetTime) {
+              isOverdue = true
+              const diffTime = Math.abs(lastReportTime - targetTime)
+              overdueDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+              overdueStatus = 'Overdue (Log)'
+            } else {
+              overdueStatus = 'On Track (Log)'
+            }
+          } else {
+            overdueStatus = 'Active'
+          }
+        } else {
+          actualStartStr = meta ? meta.actualStart : ''
+          actualEndStr = meta ? meta.actualEnd : ''
+          isOverdue = meta ? meta.isOverdue : false
+          overdueDays = meta ? meta.overdueDays : 0
+          overdueStatus = meta ? meta.overdueStatus : 'Active'
+        }
+
+        return {
           projectId: pId,
           project: projectName(pId),
-          plannedStart: '',
-          plannedEnd: '',
-          actualStart: '',
-          actualEnd: '',
-          overdueStatus: 'Active',
-          isOverdue: false,
-          overdueDays: 0
+          plannedStart: pStartStr,
+          plannedEnd: pEndStr,
+          actualStart: actualStartStr,
+          actualEnd: actualEndStr,
+          overdueStatus,
+          isOverdue,
+          overdueDays
         }
       })
 
@@ -304,6 +387,9 @@ export async function GET(request: NextRequest) {
     const userSiteList = [...new Set(salesUsers.map((u) => u.siteId).filter(Boolean))]
       .map((site) => ({ value: site, label: site }))
       .sort((a, b) => a.label.localeCompare(b.label))
+    const jobStatusList = [...new Set(salesUsers.map((u) => u.jobStatus).filter(Boolean))]
+      .map((js) => ({ value: js, label: js === 'Int' ? 'Internal (Int)' : js === 'Ext' ? 'External (Ext)' : js }))
+      .sort((a, b) => a.label.localeCompare(b.label))
 
     const totalProjectsCount = projectHours.length
     const overdueProjectsCount = projectHours.filter((p) => p.isOverdue).length
@@ -320,7 +406,7 @@ export async function GET(request: NextRequest) {
       topWorkers,
       workers,
       projectHours,
-      filterOptions: { workerList, projectList, userSiteList },
+      filterOptions: { workerList, projectList, userSiteList, jobStatusList },
     })
   } catch (error) {
     console.error('Worker reports API error:', error)

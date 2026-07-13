@@ -495,50 +495,67 @@ export default function ProjectsDashboardPage() {
                 )}
 
                 {/* Material & Service Breakdown */}
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="font-semibold text-sky-500 flex items-center gap-1"><TrendingUp className="h-3.5 w-3.5" /> Material Expenses</span>
-                      <span className="font-mono">{selectedCalculatedProject.matPct.toFixed(0)}%</span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 text-[11px]">
-                      <div className="bg-muted/20 border p-2 rounded">
-                        <span className="text-muted-foreground block text-[9px] uppercase">Purchasing</span>
-                        <span className="font-bold text-foreground">%-Only</span>
-                        <span className="text-[9px] text-muted-foreground block mt-0.5">{selectedCalculatedProject.purchasingItems.filter(i => i.type === 'Material').length} PO(s)</span>
-                      </div>
-                      <div className="bg-muted/20 border p-2 rounded">
-                        <span className="text-muted-foreground block text-[9px] uppercase">Reimburse</span>
-                        <span className="font-bold text-foreground">{fmtRp(selectedCalculatedProject.reimburseMaterialSpent)}</span>
-                        <span className="text-[9px] text-muted-foreground block mt-0.5">{selectedCalculatedProject.reimburseItems.filter(i => i.type === 'Material').length} request(s)</span>
-                      </div>
-                    </div>
-                  </div>
+                {(() => {
+                  const matPurchasingPct = selectedCalculatedProject.purchasingItems
+                    .filter(i => i.type === 'Material')
+                    .reduce((acc, i) => acc + i.pctOfOrder, 0)
+                  const svcPurchasingPct = selectedCalculatedProject.purchasingItems
+                    .filter(i => i.type === 'Service')
+                    .reduce((acc, i) => acc + i.pctOfOrder, 0)
 
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="font-semibold text-emerald-500 flex items-center gap-1"><Activity className="h-3.5 w-3.5" /> Service & Ops Expenses</span>
-                      <span className="font-mono">{selectedCalculatedProject.svcPct.toFixed(0)}%</span>
+                  return (
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="font-semibold text-sky-500 flex items-center gap-1"><TrendingUp className="h-3.5 w-3.5" /> Material Expenses</span>
+                          <span className="font-mono">{selectedCalculatedProject.matPct.toFixed(0)}%</span>
+                        </div>
+                        <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden">
+                          <div className="h-full bg-sky-500 rounded-full transition-all" style={{ width: `${Math.min(selectedCalculatedProject.matPct, 100)}%` }} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-[11px] mt-2">
+                          <div className="bg-muted/20 border p-2 rounded">
+                            <span className="text-muted-foreground block text-[9px] uppercase">Purchasing</span>
+                            <span className="font-bold text-foreground">{matPurchasingPct > 0 ? `${matPurchasingPct.toFixed(2)}%` : '0%'}</span>
+                            <span className="text-[9px] text-muted-foreground block mt-0.5">{selectedCalculatedProject.purchasingItems.filter(i => i.type === 'Material').length} PO(s)</span>
+                          </div>
+                          <div className="bg-muted/20 border p-2 rounded">
+                            <span className="text-muted-foreground block text-[9px] uppercase">Reimburse</span>
+                            <span className="font-bold text-foreground">{fmtRp(selectedCalculatedProject.reimburseMaterialSpent)}</span>
+                            <span className="text-[9px] text-muted-foreground block mt-0.5">{selectedCalculatedProject.reimburseItems.filter(i => i.type === 'Material').length} request(s)</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="font-semibold text-emerald-500 flex items-center gap-1"><Activity className="h-3.5 w-3.5" /> Service & Ops Expenses</span>
+                          <span className="font-mono">{selectedCalculatedProject.svcPct.toFixed(0)}%</span>
+                        </div>
+                        <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden">
+                          <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${Math.min(selectedCalculatedProject.svcPct, 100)}%` }} />
+                        </div>
+                        <div className="grid grid-cols-3 gap-1.5 text-[10px] mt-2">
+                          <div className="bg-muted/20 border p-2 rounded">
+                            <span className="text-muted-foreground block text-[8px] uppercase">Purchasing</span>
+                            <span className="font-bold text-foreground">{svcPurchasingPct > 0 ? `${svcPurchasingPct.toFixed(2)}%` : '0%'}</span>
+                            <span className="text-[8px] text-muted-foreground block mt-0.5">{selectedCalculatedProject.purchasingItems.filter(i => i.type === 'Service').length} PO(s)</span>
+                          </div>
+                          <div className="bg-muted/20 border p-2 rounded">
+                            <span className="text-muted-foreground block text-[8px] uppercase">Reimburse</span>
+                            <span className="font-bold text-foreground">{fmtRp(selectedCalculatedProject.reimburseServiceSpent)}</span>
+                            <span className="text-[8px] text-muted-foreground block mt-0.5">{selectedCalculatedProject.reimburseItems.filter(i => i.type === 'Service').length} req(s)</span>
+                          </div>
+                          <div className="bg-muted/20 border p-2 rounded">
+                            <span className="text-muted-foreground block text-[8px] uppercase">Meal benefits</span>
+                            <span className="font-bold text-foreground">{fmtRp(selectedCalculatedProject.spentMeal)}</span>
+                            <span className="text-[8px] text-muted-foreground block mt-0.5">{selectedCalculatedProject.mealItems.length} req(s)</span>
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                    <div className="grid grid-cols-3 gap-1.5 text-[10px]">
-                      <div className="bg-muted/20 border p-2 rounded">
-                        <span className="text-muted-foreground block text-[8px] uppercase">Purchasing</span>
-                        <span className="font-bold text-foreground">%-Only</span>
-                        <span className="text-[8px] text-muted-foreground block mt-0.5">{selectedCalculatedProject.purchasingItems.filter(i => i.type === 'Service').length} PO(s)</span>
-                      </div>
-                      <div className="bg-muted/20 border p-2 rounded">
-                        <span className="text-muted-foreground block text-[8px] uppercase">Reimburse</span>
-                        <span className="font-bold text-foreground">{fmtRp(selectedCalculatedProject.reimburseServiceSpent)}</span>
-                        <span className="text-[8px] text-muted-foreground block mt-0.5">{selectedCalculatedProject.reimburseItems.filter(i => i.type === 'Service').length} req(s)</span>
-                      </div>
-                      <div className="bg-muted/20 border p-2 rounded">
-                        <span className="text-muted-foreground block text-[8px] uppercase">Meal benefits</span>
-                        <span className="font-bold text-foreground">{fmtRp(selectedCalculatedProject.spentMeal)}</span>
-                        <span className="text-[8px] text-muted-foreground block mt-0.5">{selectedCalculatedProject.mealItems.length} req(s)</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                  )
+                })()}
 
                 {/* Workforce Data */}
                 <div className="space-y-2">

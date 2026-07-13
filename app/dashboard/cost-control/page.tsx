@@ -609,7 +609,10 @@ export default function CostControlPage() {
                         <span className="font-semibold text-sky-500 flex items-center gap-1"><TrendingUp className="h-3.5 w-3.5" /> Material Expenses</span>
                         <span className="font-mono">{selectedCalculatedProject.matPct.toFixed(0)}%</span>
                       </div>
-                      <div className="grid grid-cols-2 gap-2 text-[11px]">
+                      <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden">
+                        <div className="h-full bg-sky-500 rounded-full transition-all" style={{ width: `${Math.min(selectedCalculatedProject.matPct, 100)}%` }} />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-[11px] mt-2">
                         <div className="bg-muted/20 border p-2 rounded">
                           <span className="text-muted-foreground block text-[9px] uppercase">Purchasing</span>
                           <span className="font-bold text-foreground">{fmtRp(selectedCalculatedProject.spentMaterialPurchasing)}</span>
@@ -628,7 +631,10 @@ export default function CostControlPage() {
                         <span className="font-semibold text-emerald-500 flex items-center gap-1"><Activity className="h-3.5 w-3.5" /> Service & Ops Expenses</span>
                         <span className="font-mono">{selectedCalculatedProject.svcPct.toFixed(0)}%</span>
                       </div>
-                      <div className="grid grid-cols-3 gap-1.5 text-[10px]">
+                      <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden">
+                        <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${Math.min(selectedCalculatedProject.svcPct, 100)}%` }} />
+                      </div>
+                      <div className="grid grid-cols-3 gap-1.5 text-[10px] mt-2">
                         <div className="bg-muted/20 border p-2 rounded">
                           <span className="text-muted-foreground block text-[8px] uppercase">Purchasing</span>
                           <span className="font-bold text-foreground">{fmtRp(selectedCalculatedProject.spentServicePurchasing)}</span>

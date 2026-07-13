@@ -51,7 +51,7 @@ interface ReportsData {
   topWorkers: { name: string; value: number }[]
   workers: WorkerRow[]
   projectHours: ProjectRow[]
-  filterOptions: { workerList: Option[]; projectList: Option[]; userSiteList?: Option[] }
+  filterOptions: { workerList: Option[]; projectList: Option[]; userSiteList?: Option[]; jobStatusList?: Option[] }
 }
 
 const axis = { stroke: 'var(--muted-foreground)', tickLine: false, className: 'text-xs' } as const
@@ -71,11 +71,14 @@ export default function WorkerReportsPage() {
   const [dateType, setDateType] = useState('report')
   const [worker, setWorker] = useState<string[]>([]), [project, setProject] = useState<string[]>([])
   const [userSite, setUserSite] = useState<string[]>([])
+  const [jobStatus, setJobStatus] = useState<string[]>([])
+  const [overdueMethod, setOverdueMethod] = useState<'project' | 'worker'>('project')
 
   const [lFrom, setLFrom] = useState(dateFrom), [lTo, setLTo] = useState(dateTo)
   const [lDateType, setLDateType] = useState('report')
   const [lWorker, setLWorker] = useState<string[]>([]), [lProject, setLProject] = useState<string[]>([])
   const [lUserSite, setLUserSite] = useState<string[]>([])
+  const [lJobStatus, setLJobStatus] = useState<string[]>([])
 
   const doFetch = useCallback(async (params: any) => {
     try {
@@ -89,19 +92,19 @@ export default function WorkerReportsPage() {
   useEffect(() => {
     const fresh = firstLoad.current; firstLoad.current = false
     doFetch({
-      dateFrom, dateTo, dateType, worker, project, userSite,
+      dateFrom, dateTo, dateType, worker, project, userSite, jobStatus, overdueMethod,
       ...(chartFilter ? { cType: chartFilter.type, cVal: chartFilter.value } : {}),
       ...(fresh ? { fresh: '1' } : {}),
     })
-  }, [doFetch, dateFrom, dateTo, dateType, worker, project, userSite, chartFilter])
+  }, [doFetch, dateFrom, dateTo, dateType, worker, project, userSite, jobStatus, overdueMethod, chartFilter])
 
-  const onApply = () => { setDateFrom(lFrom); setDateTo(lTo); setDateType(lDateType); setWorker(lWorker); setProject(lProject); setUserSite(lUserSite) }
+  const onApply = () => { setDateFrom(lFrom); setDateTo(lTo); setDateType(lDateType); setWorker(lWorker); setProject(lProject); setUserSite(lUserSite); setJobStatus(lJobStatus) }
   const onClear = () => {
     const d = getYTD()
-    setLFrom(d.from); setLTo(d.to); setLDateType('report'); setLWorker([]); setLProject([]); setLUserSite([])
-    setDateFrom(d.from); setDateTo(d.to); setDateType('report'); setWorker([]); setProject([]); setUserSite([]); setChartFilter(null)
+    setLFrom(d.from); setLTo(d.to); setLDateType('report'); setLWorker([]); setLProject([]); setLUserSite([]); setLJobStatus([])
+    setDateFrom(d.from); setDateTo(d.to); setDateType('report'); setWorker([]); setProject([]); setUserSite([]); setJobStatus([]); setOverdueMethod('project'); setChartFilter(null)
   }
-  const hasUnapplied = lFrom !== dateFrom || lTo !== dateTo || lDateType !== dateType || !sameSet(lWorker, worker) || !sameSet(lProject, project) || !sameSet(lUserSite, userSite)
+  const hasUnapplied = lFrom !== dateFrom || lTo !== dateTo || lDateType !== dateType || !sameSet(lWorker, worker) || !sameSet(lProject, project) || !sameSet(lUserSite, userSite) || !sameSet(lJobStatus, jobStatus)
 
   const workerRows = useMemo(() => {
     const raw = data?.workers ?? []
@@ -151,7 +154,7 @@ export default function WorkerReportsPage() {
         <PageHeader title="Worker Reports" subtitle="PT. Multi Daya Mitra — field & site daily reports" chartFilter={chartFilter} onClearFilter={() => setChartFilter(null)} />
 
         <FilterCard from={lFrom} to={lTo} onDateChange={(f, t) => { setLFrom(f); setLTo(t) }} onApply={onApply} onClear={onClear} hasUnapplied={hasUnapplied} loading={loading && !!data}>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-4 items-start">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 lg:grid-cols-5 items-start">
             <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Date Basis</label>
               <Select value={lDateType} onValueChange={(v) => setLDateType(v ?? 'report')}>
                 <SelectTrigger className="w-full text-xs h-9 bg-background"><SelectValue>{lDateType === 'created' ? 'Submitted Date' : 'Report Date'}</SelectValue></SelectTrigger>
@@ -167,6 +170,8 @@ export default function WorkerReportsPage() {
               <MultiSelect allLabel="All Projects" selected={lProject} onChange={setLProject} options={data.filterOptions.projectList} /></div>
             <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">User Site</label>
               <MultiSelect allLabel="All Sites" selected={lUserSite} onChange={setLUserSite} options={data.filterOptions.userSiteList || []} /></div>
+            <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Job Status</label>
+              <MultiSelect allLabel="All Job Statuses" selected={lJobStatus} onChange={setLJobStatus} options={data.filterOptions.jobStatusList || []} /></div>
           </div>
         </FilterCard>
 
@@ -224,8 +229,26 @@ export default function WorkerReportsPage() {
 
         {/* Worker leaderboard */}
         <Card className="overflow-hidden" id="worker-table-section">
-          <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <CardTitle className="text-sm font-semibold">Worker Leaderboard <span className="font-normal text-muted-foreground">({workerRows.length.toLocaleString('en-US')})</span></CardTitle>
+          <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b pb-3">
+            <div className="flex flex-col gap-1.5 sm:gap-2">
+              <CardTitle className="text-sm font-semibold flex flex-wrap items-center gap-2">
+                Worker Leaderboard <span className="font-normal text-muted-foreground">({workerRows.length.toLocaleString('en-US')})</span>
+              </CardTitle>
+              <div className="flex bg-muted p-0.5 rounded-lg w-fit text-[10px] border">
+                <button
+                  onClick={() => setOverdueMethod('project')}
+                  className={`px-2.5 py-1 rounded-md transition-colors ${overdueMethod === 'project' ? 'bg-background font-semibold shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                >
+                  Project Schedule
+                </button>
+                <button
+                  onClick={() => setOverdueMethod('worker')}
+                  className={`px-2.5 py-1 rounded-md transition-colors ${overdueMethod === 'worker' ? 'bg-background font-semibold shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                >
+                  Worker Log Dates
+                </button>
+              </div>
+            </div>
             <SearchInput value={search} onChange={setSearch} />
           </CardHeader>
           <CardContent className="p-0">

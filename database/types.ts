@@ -27,6 +27,7 @@ export interface SalesUser {
   nik: string
   formalEmail: string
   photo: string
+  jobStatus: string
 }
 
 export interface SalesRole {
