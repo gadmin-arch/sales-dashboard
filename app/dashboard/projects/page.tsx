@@ -7,21 +7,23 @@ import { useSort, SortHead } from '@/components/sortable'
 import { FolderOpen, Search, AlertCircle, X, CheckCircle, Lightbulb, Clock, ShoppingCart, Receipt, Utensils, Settings2 } from 'lucide-react'
 import { DateRangeRow } from '@/components/date-range-row'
 import { MultiSelect } from '@/components/multi-select'
-import { buildQuery, getYTD, sameSet } from '@/lib/sales-helpers'
+import { buildQuery, getYTD, sameSet, fmtCurrency } from '@/lib/sales-helpers'
 import { PageSpinner, PageError } from '@/components/page-states'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 
+const fmtRp = (v: number) => fmtCurrency(v, 'IDR')
+
 interface ProjectDashboardData {
   prjId: string
   prjName: string
-  budgetTotal: number
-  spentTotal: number
-  utilizationPct: number
+  reimburseMaterialSpent: number
+  reimburseServiceSpent: number
+  mealSpent: number
   
   purchasingItems: Array<{ date: string; description: string; type: string; poNumber: string }>
-  reimburseItems: Array<{ date: string; description: string; type: string; requestor: string }>
-  mealItems: Array<{ date: string; description: string; requestor: string }>
+  reimburseItems: Array<{ date: string; description: string; type: string; requestor: string; amount: number }>
+  mealItems: Array<{ date: string; description: string; requestor: string; amount: number }>
 
   overtimeHours: number
   reportCount: number
@@ -48,7 +50,6 @@ export default function ProjectsDashboardPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
-  const [filterType, setFilterType] = useState<'all' | 'safe' | 'overbudget'>('all')
   const [selectedProject, setSelectedProject] = useState<ProjectDashboardData | null>(null)
 
   // Workforce Pricing Calculator States
@@ -127,14 +128,12 @@ export default function ProjectsDashboardPage() {
       const reportCost = calcMethod === 'hours' ? d.reportHours * hoursRate : d.reportCount * reportRate
       const calculatedWorkforceCost = overtimeCost + reportCost
 
-      const spentTotal = d.spentTotal + calculatedWorkforceCost
-      const budgetTotal = d.budgetTotal
-      const utilizationPct = budgetTotal > 0 ? (spentTotal / budgetTotal) * 100 : (spentTotal > 0 ? 100 : 0)
+      const baseSpent = (d.reimburseMaterialSpent || 0) + (d.reimburseServiceSpent || 0) + (d.mealSpent || 0)
+      const spentTotal = baseSpent + calculatedWorkforceCost
 
       return {
         ...d,
         spentTotal,
-        utilizationPct,
         overtimeCost,
         reportCost,
         calculatedWorkforceCost,
@@ -149,16 +148,9 @@ export default function ProjectsDashboardPage() {
                           (d.pePicName || '').toLowerCase().includes(search.toLowerCase()) ||
                           (d.peTeamName || '').toLowerCase().includes(search.toLowerCase())
       
-      if (!matchSearch) return false
-
-      const isOver = d.utilizationPct > 100
-      
-      if (filterType === 'safe' && isOver) return false
-      if (filterType === 'overbudget' && !isOver) return false
-
-      return true
+      return matchSearch
     })
-  }, [calculatedRows, search, filterType])
+  }, [calculatedRows, search])
 
   // Recalculate selected project reference when data changes
   const selectedCalculatedProject = useMemo(() => {
@@ -166,24 +158,23 @@ export default function ProjectsDashboardPage() {
     return filtered.find((p) => p.prjId === selectedProject.prjId) || null
   }, [selectedProject, filtered])
 
-  // Computed columns so Status and Items Purchased are sortable too.
+  // Computed columns
   const tableRows = useMemo(() => filtered.map((d) => ({
     ...d,
-    statusLabel: d.utilizationPct > 100 ? 'Overbudget' : 'Safe',
-    totalItems: d.purchasingItems.length + d.reimburseItems.length + d.mealItems.length,
+    totalItems: d.reimburseItems.length + d.mealItems.length,
   })), [filtered])
-  const sort = useSort(tableRows, 'utilizationPct', 'desc')
+  const sort = useSort(tableRows, 'spentTotal', 'desc')
 
   const insights = useMemo(() => {
     if (calculatedRows.length === 0) return []
-    const overbudgetProjects = calculatedRows.filter(d => d.utilizationPct > 100)
-    const items = []
-    if (overbudgetProjects.length > 0) {
-      items.push(`${overbudgetProjects.length} project(s) have exceeded their budget allocation.`)
-    } else {
-      items.push(`All projects are safely within their allocated budgets.`)
-    }
-    return items
+    const totalReports = calculatedRows.reduce((sum, d) => sum + d.reportCount, 0)
+    const totalOvertime = calculatedRows.reduce((sum, d) => sum + d.overtimeHours, 0)
+    const totalSpent = calculatedRows.reduce((sum, d) => sum + d.spentTotal, 0)
+    
+    return [
+      `Total expense across filtered projects: ${fmtRp(totalSpent)}`,
+      `Total worker activity: ${totalReports} reports submitted, with ${totalOvertime.toFixed(1)} overtime hours.`
+    ]
   }, [calculatedRows])
 
   const salesUserOpts: Option[] = (metadata?.salesUserList || []).map(u => ({ value: u.id, label: u.name }))
@@ -334,26 +325,6 @@ export default function ProjectsDashboardPage() {
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
-            <div className="flex bg-muted/50 p-1 rounded-md border">
-              <button
-                className={`px-3 py-1 text-xs font-medium rounded-sm transition-colors ${filterType === 'all' ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
-                onClick={() => setFilterType('all')}
-              >
-                All
-              </button>
-              <button
-                className={`px-3 py-1 text-xs font-medium rounded-sm transition-colors ${filterType === 'safe' ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
-                onClick={() => setFilterType('safe')}
-              >
-                Safe Status
-              </button>
-              <button
-                className={`px-3 py-1 text-xs font-medium rounded-sm transition-colors ${filterType === 'overbudget' ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
-                onClick={() => setFilterType('overbudget')}
-              >
-                Overbudget
-              </button>
-            </div>
           </div>
 
           <div className="rounded-md border bg-card">
@@ -362,25 +333,26 @@ export default function ProjectsDashboardPage() {
                 <TableHeader className="bg-muted/50">
                   <TableRow>
                     <SortHead label="Project" column="prjName" sortKey={sort.sortKey} sortDir={sort.sortDir} onSort={sort.toggle} className="w-[160px] max-w-[180px]" />
-                    <SortHead label="PE PIC" column="pePicName" sortKey={sort.sortKey} sortDir={sort.sortDir} onSort={sort.toggle} className="w-[120px]" />
-                    <SortHead label="PE Team" column="peTeamName" sortKey={sort.sortKey} sortDir={sort.sortDir} onSort={sort.toggle} className="w-[120px]" />
-                    <SortHead label="Utilization" column="utilizationPct" sortKey={sort.sortKey} sortDir={sort.sortDir} onSort={sort.toggle} className="w-[130px]" />
-                    <SortHead label="Status" column="statusLabel" sortKey={sort.sortKey} sortDir={sort.sortDir} onSort={sort.toggle} className="w-[110px]" />
-                    <SortHead label="Worker Reports" column="reportCount" sortKey={sort.sortKey} sortDir={sort.sortDir} onSort={sort.toggle} className="text-right w-[110px]" />
-                    <SortHead label="Overtime Hrs" column="overtimeHours" sortKey={sort.sortKey} sortDir={sort.sortDir} onSort={sort.toggle} className="text-right w-[110px]" />
-                    <SortHead label="Items Purchased" column="totalItems" sortKey={sort.sortKey} sortDir={sort.sortDir} onSort={sort.toggle} className="text-right w-[120px]" />
+                    <SortHead label="PE PIC" column="pePicName" sortKey={sort.sortKey} sortDir={sort.sortDir} onSort={sort.toggle} className="w-[110px]" />
+                    <SortHead label="PE Team" column="peTeamName" sortKey={sort.sortKey} sortDir={sort.sortDir} onSort={sort.toggle} className="w-[80px]" />
+                    <SortHead label="Reports" column="reportCount" sortKey={sort.sortKey} sortDir={sort.sortDir} onSort={sort.toggle} className="text-right w-[90px]" />
+                    <SortHead label="Overtime" column="overtimeHours" sortKey={sort.sortKey} sortDir={sort.sortDir} onSort={sort.toggle} className="text-right w-[90px]" />
+                    <SortHead label="Reimburse Mat" column="reimburseMaterialSpent" sortKey={sort.sortKey} sortDir={sort.sortDir} onSort={sort.toggle} className="text-right w-[110px]" />
+                    <SortHead label="Reimburse Svc" column="reimburseServiceSpent" sortKey={sort.sortKey} sortDir={sort.sortDir} onSort={sort.toggle} className="text-right w-[110px]" />
+                    <SortHead label="Meal Spent" column="mealSpent" sortKey={sort.sortKey} sortDir={sort.sortDir} onSort={sort.toggle} className="text-right w-[110px]" />
+                    <SortHead label="Added Cost" column="calculatedWorkforceCost" sortKey={sort.sortKey} sortDir={sort.sortDir} onSort={sort.toggle} className="text-right w-[110px]" />
+                    <SortHead label="Total Spent" column="spentTotal" sortKey={sort.sortKey} sortDir={sort.sortDir} onSort={sort.toggle} className="text-right w-[120px] bg-muted/20 font-bold" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {sort.sorted.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="h-24 text-center">
+                      <TableCell colSpan={10} className="h-24 text-center text-muted-foreground">
                         No projects found.
                       </TableCell>
                     </TableRow>
                   ) : (
                     sort.sorted.map((row) => {
-                      const isOver = row.utilizationPct > 100
                       return (
                         <TableRow 
                           key={row.prjId} 
@@ -388,51 +360,36 @@ export default function ProjectsDashboardPage() {
                           onClick={() => setSelectedProject(row)}
                         >
                           <TableCell className="max-w-[180px]">
-                            <div className="font-semibold truncate" title={row.prjName}>{row.prjName}</div>
-                            <div className="text-[10px] text-muted-foreground uppercase tracking-widest mt-1">{row.prjId}</div>
+                            <div className="font-semibold truncate text-xs text-foreground" title={row.prjName}>{row.prjName}</div>
+                            <div className="text-[9px] text-muted-foreground uppercase tracking-widest mt-1">{row.prjId}</div>
                           </TableCell>
-                          <TableCell className="max-w-[120px] truncate text-xs font-medium">
+                          <TableCell className="max-w-[110px] truncate text-xs font-medium">
                             {row.pePicName || '-'}
                           </TableCell>
-                          <TableCell className="max-w-[120px] truncate text-xs text-muted-foreground">
+                          <TableCell className="max-w-[80px] truncate text-xs text-muted-foreground">
                             {row.peTeamName || '-'}
                           </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <div className="flex-1 h-2 bg-secondary rounded-full overflow-hidden max-w-[80px]">
-                                <div 
-                                  className={`h-full ${isOver ? 'bg-red-500' : 'bg-emerald-500'}`} 
-                                  style={{ width: `${Math.min(row.utilizationPct, 100)}%` }} 
-                                />
-                              </div>
-                              <span className={`text-xs font-semibold ${isOver ? 'text-red-600' : ''}`}>
-                                {row.utilizationPct.toFixed(1)}%
-                              </span>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            {isOver ? (
-                              <Badge variant="destructive" className="flex w-fit items-center gap-1 text-[10px] px-2 py-0.5">
-                                <AlertCircle className="h-3 w-3" />
-                                Overbudget
-                              </Badge>
-                            ) : (
-                              <Badge variant="secondary" className="flex w-fit items-center gap-1 text-[10px] px-2 py-0.5 bg-emerald-500/15 text-emerald-700 hover:bg-emerald-500/25 border-emerald-500/20">
-                                <CheckCircle className="h-3 w-3" />
-                                Safe
-                              </Badge>
-                            )}
-                          </TableCell>
                           <TableCell className="text-right">
-                            <div className="font-medium text-xs">{row.reportCount}</div>
+                            <div className="font-medium text-xs text-foreground">{row.reportCount}</div>
                             <div className="text-[9px] text-muted-foreground">{row.reportHours.toFixed(1)} hrs</div>
                           </TableCell>
                           <TableCell className="text-right">
-                            <div className="font-medium text-xs text-amber-600">{row.overtimeHours.toFixed(1)}</div>
+                            <div className="font-medium text-xs text-amber-600 dark:text-amber-400">{row.overtimeHours.toFixed(1)}h</div>
                           </TableCell>
-                          <TableCell className="text-right">
-                            <div className="font-medium text-xs">{row.totalItems}</div>
-                            <div className="text-[9px] text-muted-foreground">expenses</div>
+                          <TableCell className="text-right font-mono text-xs text-foreground">
+                            {row.reimburseMaterialSpent > 0 ? fmtRp(row.reimburseMaterialSpent) : '-'}
+                          </TableCell>
+                          <TableCell className="text-right font-mono text-xs text-foreground">
+                            {row.reimburseServiceSpent > 0 ? fmtRp(row.reimburseServiceSpent) : '-'}
+                          </TableCell>
+                          <TableCell className="text-right font-mono text-xs text-foreground">
+                            {row.mealSpent > 0 ? fmtRp(row.mealSpent) : '-'}
+                          </TableCell>
+                          <TableCell className="text-right font-mono text-xs text-primary font-medium">
+                            {row.calculatedWorkforceCost > 0 ? `+ ${fmtRp(row.calculatedWorkforceCost)}` : '-'}
+                          </TableCell>
+                          <TableCell className="text-right font-mono font-bold text-foreground bg-muted/10 text-xs">
+                            {row.spentTotal > 0 ? fmtRp(row.spentTotal) : '-'}
                           </TableCell>
                         </TableRow>
                       )
@@ -500,19 +457,14 @@ export default function ProjectsDashboardPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-muted p-4 rounded-lg">
                   <div className="flex items-center gap-2 mb-2">
-                    <AlertCircle className="h-4 w-4 text-primary" />
-                    <h3 className="font-semibold text-sm">Budget Utilization</h3>
+                    <Receipt className="h-4 w-4 text-primary" />
+                    <h3 className="font-semibold text-sm">Total Expenses</h3>
                   </div>
-                  <div className="flex items-center gap-2 mt-2">
-                    <div className="flex-1 h-2 bg-secondary rounded-full overflow-hidden">
-                      <div 
-                        className={`h-full ${selectedCalculatedProject.utilizationPct > 100 ? 'bg-red-500' : 'bg-emerald-500'}`} 
-                        style={{ width: `${Math.min(selectedCalculatedProject.utilizationPct, 100)}%` }} 
-                      />
+                  <div className="mt-2">
+                    <span className="text-lg font-bold text-foreground">{fmtRp(selectedCalculatedProject.spentTotal)}</span>
+                    <div className="text-[10px] text-muted-foreground mt-0.5">
+                      Reimbursement + Meal + Calculated Workforce
                     </div>
-                    <span className={`font-bold ${selectedCalculatedProject.utilizationPct > 100 ? 'text-red-500' : ''}`}>
-                      {selectedCalculatedProject.utilizationPct.toFixed(1)}%
-                    </span>
                   </div>
                 </div>
 
@@ -530,30 +482,6 @@ export default function ProjectsDashboardPage() {
                 </div>
               </div>
 
-              {/* Purchasing POs */}
-              <div className="space-y-4">
-                <div className="flex items-center gap-2">
-                  <ShoppingCart className="h-5 w-5 text-blue-500" />
-                  <h3 className="font-semibold text-lg border-b pb-1 flex-1">Purchasing Details ({selectedCalculatedProject.purchasingItems.length})</h3>
-                </div>
-                {selectedCalculatedProject.purchasingItems.length > 0 ? (
-                  <div className="space-y-3">
-                    {selectedCalculatedProject.purchasingItems.map((item, idx) => (
-                      <div key={idx} className="bg-card border rounded p-3 text-sm flex flex-col gap-1">
-                        <div className="flex justify-between items-start">
-                          <span className="font-semibold">{item.poNumber}</span>
-                          <Badge variant="outline" className="text-[10px]">{item.type}</Badge>
-                        </div>
-                        <span className="text-muted-foreground">{item.description || 'No description provided.'}</span>
-                        <span className="text-xs text-muted-foreground/70">{item.date}</span>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">No purchasing records found.</p>
-                )}
-              </div>
-
               {/* Reimburse Items */}
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
@@ -565,8 +493,11 @@ export default function ProjectsDashboardPage() {
                     {selectedCalculatedProject.reimburseItems.map((item, idx) => (
                       <div key={idx} className="bg-card border rounded p-3 text-sm flex flex-col gap-1">
                         <div className="flex justify-between items-start">
-                          <span className="font-semibold">{item.requestor}</span>
-                          <Badge variant="outline" className="text-[10px]">{item.type}</Badge>
+                          <span className="font-semibold text-foreground">{item.requestor}</span>
+                          <div className="flex items-center gap-1.5">
+                            <Badge variant="outline" className="text-[10px]">{item.type}</Badge>
+                            <span className="font-bold text-foreground font-mono text-xs">{fmtRp(item.amount)}</span>
+                          </div>
                         </div>
                         <span className="text-muted-foreground">{item.description || 'No description provided.'}</span>
                         <span className="text-xs text-muted-foreground/70">{item.date}</span>
@@ -588,7 +519,10 @@ export default function ProjectsDashboardPage() {
                   <div className="space-y-3">
                     {selectedCalculatedProject.mealItems.map((item, idx) => (
                       <div key={idx} className="bg-card border rounded p-3 text-sm flex flex-col gap-1">
-                        <div className="font-semibold">{item.requestor}</div>
+                        <div className="flex justify-between items-start">
+                          <span className="font-semibold text-foreground">{item.requestor}</span>
+                          <span className="font-bold text-foreground font-mono text-xs">{fmtRp(item.amount)}</span>
+                        </div>
                         <span className="text-muted-foreground">{item.description || 'Meal allowance'}</span>
                         <span className="text-xs text-muted-foreground/70">{item.date}</span>
                       </div>
