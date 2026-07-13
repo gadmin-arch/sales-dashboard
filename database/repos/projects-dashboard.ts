@@ -120,6 +120,8 @@ export async function getProjectDashboardData(f: CostControlFilter = {}): Promis
   }
 
   // Aggregate Overtimes
+  // overtime_date (2), overtime_time (6), overtime_reason (7), overtime_user (8),
+  // overtime_status (9), overtime_deleted_at (13), overtime_prj (14)
   const overtimeByPrj = new Map<string, number>()
   const overtimeItemsByPrj = new Map<string, Array<{ date: string; workerName: string; hours: number; reason: string }>>()
   for (const r of overtimeRes.rows) {
@@ -128,16 +130,19 @@ export async function getProjectDashboardData(f: CostControlFilter = {}): Promis
     if (status !== 'A' && status !== 'P') continue
     const prjId = r[14]
     if (!prjId) continue
-    
+
     const hours = parseNum(r[6])
     overtimeByPrj.set(prjId, (overtimeByPrj.get(prjId) || 0) + hours)
-    
+
+    const otUserId = r[8] || ''
+    const otUser = otUserId ? salesUsers.find(u => u.userId === otUserId) : null
+
     if (!overtimeItemsByPrj.has(prjId)) overtimeItemsByPrj.set(prjId, [])
     overtimeItemsByPrj.get(prjId)!.push({
-      date: r[3] || '',
-      workerName: r[12] || '',
+      date: r[2] || '',
+      workerName: otUser ? otUser.name : otUserId || '-',
       hours,
-      reason: r[5] || 'Overtime'
+      reason: r[7] || 'Overtime'
     })
   }
 
@@ -151,10 +156,13 @@ export async function getProjectDashboardData(f: CostControlFilter = {}): Promis
     reportCountByPrj.set(prjId, (reportCountByPrj.get(prjId) || 0) + 1)
     reportHoursByPrj.set(prjId, (reportHoursByPrj.get(prjId) || 0) + r.reportTime)
     
+    const rptUserId = r.reportUser || ''
+    const rptUser = rptUserId ? salesUsers.find(u => u.userId === rptUserId) : null
+
     if (!reportItemsByPrj.has(prjId)) reportItemsByPrj.set(prjId, [])
     reportItemsByPrj.get(prjId)!.push({
       date: r.reportDate || '',
-      workerName: r.reportUserName || '',
+      workerName: rptUser ? rptUser.name : rptUserId || '-',
       hours: r.reportTime,
       remarks: r.reportRemarks || ''
     })
@@ -162,11 +170,9 @@ export async function getProjectDashboardData(f: CostControlFilter = {}): Promis
 
   // Aggregate Purchasing POs
   const validPos = new Map<string, string>() // poNumber -> poDate
-  const poInfoByNumber = new Map<string, { vendor: string }>()
   for (const po of pos) {
     if (!po.poStatus.toLowerCase().includes('cancel') && !po.poStatus.toLowerCase().includes('reject')) {
       validPos.set(po.poNumber, po.poDate)
-      poInfoByNumber.set(po.poNumber, { vendor: po.poVendorName })
     }
   }
 

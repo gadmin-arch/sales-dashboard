@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { cachedRoute } from '@/lib/route-cache'
 import { getProjectDashboardData } from '@/database/repos/projects-dashboard'
 import { parseDashboardParams } from '@/lib/api-helpers'
 import { parseMulti, parseDate } from '@/lib/utils-date-currency'
@@ -13,9 +14,7 @@ import { getAllSalesUsers } from '@/database/repos/sales-users'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url)
+async function compute(searchParams: URLSearchParams) {
     const { dateFrom, dateTo } = parseDashboardParams(searchParams)
     const salesUser = parseMulti(searchParams, 'salesUser')
     const orderType = parseMulti(searchParams, 'orderType')
@@ -113,7 +112,7 @@ export async function GET(request: NextRequest) {
       { flagId: 'Urgent', flagDescription: 'Urgent' },
     ]
 
-    return NextResponse.json({
+    return ({
       projects: projectsData,
       salesUserList,
       pePicList,
@@ -123,6 +122,16 @@ export async function GET(request: NextRequest) {
       invoiceStatusList,
       projectFlagList
     })
+}
+
+// v2: bump the cache name when a bugfix must bypass entries computed by older
+// code (the data cache outlives deploys; version only changes at sync time).
+const getData = cachedRoute('projects-v2', compute)
+
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url)
+    return NextResponse.json(await getData(searchParams))
   } catch (error: any) {
     console.error('Projects Dashboard API error:', error)
     return NextResponse.json({ error: error.message || 'Unknown error' }, { status: 500 })
