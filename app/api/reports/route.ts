@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAllReports, getAllOrders, getAllProjectLogs, getAllBasts } from '@/database'
-import { getSalesUserNamesMap } from '@/database/repos/sales-users'
+import { getSalesUserNamesMap, getAllSalesUsers } from '@/database/repos/sales-users'
 import { parseDashboardParams, applyChartFilter } from '@/lib/api-helpers'
 import { parseDate, formatMonth, sortByPeriod, parseMulti, filterDataByDateRange } from '@/lib/utils-date-currency'
 import { reportDelayHours, delayScore, SCORE_META, parseProgress } from '@/lib/reports-helpers'
@@ -24,25 +24,29 @@ export async function GET(request: NextRequest) {
     const dateType = searchParams.get('dateType') || 'report' // 'report' | 'created'
     const worker = parseMulti(searchParams, 'worker')
     const project = parseMulti(searchParams, 'project')
+    const userSite = parseMulti(searchParams, 'userSite')
 
-    const [reports, orders, logs, basts] = await Promise.all([
+    const [reports, orders, logs, basts, salesUsers] = await Promise.all([
       getAllReports(),
       getAllOrders(),
       getAllProjectLogs(),
-      getAllBasts()
+      getAllBasts(),
+      getAllSalesUsers()
     ])
 
     const { nsToIp, ipToD } = buildLogMaps(logs)
     const bastSubmitMap = buildBastSubmitMap(basts)
     const today = new Date()
 
-    // Resolve worker (U-xxxx) and project names.
+    // Resolve worker (U-xxxx) and project names, and map user sites.
     const userIds = new Set<string>()
     for (const r of reports) if (r.reportUser) userIds.add(r.reportUser)
     const userNames = await getSalesUserNamesMap(userIds)
     const userName = (id: string) => userNames.get(id) || id || '(unknown)'
     const projName = new Map(orders.map((o) => [o.prjId, o.prjName]))
     const projectName = (id: string) => projName.get(id) || id || '-'
+
+    const userSiteMap = new Map(salesUsers.map((u) => [u.userId, u.siteId]))
 
     // ── Per-report derived ──
     const enriched = reports.map((r) => {
@@ -60,6 +64,12 @@ export async function GET(request: NextRequest) {
     let filtered = filterDataByDateRange(enriched, (r) => r.dateBasis, dateFrom, dateTo)
     if (worker.length) filtered = filtered.filter((r) => worker.includes(r.reportUser))
     if (project.length) filtered = filtered.filter((r) => project.includes(r.reportPrjId))
+    if (userSite.length) {
+      filtered = filtered.filter((r) => {
+        const site = userSiteMap.get(r.reportUser) || ''
+        return userSite.includes(site)
+      })
+    }
 
     // Chart cross-filter (cType/cVal from a chart click) — same semantics as sales overview:
     // applied after the standard filters so KPIs, charts, and tables all reflect the click.
@@ -291,6 +301,9 @@ export async function GET(request: NextRequest) {
       .map((id) => ({ value: id, label: userName(id) })).sort((a, b) => a.label.localeCompare(b.label))
     const projectList = [...new Set(reports.map((r) => r.reportPrjId).filter(Boolean))]
       .map((id) => ({ value: id, label: projectName(id) })).sort((a, b) => a.label.localeCompare(b.label))
+    const userSiteList = [...new Set(salesUsers.map((u) => u.siteId).filter(Boolean))]
+      .map((site) => ({ value: site, label: site }))
+      .sort((a, b) => a.label.localeCompare(b.label))
 
     const totalProjectsCount = projectHours.length
     const overdueProjectsCount = projectHours.filter((p) => p.isOverdue).length
@@ -307,7 +320,7 @@ export async function GET(request: NextRequest) {
       topWorkers,
       workers,
       projectHours,
-      filterOptions: { workerList, projectList },
+      filterOptions: { workerList, projectList, userSiteList },
     })
   } catch (error) {
     console.error('Worker reports API error:', error)

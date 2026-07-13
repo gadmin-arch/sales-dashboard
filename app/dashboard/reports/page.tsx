@@ -51,7 +51,7 @@ interface ReportsData {
   topWorkers: { name: string; value: number }[]
   workers: WorkerRow[]
   projectHours: ProjectRow[]
-  filterOptions: { workerList: Option[]; projectList: Option[] }
+  filterOptions: { workerList: Option[]; projectList: Option[]; userSiteList?: Option[] }
 }
 
 const axis = { stroke: 'var(--muted-foreground)', tickLine: false, className: 'text-xs' } as const
@@ -70,10 +70,12 @@ export default function WorkerReportsPage() {
   const [dateFrom, setDateFrom] = useState(getYTD().from), [dateTo, setDateTo] = useState(getYTD().to)
   const [dateType, setDateType] = useState('report')
   const [worker, setWorker] = useState<string[]>([]), [project, setProject] = useState<string[]>([])
+  const [userSite, setUserSite] = useState<string[]>([])
 
   const [lFrom, setLFrom] = useState(dateFrom), [lTo, setLTo] = useState(dateTo)
   const [lDateType, setLDateType] = useState('report')
   const [lWorker, setLWorker] = useState<string[]>([]), [lProject, setLProject] = useState<string[]>([])
+  const [lUserSite, setLUserSite] = useState<string[]>([])
 
   const doFetch = useCallback(async (params: any) => {
     try {
@@ -87,19 +89,19 @@ export default function WorkerReportsPage() {
   useEffect(() => {
     const fresh = firstLoad.current; firstLoad.current = false
     doFetch({
-      dateFrom, dateTo, dateType, worker, project,
+      dateFrom, dateTo, dateType, worker, project, userSite,
       ...(chartFilter ? { cType: chartFilter.type, cVal: chartFilter.value } : {}),
       ...(fresh ? { fresh: '1' } : {}),
     })
-  }, [doFetch, dateFrom, dateTo, dateType, worker, project, chartFilter])
+  }, [doFetch, dateFrom, dateTo, dateType, worker, project, userSite, chartFilter])
 
-  const onApply = () => { setDateFrom(lFrom); setDateTo(lTo); setDateType(lDateType); setWorker(lWorker); setProject(lProject) }
+  const onApply = () => { setDateFrom(lFrom); setDateTo(lTo); setDateType(lDateType); setWorker(lWorker); setProject(lProject); setUserSite(lUserSite) }
   const onClear = () => {
     const d = getYTD()
-    setLFrom(d.from); setLTo(d.to); setLDateType('report'); setLWorker([]); setLProject([])
-    setDateFrom(d.from); setDateTo(d.to); setDateType('report'); setWorker([]); setProject([]); setChartFilter(null)
+    setLFrom(d.from); setLTo(d.to); setLDateType('report'); setLWorker([]); setLProject([]); setLUserSite([])
+    setDateFrom(d.from); setDateTo(d.to); setDateType('report'); setWorker([]); setProject([]); setUserSite([]); setChartFilter(null)
   }
-  const hasUnapplied = lFrom !== dateFrom || lTo !== dateTo || lDateType !== dateType || !sameSet(lWorker, worker) || !sameSet(lProject, project)
+  const hasUnapplied = lFrom !== dateFrom || lTo !== dateTo || lDateType !== dateType || !sameSet(lWorker, worker) || !sameSet(lProject, project) || !sameSet(lUserSite, userSite)
 
   const workerRows = useMemo(() => {
     const raw = data?.workers ?? []
@@ -149,7 +151,7 @@ export default function WorkerReportsPage() {
         <PageHeader title="Worker Reports" subtitle="PT. Multi Daya Mitra — field & site daily reports" chartFilter={chartFilter} onClearFilter={() => setChartFilter(null)} />
 
         <FilterCard from={lFrom} to={lTo} onDateChange={(f, t) => { setLFrom(f); setLTo(t) }} onApply={onApply} onClear={onClear} hasUnapplied={hasUnapplied} loading={loading && !!data}>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 items-start">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-4 items-start">
             <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Date Basis</label>
               <Select value={lDateType} onValueChange={(v) => setLDateType(v ?? 'report')}>
                 <SelectTrigger className="w-full text-xs h-9 bg-background"><SelectValue>{lDateType === 'created' ? 'Submitted Date' : 'Report Date'}</SelectValue></SelectTrigger>
@@ -163,6 +165,8 @@ export default function WorkerReportsPage() {
               <MultiSelect allLabel="All Workers" selected={lWorker} onChange={setLWorker} options={data.filterOptions.workerList} /></div>
             <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Project</label>
               <MultiSelect allLabel="All Projects" selected={lProject} onChange={setLProject} options={data.filterOptions.projectList} /></div>
+            <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">User Site</label>
+              <MultiSelect allLabel="All Sites" selected={lUserSite} onChange={setLUserSite} options={data.filterOptions.userSiteList || []} /></div>
           </div>
         </FilterCard>
 

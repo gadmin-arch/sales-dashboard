@@ -212,11 +212,11 @@ export async function getProjectDashboardData(f: CostControlFilter = {}): Promis
     const reimMat = reimMatByPrj.get(pId) || 0
     const purSvc = purSvcByPrj.get(pId) || 0
     const reimSvc = reimSvcByPrj.get(pId) || 0
-    const meal = mealByPrj.get(pId) || 0
-
     const purItems = purchasingItemsByPrj.get(pId) || []
     const remItems = reimburseItemsByPrj.get(pId) || []
     const mItems = mealItemsByPrj.get(pId) || []
+    
+    const meal = mItems.reduce((sum, item) => sum + item.amount, 0)
     
     const reimburseMaterialSpent = reimMat
     const reimburseServiceSpent = reimSvc
