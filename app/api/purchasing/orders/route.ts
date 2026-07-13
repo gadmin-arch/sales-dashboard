@@ -4,12 +4,11 @@ import {
   getPoStatusLabel, getPaymentTypeLabel, getItemTypeLabel, loadProcurementRefMaps,
 } from '@/database'
 import { parseDashboardParams } from '@/lib/api-helpers'
+import { cachedRoute } from '@/lib/route-cache'
 import { parseDate, formatMonth, sortByPeriod, parseMulti, filterDataByDateRange } from '@/lib/utils-date-currency'
 import { distinct, makeProjectLabeler, makeVendorNamer, makeNamer } from '@/lib/purchasing-helpers'
 
-export async function GET(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url)
+async function computeOrders(searchParams: URLSearchParams) {
     const { dateFrom, dateTo } = parseDashboardParams(searchParams)
     const vendor = parseMulti(searchParams, 'vendor')
     const project = parseMulti(searchParams, 'project')
@@ -196,7 +195,7 @@ export async function GET(request: NextRequest) {
       (a, b) => (parseDate(b.poDate)?.getTime() || 0) - (parseDate(a.poDate)?.getTime() || 0)
     )
 
-    return NextResponse.json({
+    return {
       kpis: { totalSpend, poCount, lineCount, avgPO, vendorCount, totalNet, totalPpn, totalPph, approvedCount, waitingCount },
       spendTrend,
       spendByVendor,
@@ -210,7 +209,15 @@ export async function GET(request: NextRequest) {
       orders: tableRows,
       totalRows: finalRows.length,
       filterOptions: { vendorList, projectList, paymentTypeList, statusList, itemTypeList, userList },
-    })
+    }
+}
+
+const getOrders = cachedRoute('purchasing-orders', computeOrders)
+
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url)
+    return NextResponse.json(await getOrders(searchParams))
   } catch (error) {
     console.error('Purchasing orders API error:', error)
     return NextResponse.json({ error: 'Failed to load purchase orders' }, { status: 500 })

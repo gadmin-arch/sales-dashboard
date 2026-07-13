@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { cachedRoute } from '@/lib/route-cache'
 import {
   getAllSalesActivities, getAllActivityTypes, getAllActivityLevels, getAllActivityStatuses,
   loadRefMaps as loadActivityRefMaps, getActivityTypeLabel, getActivityLevelLabel, getActivityStatusLabel,
@@ -7,9 +8,7 @@ import {
 import { parseMulti, parseDate, formatMonth, formatWeek, filterDataByDateRange } from '@/lib/utils-date-currency'
 import { parseDashboardParams } from '@/lib/api-helpers'
 
-export async function GET(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url)
+async function compute(searchParams: URLSearchParams) {
     const { dateFrom, dateTo } = parseDashboardParams(searchParams)
     const salesUser = parseMulti(searchParams, 'salesUser')
     const activityType = parseMulti(searchParams, 'activityType')
@@ -178,7 +177,7 @@ export async function GET(request: NextRequest) {
       .map(id => ({ id, name: userNameMap.get(id) || id }))
       .sort((a, b) => a.name.localeCompare(b.name))
 
-    return NextResponse.json({
+    return ({
       kpis: {
         totalActivities,
         completionRate,
@@ -203,6 +202,14 @@ export async function GET(request: NextRequest) {
       },
       salesUserList,
     })
+}
+
+const getData = cachedRoute('sales-activities', compute)
+
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url)
+    return NextResponse.json(await getData(searchParams))
   } catch (error) {
     console.error('Sales activities error:', error)
     return NextResponse.json({ error: 'Failed to load sales activities' }, { status: 500 })

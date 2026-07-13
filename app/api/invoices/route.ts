@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { cachedRoute } from '@/lib/route-cache'
 import { getInvoicingData } from '@/database/repos/invoicing'
 import { getCompanyNameMap } from '@/database/repos/companies'
 import { getProjectCompletionDates, getAllOrders, loadRefMaps, getPeStatusLabelSync, getFlagLabel } from '@/database/repos/orders'
@@ -38,9 +39,7 @@ function statusOf(inv: Invoice, paymentDateStr: string | null, today: Date): Pay
 
 
 
-export async function GET(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url)
+async function compute(searchParams: URLSearchParams) {
     const { dateFrom, dateTo } = parseDashboardParams(searchParams)
     const customer = parseMulti(searchParams, 'customer')
     const status = parseMulti(searchParams, 'status')
@@ -600,7 +599,7 @@ export async function GET(request: NextRequest) {
     const tableRows = [...finalRows]
       .sort((a, b) => (parseDate(b.invoiceDate)?.getTime() || 0) - (parseDate(a.invoiceDate)?.getTime() || 0))
 
-    return NextResponse.json({
+    return ({
       kpis: {
         totalInvoiced,
         totalPaid,
@@ -629,6 +628,14 @@ export async function GET(request: NextRequest) {
       totalRows: finalRows.length,
       filterOptions: { customerList, statusList, projectStatusList, projectFlagList },
     })
+}
+
+const getData = cachedRoute('invoices', compute)
+
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url)
+    return NextResponse.json(await getData(searchParams))
   } catch (error) {
     console.error('Invoices API error:', error)
     return NextResponse.json({ error: 'Failed to load invoices' }, { status: 500 })

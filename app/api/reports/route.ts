@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { cachedRoute } from '@/lib/route-cache'
 import { getAllReports, getAllOrders, getAllProjectLogs, getAllBasts, getAllOrderTypes } from '@/database'
 import { getSalesUserNamesMap, getAllSalesUsers } from '@/database/repos/sales-users'
 import { parseDashboardParams, applyChartFilter } from '@/lib/api-helpers'
@@ -17,9 +18,7 @@ const median = (a: number[]) => {
   return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2
 }
 
-export async function GET(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url)
+async function compute(searchParams: URLSearchParams) {
     const { dateFrom, dateTo } = parseDashboardParams(searchParams)
     const dateType = searchParams.get('dateType') || 'report' // 'report' | 'created'
     const worker = parseMulti(searchParams, 'worker')
@@ -408,7 +407,7 @@ export async function GET(request: NextRequest) {
     const overdueProjectsCount = projectHours.filter((p) => p.isOverdue).length
     const overdueProjectsPct = totalProjectsCount ? Math.round((overdueProjectsCount / totalProjectsCount) * 100) : 0
 
-    return NextResponse.json({
+    return ({
       kpis: {
         totalReports, totalHours: Math.round(totalHours), totalOvertime: Math.round(totalOvertime),
         activeWorkers, avgDelayHours, medianDelayHours, sameDayRate, avgScore, uniqueProjects,
@@ -421,6 +420,14 @@ export async function GET(request: NextRequest) {
       projectHours,
       filterOptions: { workerList, projectList, userSiteList, jobStatusList, orderTypeList },
     })
+}
+
+const getData = cachedRoute('reports', compute)
+
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url)
+    return NextResponse.json(await getData(searchParams))
   } catch (error) {
     console.error('Worker reports API error:', error)
     return NextResponse.json({ error: 'Failed to load worker reports' }, { status: 500 })

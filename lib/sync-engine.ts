@@ -152,7 +152,9 @@ export async function syncAllSheets(): Promise<{ success: boolean; syncedCount: 
       }
     }
 
-    // 3. Log success metadata
+    // 3. Log success metadata. The new last_sync_time doubles as the data
+    // version for the route-level cache (lib/route-cache.ts) — writing it
+    // invalidates all cached dashboard aggregates.
     await query(`
       INSERT INTO sync_metadata (status, last_sync_time)
       VALUES ('SUCCESS', NOW());

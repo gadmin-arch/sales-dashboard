@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { cachedRoute } from '@/lib/route-cache'
 import { getAllPurchaseOrders, getAllQrLists, getPaymentTypeLabel, loadProcurementRefMaps } from '@/database'
 import { parseDashboardParams } from '@/lib/api-helpers'
 import { parseDate, parseMulti, filterDataByDateRange } from '@/lib/utils-date-currency'
 import { distinct, makeVendorNamer } from '@/lib/purchasing-helpers'
 
-export async function GET(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url)
+async function compute(searchParams: URLSearchParams) {
     const { dateFrom, dateTo } = parseDashboardParams(searchParams)
     const paymentType = parseMulti(searchParams, 'paymentType')
     const minSpend = Number(searchParams.get('minSpend') || '0') || 0
@@ -82,7 +81,7 @@ export async function GET(request: NextRequest) {
     const paymentTypeList = distinct(pos.map((p) => p.poPaymentType).filter(Boolean))
       .map((id) => ({ value: id, label: getPaymentTypeLabel(id) })).sort((a, b) => a.label.localeCompare(b.label))
 
-    return NextResponse.json({
+    return ({
       kpis: { activeVendors, totalSpend, topVendorShare, avgPerVendor },
       topVendors,
       pareto,
@@ -90,6 +89,14 @@ export async function GET(request: NextRequest) {
       totalRows: vendorRows.length,
       filterOptions: { paymentTypeList },
     })
+}
+
+const getData = cachedRoute('purchasing-vendors', compute)
+
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url)
+    return NextResponse.json(await getData(searchParams))
   } catch (error) {
     console.error('Purchasing vendors API error:', error)
     return NextResponse.json({ error: 'Failed to load vendors' }, { status: 500 })

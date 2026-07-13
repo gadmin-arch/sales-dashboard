@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { cachedRoute } from '@/lib/route-cache'
 import {
   getAllPurchaseRequests, getItemNameMap, getAllOrders, getAllPurchaseOrders, getAllPoLines,
   getPrStatusLabel, loadPurchasingRefMaps,
@@ -35,9 +36,7 @@ const leadDays = (from: Date | null | undefined, to: Date | null | undefined): n
   return days < 0 ? 0 : days
 }
 
-export async function GET(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url)
+async function compute(searchParams: URLSearchParams) {
     const { dateFrom, dateTo } = parseDashboardParams(searchParams)
     const status = parseMulti(searchParams, 'status')
     const overdue = parseMulti(searchParams, 'overdue')
@@ -243,7 +242,7 @@ export async function GET(request: NextRequest) {
       (a, b) => (parseDate(b.createdAt)?.getTime() || 0) - (parseDate(a.createdAt)?.getTime() || 0)
     )
 
-    return NextResponse.json({
+    return ({
       kpis: {
         totalPR, purchasedCount, openCount, overdueCount, completionRate, totalEstimated, totalPurchased, avgVariancePct,
         leadTimePOAvg, leadTimePOMedian, leadTimePOCount,
@@ -259,6 +258,14 @@ export async function GET(request: NextRequest) {
       totalRows: finalRows.length,
       filterOptions: { statusList, overdueList, approvalList, projectList, handlerList, requesterList },
     })
+}
+
+const getData = cachedRoute('purchasing-requests', compute)
+
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url)
+    return NextResponse.json(await getData(searchParams))
   } catch (error) {
     console.error('Purchasing requests API error:', error)
     return NextResponse.json({ error: 'Failed to load purchase requests' }, { status: 500 })

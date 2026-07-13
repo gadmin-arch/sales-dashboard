@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { cachedRoute } from '@/lib/route-cache'
 import { getInvoicingData } from '@/database/repos/invoicing'
 import { getCompanyNameMap } from '@/database/repos/companies'
 import { parseDate, formatMonth, sortByPeriod, parseMulti, filterDataByDateRange } from '@/lib/utils-date-currency'
@@ -6,9 +7,7 @@ import { parseDashboardParams } from '@/lib/api-helpers'
 
 
 
-export async function GET(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url)
+async function compute(searchParams: URLSearchParams) {
     const { dateFrom, dateTo } = parseDashboardParams(searchParams)
     const customer = parseMulti(searchParams, 'customer')
 
@@ -95,7 +94,7 @@ export async function GET(request: NextRequest) {
         }
       })
 
-    return NextResponse.json({
+    return ({
       kpis: { totalCollected, paymentsThisMonth, paymentCount, avgPayment },
       trend,
       byCustomer,
@@ -103,6 +102,14 @@ export async function GET(request: NextRequest) {
       totalRows: filtered.length,
       filterOptions: { customerList },
     })
+}
+
+const getData = cachedRoute('payments', compute)
+
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url)
+    return NextResponse.json(await getData(searchParams))
   } catch (error) {
     console.error('Payments API error:', error)
     return NextResponse.json({ error: 'Failed to load payments' }, { status: 500 })

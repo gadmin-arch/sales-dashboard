@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { cachedRoute } from '@/lib/route-cache'
 import {
   getAllOrders, getAllProjectLogs, getAllBasts,
   loadOrdersRefMaps, getPeStatusLabelSync,
@@ -20,9 +21,7 @@ const median = (a: number[]) => {
 }
 const iso = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : '')
 
-export async function GET(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url)
+async function compute(searchParams: URLSearchParams) {
     const { dateFrom, dateTo } = parseDashboardParams(searchParams)
     const dateType = searchParams.get('dateType') || 'due' // 'due' | 'start' | 'end' | 'created'
     const status = parseMulti(searchParams, 'status')
@@ -182,7 +181,7 @@ export async function GET(request: NextRequest) {
     const pePicList = [...new Set(orders.map((o) => o.prjPePic).filter(Boolean))]
       .map((id) => ({ value: id, label: userName(id) })).sort((a, b) => a.label.localeCompare(b.label))
 
-    return NextResponse.json({
+    return ({
       kpis: {
         totalProjects, onTime, overtime, pending, onTimeRate, overduePending,
         medianDuration, medianEndVariance, withActualEnd, newProjectsCount,
@@ -197,6 +196,14 @@ export async function GET(request: NextRequest) {
       dateType,
       filterOptions: { statusList, ownerList, typeList, deliveryList, pePicList },
     })
+}
+
+const getData = cachedRoute('delivery', compute)
+
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url)
+    return NextResponse.json(await getData(searchParams))
   } catch (error) {
     console.error('Project delivery API error:', error)
     return NextResponse.json({ error: 'Failed to load project delivery data' }, { status: 500 })

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { cachedRoute } from '@/lib/route-cache'
 import { getCostControlData } from '@/database/repos/cost-control'
 import { parseDashboardParams } from '@/lib/api-helpers'
 import { parseMulti, parseDate } from '@/lib/utils-date-currency'
@@ -13,9 +14,7 @@ import { getAllSalesUsers } from '@/database/repos/sales-users'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url)
+async function compute(searchParams: URLSearchParams) {
     const { dateFrom, dateTo } = parseDashboardParams(searchParams)
     const salesUser = parseMulti(searchParams, 'salesUser')
     const orderType = parseMulti(searchParams, 'orderType')
@@ -113,7 +112,7 @@ export async function GET(request: NextRequest) {
       { flagId: 'Urgent', flagDescription: 'Urgent' },
     ]
 
-    return NextResponse.json({
+    return ({
       projects: costData,
       salesUserList,
       pePicList,
@@ -123,6 +122,14 @@ export async function GET(request: NextRequest) {
       invoiceStatusList,
       projectFlagList
     })
+}
+
+const getData = cachedRoute('cost-control', compute)
+
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url)
+    return NextResponse.json(await getData(searchParams))
   } catch (error: any) {
     console.error('Cost Control API error:', error)
     return NextResponse.json({ error: error.message || 'Unknown error' }, { status: 500 })

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { cachedRoute } from '@/lib/route-cache'
 import {
   getAllOrders,
   getAllPayroll, getPayrollPayments, getPayrollLists,
@@ -17,9 +18,7 @@ import {
   byMonth, mergeMonthly, reimburseCategory, timelinessOf, adjustDueDate,
 } from '@/lib/finance-ap-helpers'
 
-export async function GET(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url)
+async function compute(searchParams: URLSearchParams) {
     const { dateFrom: from, dateTo: to } = parseDashboardParams(searchParams)
     const now = Date.now()
 
@@ -351,7 +350,7 @@ export async function GET(request: NextRequest) {
       pendingAp: poPayments.kpis.pendingApproval,
     })
 
-    return NextResponse.json({
+    return ({
       overview: { ...overview, monthly: overviewMonthly },
       poPayments,
       payroll: payrollData,
@@ -360,6 +359,14 @@ export async function GET(request: NextRequest) {
       reimburse,
       dateRange: { from, to },
     })
+}
+
+const getData = cachedRoute('finance-ap', compute)
+
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url)
+    return NextResponse.json(await getData(searchParams))
   } catch (error) {
     console.error('Finance AP API error:', error)
     return NextResponse.json({ error: 'Failed to load Finance AP data' }, { status: 500 })

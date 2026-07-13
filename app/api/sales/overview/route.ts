@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { cachedRoute } from '@/lib/route-cache'
 import { parseDashboardParams } from '@/lib/api-helpers'
 import { getProjectOrders, getOrderTypeLabelSync, getPeStatusLabelSync, getFinanceStatusLabelSync, loadRefMaps as loadOrderRefMaps, getAllOrderTypes, getAllPeStatuses, getAllFinanceStatuses, getFlagLabel } from '@/database/repos/orders'
 import { getAllQuotations, getStatusLabel, loadRefMaps as loadQuotRefMaps, getAllQuotationTypes } from '@/database/repos/quotations'
@@ -8,12 +9,8 @@ import { getInvoicingData } from '@/database/repos/invoicing'
 import { parseDate, formatMonth, formatWeek, sortByPeriod, filterDataByDateRange, parseMulti } from '@/lib/utils-date-currency'
 import type { Order, Quotation, SalesUser, Company } from '@/database'
 
-export async function GET(request: NextRequest) {
-  const url = new URL(request.url)
-  const debug = url.searchParams.get('debug') === '1'
-
-  try {
-    const { searchParams } = new URL(request.url)
+async function compute(searchParams: URLSearchParams) {
+    const debug = searchParams.get('debug') === '1'
     const { dateFrom, dateTo } = parseDashboardParams(searchParams)
     const salesUser = parseMulti(searchParams, 'salesUser')
     const currency = searchParams.get('currency') || ''
@@ -416,7 +413,15 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    return NextResponse.json(result)
+    return result
+}
+
+const getData = cachedRoute('sales-overview', compute)
+
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url)
+    return NextResponse.json(await getData(searchParams))
   } catch (error) {
     console.error('Sales overview error:', error)
     return NextResponse.json({ error: 'Failed to load sales data' }, { status: 500 })

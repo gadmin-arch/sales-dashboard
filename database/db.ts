@@ -23,5 +23,12 @@ export function getDbPool(): Pool {
 
 export async function query(text: string, params?: any[]) {
   const p = getDbPool()
-  return p.query(text, params)
+  const t0 = Date.now()
+  const res = await p.query(text, params)
+  // Egress signal: full-sheet reads are the dominant Neon transfer cost.
+  if (text.includes('FROM sheets_cache')) {
+    const kb = res.rows[0] ? Math.round(JSON.stringify(res.rows[0]).length / 1024) : 0
+    console.log(`[db] sheets_cache read key=${params?.[0]} ~${kb}KB ${Date.now() - t0}ms`)
+  }
+  return res
 }

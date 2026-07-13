@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { cachedRoute } from '@/lib/route-cache'
 import { getAllLeads, getAllOpportunities, getSalesUserNamesForLeadsOpps } from '@/database/repos/leads-opps'
 import { parseMulti, filterDataByDateRange } from '@/lib/utils-date-currency'
 import { parseDashboardParams } from '@/lib/api-helpers'
 
-export async function GET(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url)
+async function compute(searchParams: URLSearchParams) {
     const { dateFrom, dateTo } = parseDashboardParams(searchParams)
     const status = parseMulti(searchParams, 'status')
     const assignedTo = parseMulti(searchParams, 'assignedTo')
@@ -205,7 +204,15 @@ export async function GET(request: NextRequest) {
       filterOptions: { leadStatuses, oppStages, oppStatuses, sources },
     }
 
-    return NextResponse.json(result)
+    return (result)
+}
+
+const getData = cachedRoute('leads-opps', compute)
+
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url)
+    return NextResponse.json(await getData(searchParams))
   } catch (error) {
     console.error('Leads & Opportunities error:', error)
     return NextResponse.json({ error: 'Failed to load leads and opportunities' }, { status: 500 })
