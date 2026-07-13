@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table'
 import { useSort, SortHead } from '@/components/sortable'
-import { FolderOpen, Search, AlertCircle, X, CheckCircle, Lightbulb, Clock, ShoppingCart, Receipt, Utensils, Settings2, TrendingUp } from 'lucide-react'
+import { FolderOpen, Search, AlertCircle, X, CheckCircle, Lightbulb, Clock, ShoppingCart, Receipt, Utensils, Settings2, TrendingUp, Activity } from 'lucide-react'
 import { DateRangeRow } from '@/components/date-range-row'
 import { MultiSelect } from '@/components/multi-select'
 import { buildQuery, getYTD, sameSet, fmtCurrency } from '@/lib/sales-helpers'
@@ -29,6 +29,8 @@ interface ProjectDashboardData {
   purchasingItems: Array<{ date: string; description: string; type: string; poNumber: string; pctOfOrder: number }>
   reimburseItems: Array<{ date: string; description: string; type: string; requestor: string; amount: number }>
   mealItems: Array<{ date: string; description: string; requestor: string; amount: number }>
+  overtimeItems: Array<{ date: string; workerName: string; hours: number; reason: string }>
+  reportItems: Array<{ date: string; workerName: string; hours: number; remarks: string }>
 
   overtimeHours: number
   reportCount: number
@@ -56,6 +58,7 @@ export default function ProjectsDashboardPage() {
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [selectedProject, setSelectedProject] = useState<ProjectDashboardData | null>(null)
+  const [activeTab, setActiveTab] = useState<'purchasing' | 'reimburse' | 'overtime' | 'report'>('purchasing')
 
   // Workforce Pricing Calculator States
   const [overtimeRate, setOvertimeRate] = useState<number>(0)
@@ -420,174 +423,249 @@ export default function ProjectsDashboardPage() {
         </>
       )}
 
-      {/* Slide-over Detail View */}
+      {/* Modal Overlay Dialog for Project Details (Full lists of POs, Reimbursements, Overtimes, Reports) */}
       {selectedCalculatedProject && (
-        <>
-          <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-40 transition-opacity" onClick={() => setSelectedProject(null)} />
-          <div className="fixed inset-y-0 right-0 z-50 w-full md:w-[600px] bg-background border-l shadow-2xl p-6 overflow-y-auto transform transition-transform duration-300 ease-in-out">
-            <div className="flex items-start justify-between mb-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-background border shadow-2xl rounded-2xl max-w-6xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b">
               <div>
-                <h2 className="text-2xl font-bold tracking-tight">{selectedCalculatedProject.prjName}</h2>
-                <p className="text-sm text-muted-foreground mt-1 tracking-widest">{selectedCalculatedProject.prjId}</p>
+                <h2 className="text-base font-bold text-foreground truncate max-w-[500px]" title={selectedCalculatedProject.prjName}>
+                  {selectedCalculatedProject.prjName}
+                </h2>
+                <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 mt-0.5 text-xs text-muted-foreground">
+                  <span className="font-mono bg-muted text-[10px] px-1.5 py-0.5 rounded uppercase tracking-wider font-semibold text-primary">{selectedCalculatedProject.prjId}</span>
+                  <span>•</span>
+                  <span>Executor PIC: <strong className="text-foreground">{selectedCalculatedProject.pePicName || '-'}</strong></span>
+                  <span>•</span>
+                  <span>Executor Team: <strong className="text-foreground">{selectedCalculatedProject.peTeamName || '-'}</strong></span>
+                </div>
               </div>
-              <Button variant="ghost" size="icon" onClick={() => setSelectedProject(null)}>
+              <button 
+                onClick={() => setSelectedProject(null)} 
+                className="p-1.5 hover:bg-muted rounded-full transition-colors text-muted-foreground hover:text-foreground"
+              >
                 <X className="h-5 w-5" />
-              </Button>
+              </button>
             </div>
 
-            <div className="space-y-8">
-              {/* Project Owner & Team */}
-              <div className="grid grid-cols-2 gap-4 bg-muted/40 p-4 rounded-xl border text-sm">
-                <div>
-                  <span className="text-muted-foreground block text-xs mb-1">Project Executor PIC</span>
-                  <span className="font-bold text-foreground">{selectedCalculatedProject.pePicName || '-'}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground block text-xs mb-1">Project Executor Team</span>
-                  <span className="font-bold text-foreground">{selectedCalculatedProject.peTeamName || '-'}</span>
-                </div>
-              </div>
-
-              {/* Dynamic Cost Calculator Impact */}
-              {selectedCalculatedProject.calculatedWorkforceCost > 0 && (
-                <div className="bg-primary/5 p-4 rounded-xl border border-primary/20 space-y-2">
-                  <h4 className="text-xs font-semibold text-primary uppercase tracking-wider">Dynamic Workforce Cost Additions</h4>
-                  <div className="space-y-1.5 text-xs">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Calculated Overtime Cost ({selectedCalculatedProject.overtimeHours}h):</span>
-                      <span className="font-medium text-foreground">{overtimeRate > 0 ? `Rp ${overtimeRate.toLocaleString('en-US')}/hr` : '-'}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Calculated Work Reports Cost ({calcMethod === 'hours' ? `${selectedCalculatedProject.reportHours} hrs` : `${selectedCalculatedProject.reportCount} rpts`}):</span>
-                      <span className="font-medium text-foreground">
-                        {calcMethod === 'hours' ? `Rp ${hoursRate.toLocaleString('en-US')}/hr` : `Rp ${reportRate.toLocaleString('en-US')}/rpt`}
-                      </span>
-                    </div>
-                    <div className="flex justify-between border-t pt-1.5 font-bold text-foreground">
-                      <span>Total Added Cost:</span>
-                      <span>{selectedCalculatedProject.calculatedWorkforceCost > 0 ? `+ ${selectedCalculatedProject.calculatedWorkforceCost.toLocaleString('id-ID')}` : 'Rp 0'}</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* KPIs */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-muted p-4 rounded-lg">
-                  <div className="flex items-center gap-2 mb-2">
-                    <TrendingUp className="h-4 w-4 text-primary" />
-                    <h3 className="font-semibold text-sm">Total Utilization</h3>
-                  </div>
-                  <div className="flex items-center gap-2 mt-2">
-                    <div className="flex-1 h-2 bg-secondary rounded-full overflow-hidden">
-                      <div 
-                        className={`h-full ${selectedCalculatedProject.totalPct > 100 ? 'bg-red-500' : 'bg-emerald-500'}`} 
-                        style={{ width: `${Math.min(selectedCalculatedProject.totalPct, 100)}%` }} 
-                      />
-                    </div>
-                    <span className={`font-bold ${selectedCalculatedProject.totalPct > 100 ? 'text-red-500' : ''}`}>
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6">
+              
+              {/* Left Side: Summary & Workforce Cards (Cols span 5) */}
+              <div className="lg:col-span-5 space-y-5">
+                {/* Budget Progress Summary */}
+                <div className="bg-muted/30 border p-4 rounded-xl space-y-3">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="font-bold text-foreground">Overall Budget Utilization</span>
+                    <span className={`font-mono font-bold ${selectedCalculatedProject.totalPct > 100 ? 'text-destructive' : 'text-emerald-500'}`}>
                       {selectedCalculatedProject.totalPct.toFixed(1)}%
                     </span>
                   </div>
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
+                    <div 
+                      className="h-full rounded-full transition-all" 
+                      style={{ 
+                        width: `${Math.min(selectedCalculatedProject.totalPct, 100)}%`, 
+                        background: selectedCalculatedProject.totalPct > 100 ? 'var(--destructive)' : 'var(--primary)' 
+                      }} 
+                    />
+                  </div>
                 </div>
 
-                <div className="bg-muted p-4 rounded-lg">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Clock className="h-4 w-4 text-primary" />
-                    <h3 className="font-semibold text-sm">Workforce Summary</h3>
+                {/* Pricing Calculator Impact */}
+                {selectedCalculatedProject.calculatedWorkforceCost > 0 && (
+                  <div className="bg-primary/5 p-4 rounded-xl border border-primary/20 space-y-2">
+                    <h4 className="text-[10px] font-bold text-primary uppercase tracking-wider">Dynamic Workforce Cost Additions</h4>
+                    <div className="space-y-1.5 text-xs">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Overtime ({selectedCalculatedProject.overtimeHours} hours):</span>
+                        <span className="font-medium text-foreground">{fmtRp(selectedCalculatedProject.overtimeCost)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Reports ({selectedCalculatedProject.reportCount} reports):</span>
+                        <span className="font-medium text-foreground">{fmtRp(selectedCalculatedProject.reportCost)}</span>
+                      </div>
+                      <div className="flex justify-between border-t pt-1.5 font-bold text-foreground">
+                        <span>Total Workforce Cost:</span>
+                        <span>{fmtRp(selectedCalculatedProject.calculatedWorkforceCost)}</span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-sm">
-                    <span className="font-bold">{selectedCalculatedProject.reportCount}</span> reports, <span className="font-bold">{selectedCalculatedProject.reportHours.toFixed(1)}</span> total hrs
-                    <div className="text-xs text-muted-foreground mt-1">
-                      <span className="text-amber-600 font-medium">{selectedCalculatedProject.overtimeHours.toFixed(1)}</span> overtime hours
+                )}
+
+                {/* Material & Service Breakdown */}
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="font-semibold text-sky-500 flex items-center gap-1"><TrendingUp className="h-3.5 w-3.5" /> Material Expenses</span>
+                      <span className="font-mono">{selectedCalculatedProject.matPct.toFixed(0)}%</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-[11px]">
+                      <div className="bg-muted/20 border p-2 rounded">
+                        <span className="text-muted-foreground block text-[9px] uppercase">Purchasing</span>
+                        <span className="font-bold text-foreground">%-Only</span>
+                        <span className="text-[9px] text-muted-foreground block mt-0.5">{selectedCalculatedProject.purchasingItems.filter(i => i.type === 'Material').length} PO(s)</span>
+                      </div>
+                      <div className="bg-muted/20 border p-2 rounded">
+                        <span className="text-muted-foreground block text-[9px] uppercase">Reimburse</span>
+                        <span className="font-bold text-foreground">{fmtRp(selectedCalculatedProject.reimburseMaterialSpent)}</span>
+                        <span className="text-[9px] text-muted-foreground block mt-0.5">{selectedCalculatedProject.reimburseItems.filter(i => i.type === 'Material').length} request(s)</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="font-semibold text-emerald-500 flex items-center gap-1"><Activity className="h-3.5 w-3.5" /> Service & Ops Expenses</span>
+                      <span className="font-mono">{selectedCalculatedProject.svcPct.toFixed(0)}%</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1.5 text-[10px]">
+                      <div className="bg-muted/20 border p-2 rounded">
+                        <span className="text-muted-foreground block text-[8px] uppercase">Purchasing</span>
+                        <span className="font-bold text-foreground">%-Only</span>
+                        <span className="text-[8px] text-muted-foreground block mt-0.5">{selectedCalculatedProject.purchasingItems.filter(i => i.type === 'Service').length} PO(s)</span>
+                      </div>
+                      <div className="bg-muted/20 border p-2 rounded">
+                        <span className="text-muted-foreground block text-[8px] uppercase">Reimburse</span>
+                        <span className="font-bold text-foreground">{fmtRp(selectedCalculatedProject.reimburseServiceSpent)}</span>
+                        <span className="text-[8px] text-muted-foreground block mt-0.5">{selectedCalculatedProject.reimburseItems.filter(i => i.type === 'Service').length} req(s)</span>
+                      </div>
+                      <div className="bg-muted/20 border p-2 rounded">
+                        <span className="text-muted-foreground block text-[8px] uppercase">Meal benefits</span>
+                        <span className="font-bold text-foreground">{fmtRp(selectedCalculatedProject.spentMeal)}</span>
+                        <span className="text-[8px] text-muted-foreground block mt-0.5">{selectedCalculatedProject.mealItems.length} req(s)</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Workforce Data */}
+                <div className="space-y-2">
+                  <h4 className="text-xs font-semibold text-foreground flex items-center gap-1.5"><Clock className="h-3.5 w-3.5 text-amber-500" /> Site Workforce Summary</h4>
+                  <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                    <div className="p-2 border rounded bg-muted/10">
+                      <div className="font-bold text-foreground">{selectedCalculatedProject.reportCount}</div>
+                      <div className="text-[9px] text-muted-foreground">Reports</div>
+                    </div>
+                    <div className="p-2 border rounded bg-muted/10">
+                      <div className="font-bold text-foreground">{selectedCalculatedProject.reportHours}</div>
+                      <div className="text-[9px] text-muted-foreground">Total Hours</div>
+                    </div>
+                    <div className="p-2 border rounded bg-muted/10">
+                      <div className="font-bold text-amber-600">{selectedCalculatedProject.overtimeHours}</div>
+                      <div className="text-[9px] text-muted-foreground">Overtime</div>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Purchasing POs */}
-              <div className="space-y-4">
-                <div className="flex items-center gap-2">
-                  <ShoppingCart className="h-5 w-5 text-blue-500" />
-                  <h3 className="font-semibold text-lg border-b pb-1 flex-1">Purchasing Details ({selectedCalculatedProject.purchasingItems.length})</h3>
+              {/* Right Side: Detailed lists in tabs (Cols span 7) */}
+              <div className="lg:col-span-7 space-y-4">
+                {/* Tabs Header */}
+                <div className="flex border-b border-border gap-2 text-xs overflow-x-auto pb-1">
+                  {(['purchasing', 'reimburse', 'overtime', 'report'] as const).map((tab) => {
+                    const label = 
+                      tab === 'purchasing' ? `Purchases (${selectedCalculatedProject.purchasingItems.length})` :
+                      tab === 'reimburse' ? `Reimbursements (${selectedCalculatedProject.reimburseItems.length})` :
+                      tab === 'overtime' ? `Overtimes (${selectedCalculatedProject.overtimeItems.length})` :
+                      `Daily Reports (${selectedCalculatedProject.reportItems.length})`
+                    
+                    return (
+                      <button
+                        key={tab}
+                        onClick={() => setActiveTab(tab)}
+                        className={`pb-2 px-1 font-semibold whitespace-nowrap border-b-2 transition-colors ${activeTab === tab ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
+                      >
+                        {label}
+                      </button>
+                    )
+                  })}
                 </div>
-                {selectedCalculatedProject.purchasingItems.length > 0 ? (
-                  <div className="space-y-3">
-                    {selectedCalculatedProject.purchasingItems.map((item, idx) => (
-                      <div key={idx} className="bg-card border rounded p-3 text-sm flex flex-col gap-1">
-                        <div className="flex justify-between items-start">
-                          <span className="font-semibold text-foreground">{item.poNumber}</span>
-                          <div className="flex items-center gap-1.5">
-                            <Badge variant="outline" className="text-[10px]">{item.type}</Badge>
-                            <span className="font-bold text-muted-foreground font-mono text-xs">
-                              {item.pctOfOrder > 0 ? `${item.pctOfOrder.toFixed(2)}% of PO` : '-'}
-                            </span>
-                          </div>
-                        </div>
-                        <span className="text-muted-foreground">{item.description || 'No description provided.'}</span>
-                        <span className="text-xs text-muted-foreground/70">{item.date}</span>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">No purchasing records found.</p>
-                )}
-              </div>
 
-              {/* Reimburse Items */}
-              <div className="space-y-4">
-                <div className="flex items-center gap-2">
-                  <Receipt className="h-5 w-5 text-emerald-500" />
-                  <h3 className="font-semibold text-lg border-b pb-1 flex-1">Reimburse Requests ({selectedCalculatedProject.reimburseItems.length})</h3>
-                </div>
-                {selectedCalculatedProject.reimburseItems.length > 0 ? (
-                  <div className="space-y-3">
-                    {selectedCalculatedProject.reimburseItems.map((item, idx) => (
-                      <div key={idx} className="bg-card border rounded p-3 text-sm flex flex-col gap-1">
-                        <div className="flex justify-between items-start">
-                          <span className="font-semibold text-foreground">{item.requestor}</span>
-                          <div className="flex items-center gap-1.5">
-                            <Badge variant="outline" className="text-[10px]">{item.type}</Badge>
-                            <span className="font-bold text-foreground font-mono text-xs">{fmtRp(item.amount)}</span>
+                {/* Tab Contents */}
+                <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-1">
+                  {activeTab === 'purchasing' && (
+                    selectedCalculatedProject.purchasingItems.length > 0 ? (
+                      selectedCalculatedProject.purchasingItems.map((item, idx) => (
+                        <div key={idx} className="bg-card border rounded p-3 text-xs flex flex-col gap-1 shadow-sm">
+                          <div className="flex justify-between items-start">
+                            <span className="font-semibold text-foreground">{item.poNumber}</span>
+                            <div className="flex items-center gap-1.5">
+                              <Badge variant="outline" className="text-[9px]">{item.type}</Badge>
+                              <span className="font-bold text-muted-foreground font-mono">
+                                {item.pctOfOrder > 0 ? `${item.pctOfOrder.toFixed(2)}% of PO` : '-'}
+                              </span>
+                            </div>
                           </div>
+                          <span className="text-muted-foreground">{item.description || 'No description provided.'}</span>
+                          <span className="text-[10px] text-muted-foreground/75">{item.date}</span>
                         </div>
-                        <span className="text-muted-foreground">{item.description || 'No description provided.'}</span>
-                        <span className="text-xs text-muted-foreground/70">{item.date}</span>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">No reimburse records found.</p>
-                )}
-              </div>
+                      ))
+                    ) : (
+                      <div className="text-center py-8 text-muted-foreground text-xs">No purchasing records found.</div>
+                    )
+                  )}
 
-              {/* Meal Requests */}
-              <div className="space-y-4">
-                <div className="flex items-center gap-2">
-                  <Utensils className="h-5 w-5 text-amber-500" />
-                  <h3 className="font-semibold text-lg border-b pb-1 flex-1">Meal Requests ({selectedCalculatedProject.mealItems.length})</h3>
-                </div>
-                {selectedCalculatedProject.mealItems.length > 0 ? (
-                  <div className="space-y-3">
-                    {selectedCalculatedProject.mealItems.map((item, idx) => (
-                      <div key={idx} className="bg-card border rounded p-3 text-sm flex flex-col gap-1">
-                        <div className="flex justify-between items-start">
-                          <span className="font-semibold text-foreground">{item.requestor}</span>
-                          <span className="font-bold text-foreground font-mono text-xs">{fmtRp(item.amount)}</span>
+                  {activeTab === 'reimburse' && (
+                    selectedCalculatedProject.reimburseItems.length > 0 ? (
+                      selectedCalculatedProject.reimburseItems.map((item, idx) => (
+                        <div key={idx} className="bg-card border rounded p-3 text-xs flex flex-col gap-1 shadow-sm">
+                          <div className="flex justify-between items-start">
+                            <span className="font-semibold text-foreground">{item.requestor}</span>
+                            <div className="flex items-center gap-1.5">
+                              <Badge variant="outline" className="text-[9px]">{item.type}</Badge>
+                              <span className="font-bold text-foreground font-mono">{fmtRp(item.amount)}</span>
+                            </div>
+                          </div>
+                          <span className="text-muted-foreground">{item.description || 'No description provided.'}</span>
+                          <span className="text-[10px] text-muted-foreground/75">{item.date}</span>
                         </div>
-                        <span className="text-muted-foreground">{item.description || 'Meal allowance'}</span>
-                        <span className="text-xs text-muted-foreground/70">{item.date}</span>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">No meal records found.</p>
-                )}
+                      ))
+                    ) : (
+                      <div className="text-center py-8 text-muted-foreground text-xs">No reimburse records found.</div>
+                    )
+                  )}
+
+                  {activeTab === 'overtime' && (
+                    selectedCalculatedProject.overtimeItems && selectedCalculatedProject.overtimeItems.length > 0 ? (
+                      selectedCalculatedProject.overtimeItems.map((item, idx) => (
+                        <div key={idx} className="bg-card border rounded p-3 text-xs flex flex-col gap-1 shadow-sm">
+                          <div className="flex justify-between items-start">
+                            <span className="font-semibold text-foreground">{item.workerName}</span>
+                            <span className="font-bold text-amber-600 font-mono">{item.hours} hrs</span>
+                          </div>
+                          <span className="text-muted-foreground">{item.reason || 'Overtime work'}</span>
+                          <span className="text-[10px] text-muted-foreground/75">{item.date}</span>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-center py-8 text-muted-foreground text-xs">No overtime records found.</div>
+                    )
+                  )}
+
+                  {activeTab === 'report' && (
+                    selectedCalculatedProject.reportItems && selectedCalculatedProject.reportItems.length > 0 ? (
+                      selectedCalculatedProject.reportItems.map((item, idx) => (
+                        <div key={idx} className="bg-card border rounded p-3 text-xs flex flex-col gap-1 shadow-sm">
+                          <div className="flex justify-between items-start">
+                            <span className="font-semibold text-foreground">{item.workerName}</span>
+                            <span className="font-bold text-foreground font-mono">{item.hours} hrs</span>
+                          </div>
+                          <span className="text-muted-foreground">{item.remarks || 'No remarks provided.'}</span>
+                          <span className="text-[10px] text-muted-foreground/75">{item.date}</span>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-center py-8 text-muted-foreground text-xs">No daily report logs found.</div>
+                    )
+                  )}
+                </div>
               </div>
 
             </div>
           </div>
-        </>
+        </div>
       )}
     </div>
   )

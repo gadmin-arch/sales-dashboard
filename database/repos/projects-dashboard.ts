@@ -23,6 +23,8 @@ export interface ProjectDashboardData {
   purchasingItems: Array<{ date: string; description: string; type: string; poNumber: string; pctOfOrder: number }>
   reimburseItems: Array<{ date: string; description: string; type: string; requestor: string; amount: number }>
   mealItems: Array<{ date: string; description: string; requestor: string; amount: number }>
+  overtimeItems: Array<{ date: string; workerName: string; hours: number; reason: string }>
+  reportItems: Array<{ date: string; workerName: string; hours: number; remarks: string }>
 
   overtimeHours: number
   reportCount: number
@@ -119,23 +121,43 @@ export async function getProjectDashboardData(f: CostControlFilter = {}): Promis
 
   // Aggregate Overtimes
   const overtimeByPrj = new Map<string, number>()
+  const overtimeItemsByPrj = new Map<string, Array<{ date: string; workerName: string; hours: number; reason: string }>>()
   for (const r of overtimeRes.rows) {
     if (!r[0] || r[0] === 'overtime_id' || r[13]) continue
     const status = (r[9] || '').trim().toUpperCase() // A=Approved P=Pending R=Rejected
     if (status !== 'A' && status !== 'P') continue
     const prjId = r[14]
     if (!prjId) continue
-    overtimeByPrj.set(prjId, (overtimeByPrj.get(prjId) || 0) + parseNum(r[6]))
+    
+    const hours = parseNum(r[6])
+    overtimeByPrj.set(prjId, (overtimeByPrj.get(prjId) || 0) + hours)
+    
+    if (!overtimeItemsByPrj.has(prjId)) overtimeItemsByPrj.set(prjId, [])
+    overtimeItemsByPrj.get(prjId)!.push({
+      date: r[3] || '',
+      workerName: r[12] || '',
+      hours,
+      reason: r[5] || 'Overtime'
+    })
   }
 
   // Aggregate Reports
   const reportCountByPrj = new Map<string, number>()
   const reportHoursByPrj = new Map<string, number>()
+  const reportItemsByPrj = new Map<string, Array<{ date: string; workerName: string; hours: number; remarks: string }>>()
   for (const r of reports) {
     const prjId = r.reportPrjId
     if (!prjId) continue
     reportCountByPrj.set(prjId, (reportCountByPrj.get(prjId) || 0) + 1)
     reportHoursByPrj.set(prjId, (reportHoursByPrj.get(prjId) || 0) + r.reportTime)
+    
+    if (!reportItemsByPrj.has(prjId)) reportItemsByPrj.set(prjId, [])
+    reportItemsByPrj.get(prjId)!.push({
+      date: r.reportDate || '',
+      workerName: r.reportUserName || '',
+      hours: r.reportTime,
+      remarks: r.reportRemarks || ''
+    })
   }
 
   // Aggregate Purchasing POs
@@ -278,6 +300,8 @@ export async function getProjectDashboardData(f: CostControlFilter = {}): Promis
       purchasingItems: safePurItems,
       reimburseItems: safeRemItems,
       mealItems: safeMealItems,
+      overtimeItems: overtimeItemsByPrj.get(pId) || [],
+      reportItems: reportItemsByPrj.get(pId) || [],
       overtimeHours: overtimeByPrj.get(pId) || 0,
       reportCount: reportCountByPrj.get(pId) || 0,
       reportHours: reportHoursByPrj.get(pId) || 0,
