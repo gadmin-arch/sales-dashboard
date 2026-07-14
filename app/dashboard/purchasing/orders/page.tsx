@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { KPICard } from '@/components/kpi-card'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -15,8 +15,9 @@ import { PageHeader } from '@/components/page-header'
 import { FilterCard } from '@/components/filter-card'
 import { PageSpinner, PageError } from '@/components/page-states'
 import { SearchInput } from '@/components/search-input'
-import { LoadMore, useLoadMore } from '@/components/load-more'
-import { useSort, SortHead } from '@/components/sortable'
+import { LoadMore } from '@/components/load-more'
+import { SortHead } from '@/components/sortable'
+import { useServerRows } from '@/hooks/use-server-rows'
 import { fmtCurrency, buildQuery, sameSet, getYTD, fmtShortDate as fmtDate, truncLabel as truncTick } from '@/lib/sales-helpers'
 import { useChartFilter } from '@/hooks/use-chart-filter'
 
@@ -51,11 +52,14 @@ const statusClass: Record<string, string> = {
   R: 'bg-red-500/10 text-red-600 dark:text-red-400',
 }
 
+// Stable fallback while data is loading — a fresh `?? []` per render would
+// retrigger useServerRows' reset effect in a loop.
+const EMPTY_ROWS: PORow[] = []
+
 export default function PurchaseOrdersPage() {
   const [data, setData] = useState<POData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [search, setSearch] = useState('')
   const { chartFilter, setChartFilter, handleChartClick } = useChartFilter('po-table-section', undefined, false)
 
   const [dateFrom, setDateFrom] = useState(getYTD().from), [dateTo, setDateTo] = useState(getYTD().to)
@@ -93,14 +97,18 @@ export default function PurchaseOrdersPage() {
     setDateFrom(d.from); setDateTo(d.to); setVen([]); setPrj([]); setPt([]); setSt([]); setIt([]); setUsr([]); setChartFilter(null)
   }
 
-  const tableRows = useMemo(() => {
-    if (!data) return []
-    if (!search) return data.orders
-    const q = search.toLowerCase()
-    return data.orders.filter(r => [r.poNumber, r.vendor, r.user, r.projects, r.statusLabel, r.paymentTypeLabel].some(s => s?.toLowerCase().includes(q)))
-  }, [data, search])
-  const poSort = useSort(tableRows, 'poDate', 'desc')
-  const poPage = useLoadMore(poSort.sorted)
+  // Server-backed table: main payload carries only the first page; sorting,
+  // searching, and load-more request slices from the route's cached row view.
+  const po = useServerRows<PORow>({
+    endpoint: '/api/purchasing/orders',
+    baseParams: {
+      dateFrom, dateTo, vendor: ven, project: prj, paymentType: pt, status: st, itemType: it, user: usr,
+      ...(chartFilter ? { cType: chartFilter.type, cVal: chartFilter.value } : {}),
+    },
+    initialRows: data?.orders ?? EMPTY_ROWS,
+    totalRows: data?.totalRows ?? 0,
+    initialSortKey: 'poDate',
+  })
 
   const hasUnapplied = lFrom !== dateFrom || lTo !== dateTo || !sameSet(lVen, ven) || !sameSet(lPrj, prj) || !sameSet(lPt, pt) || !sameSet(lSt, st) || !sameSet(lIt, it) || !sameSet(lUsr, usr)
 
@@ -233,28 +241,28 @@ export default function PurchaseOrdersPage() {
         {/* PO table */}
         <Card className="overflow-hidden" id="po-table-section">
           <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <CardTitle className="text-sm font-semibold">Purchase Orders <span className="font-normal text-muted-foreground">({tableRows.length.toLocaleString('en-US')}{tableRows.length !== data.totalRows ? ` of ${data.totalRows.toLocaleString('en-US')}` : ''})</span></CardTitle>
-            <SearchInput value={search} onChange={setSearch} />
+            <CardTitle className="text-sm font-semibold">Purchase Orders <span className="font-normal text-muted-foreground">({po.total.toLocaleString('en-US')}{po.total !== data.totalRows ? ` of ${data.totalRows.toLocaleString('en-US')}` : ''})</span></CardTitle>
+            <SearchInput value={po.search} onChange={po.setSearch} />
           </CardHeader>
           <CardContent className="p-0">
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader><TableRow>
-                  <SortHead label="PO #" column="poNumber" sortKey={poSort.sortKey} sortDir={poSort.sortDir} onSort={poSort.toggle} />
-                  <SortHead label="Date" column="poDate" sortKey={poSort.sortKey} sortDir={poSort.sortDir} onSort={poSort.toggle} />
-                  <SortHead label="Vendor" column="vendor" sortKey={poSort.sortKey} sortDir={poSort.sortDir} onSort={poSort.toggle} />
-                  <SortHead label="User" column="user" sortKey={poSort.sortKey} sortDir={poSort.sortDir} onSort={poSort.toggle} />
-                  <SortHead label="Project" column="projects" sortKey={poSort.sortKey} sortDir={poSort.sortDir} onSort={poSort.toggle} />
-                  <SortHead label="Net" column="net" sortKey={poSort.sortKey} sortDir={poSort.sortDir} onSort={poSort.toggle} className="text-right" />
-                  <SortHead label="PPN" column="ppn" sortKey={poSort.sortKey} sortDir={poSort.sortDir} onSort={poSort.toggle} className="text-right" />
-                  <SortHead label="Amount" column="amount" sortKey={poSort.sortKey} sortDir={poSort.sortDir} onSort={poSort.toggle} className="text-right" />
-                  <SortHead label="Payment" column="paymentTypeLabel" sortKey={poSort.sortKey} sortDir={poSort.sortDir} onSort={poSort.toggle} />
-                  <SortHead label="PPH" column="pph" sortKey={poSort.sortKey} sortDir={poSort.sortDir} onSort={poSort.toggle} className="text-right" />
-                  <SortHead label="Delivery" column="deliveryDate" sortKey={poSort.sortKey} sortDir={poSort.sortDir} onSort={poSort.toggle} />
-                  <SortHead label="Status" column="status" sortKey={poSort.sortKey} sortDir={poSort.sortDir} onSort={poSort.toggle} />
+                  <SortHead label="PO #" column="poNumber" sortKey={po.sortKey} sortDir={po.sortDir} onSort={po.toggle} />
+                  <SortHead label="Date" column="poDate" sortKey={po.sortKey} sortDir={po.sortDir} onSort={po.toggle} />
+                  <SortHead label="Vendor" column="vendor" sortKey={po.sortKey} sortDir={po.sortDir} onSort={po.toggle} />
+                  <SortHead label="User" column="user" sortKey={po.sortKey} sortDir={po.sortDir} onSort={po.toggle} />
+                  <SortHead label="Project" column="projects" sortKey={po.sortKey} sortDir={po.sortDir} onSort={po.toggle} />
+                  <SortHead label="Net" column="net" sortKey={po.sortKey} sortDir={po.sortDir} onSort={po.toggle} className="text-right" />
+                  <SortHead label="PPN" column="ppn" sortKey={po.sortKey} sortDir={po.sortDir} onSort={po.toggle} className="text-right" />
+                  <SortHead label="Amount" column="amount" sortKey={po.sortKey} sortDir={po.sortDir} onSort={po.toggle} className="text-right" />
+                  <SortHead label="Payment" column="paymentTypeLabel" sortKey={po.sortKey} sortDir={po.sortDir} onSort={po.toggle} />
+                  <SortHead label="PPH" column="pph" sortKey={po.sortKey} sortDir={po.sortDir} onSort={po.toggle} className="text-right" />
+                  <SortHead label="Delivery" column="deliveryDate" sortKey={po.sortKey} sortDir={po.sortDir} onSort={po.toggle} />
+                  <SortHead label="Status" column="status" sortKey={po.sortKey} sortDir={po.sortDir} onSort={po.toggle} />
                 </TableRow></TableHeader>
                 <TableBody>
-                  {tableRows.length === 0 ? <TableRow><TableCell colSpan={12} className="text-center text-muted-foreground py-8">No purchase orders found</TableCell></TableRow> : poPage.visible.map(r => (
+                  {po.rows.length === 0 ? <TableRow><TableCell colSpan={12} className="text-center text-muted-foreground py-8">No purchase orders found</TableCell></TableRow> : po.rows.map(r => (
                     <TableRow key={r.poNumber}>
                       <TableCell className="text-xs font-semibold text-primary whitespace-nowrap">{r.poNumber}</TableCell>
                       <TableCell className="text-muted-foreground whitespace-nowrap">{fmtDate(r.poDate)}</TableCell>
@@ -273,7 +281,7 @@ export default function PurchaseOrdersPage() {
                 </TableBody>
               </Table>
             </div>
-            <LoadMore hasMore={poPage.hasMore} shown={poPage.shown} total={poPage.total} onClick={poPage.loadMore} onLoadAll={poPage.loadAll} onCollapse={poPage.collapse} />
+            <LoadMore hasMore={po.hasMore} shown={po.shown} total={po.total} onClick={po.loadMore} onLoadAll={po.loadAll} onCollapse={po.collapse} />
           </CardContent>
         </Card>
       </div>

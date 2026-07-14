@@ -15,7 +15,8 @@ import { PayrollTab } from '../finance-ap/components/payroll-tab'
 
 export default function PayrollPage() {
   const { user } = useAuth()
-  const [data, setData] = useState<FA | null>(null)
+  // Only the payroll slice is fetched (?tab=payroll) — small & server-cacheable.
+  const [data, setData] = useState<Pick<FA, 'payroll'> | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -29,7 +30,7 @@ export default function PayrollPage() {
   const doFetch = useCallback(async (p: Record<string, string>) => {
     setLoading(true); setError(null)
     try {
-      const res = await fetch('/api/finance-ap?' + buildQuery(p))
+      const res = await fetch('/api/finance-ap?' + buildQuery({ ...p, tab: 'payroll' }))
       if (!res.ok) throw new Error('Failed to load data')
       setData(await res.json())
     } catch (e) { setError(e instanceof Error ? e.message : 'Failed to load data') } finally { setLoading(false) }

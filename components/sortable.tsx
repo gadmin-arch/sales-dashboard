@@ -7,26 +7,8 @@ import { cn } from '@/lib/utils'
 
 // Value-agnostic comparator: numbers numerically, real dates chronologically,
 // everything else as numeric-aware strings (so "230267" / "INV-2024-001" sort sensibly).
-function parseSortableDate(s: string): number | null {
-  let m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
-  if (m) return new Date(+m[3], +m[1] - 1, +m[2]).getTime()
-  m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/)
-  if (m) return new Date(+m[1], +m[2] - 1, +m[3]).getTime()
-  return null
-}
-
-function compareValues(a: unknown, b: unknown): number {
-  if (a == null && b == null) return 0
-  if (a == null) return 1
-  if (b == null) return -1
-  if (typeof a === 'number' && typeof b === 'number') return a - b
-  const as = a.toString().trim()
-  const bs = b.toString().trim()
-  const ad = parseSortableDate(as)
-  const bd = parseSortableDate(bs)
-  if (ad !== null && bd !== null) return ad - bd
-  return as.localeCompare(bs, undefined, { numeric: true, sensitivity: 'base' })
-}
+// Shared with the server rows endpoints so server sorting matches client sorting.
+import { compareValues } from '@/lib/sort-utils'
 
 export interface SortState {
   sorted: <T>(rows: T[]) => T[]

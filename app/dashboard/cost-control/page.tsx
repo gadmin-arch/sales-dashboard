@@ -43,6 +43,12 @@ interface CostControlRow {
 
   pePicName: string
   peTeamName: string
+}
+
+// Per-project transaction lists — fetched lazily via ?detail=<prjId> when the
+// modal opens (they are no longer embedded in the list response).
+interface ProjectDetailItems {
+  prjId: string
   purchasingItems: Array<{ date: string; description: string; type: 'Material' | 'Service'; poNumber: string; vendor: string; amount: number }>
   reimburseItems: Array<{ date: string; description: string; type: 'Material' | 'Service'; requestor: string; amount: number }>
   overtimeItems: Array<{ date: string; hours: number; workerName: string; reason: string }>
@@ -70,6 +76,8 @@ export default function CostControlPage() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'safe' | 'overbudget'>('all')
   const [selectedProject, setSelectedProject] = useState<CostControlRow | null>(null)
   const [detailTab, setDetailTab] = useState<'purchasing' | 'reimburse' | 'meal' | 'overtime' | 'report'>('purchasing')
+  const [detailItems, setDetailItems] = useState<ProjectDetailItems | null>(null)
+  const [detailLoading, setDetailLoading] = useState(false)
 
   // Workforce Pricing Calculator States
   const [overtimeRate, setOvertimeRate] = useState<number>(0)
@@ -182,11 +190,36 @@ export default function CostControlPage() {
     })
   }, [calculatedRows, search, statusFilter])
 
-  // Get selected project with updated calculations
+  // Fetch the per-project transaction lists when the modal opens.
+  useEffect(() => {
+    if (!selectedProject) { setDetailItems(null); return }
+    let cancelled = false
+    setDetailLoading(true); setDetailItems(null)
+    fetch('/api/cost-control?' + buildQuery({
+      dateFrom, dateTo, salesUser: su, orderType: ot, projectStatus: ps, invoiceStatus: inv, projectFlag: prjFlag,
+      pePic, peTeam, detail: selectedProject.prjId,
+    }))
+      .then((r) => r.json())
+      .then((j) => { if (!cancelled) setDetailItems(j.detail || null) })
+      .catch(() => { if (!cancelled) setDetailItems(null) })
+      .finally(() => { if (!cancelled) setDetailLoading(false) })
+    return () => { cancelled = true }
+  }, [selectedProject, dateFrom, dateTo, su, ot, ps, inv, prjFlag, pePic, peTeam])
+
+  // Get selected project with updated calculations + lazily fetched detail lists
   const selectedCalculatedProject = useMemo(() => {
     if (!selectedProject) return null
-    return calculatedRows.find((p) => p.prjId === selectedProject.prjId) || null
-  }, [selectedProject, calculatedRows])
+    const base = calculatedRows.find((p) => p.prjId === selectedProject.prjId)
+    if (!base) return null
+    return {
+      ...base,
+      purchasingItems: detailItems?.purchasingItems ?? [],
+      reimburseItems: detailItems?.reimburseItems ?? [],
+      overtimeItems: detailItems?.overtimeItems ?? [],
+      reportItems: detailItems?.reportItems ?? [],
+      mealItems: detailItems?.mealItems ?? [],
+    }
+  }, [selectedProject, calculatedRows, detailItems])
 
   const sort = useSort(filtered, 'totalPct', 'desc')
   const page = useLoadMore(sort.sorted)
@@ -693,12 +726,13 @@ export default function CostControlPage() {
                   {/* Tabs Header */}
                   <div className="flex border-b border-border gap-2 text-xs overflow-x-auto pb-1">
                     {(['purchasing', 'reimburse', 'meal', 'overtime', 'report'] as const).map((tab) => {
-                      const label = 
-                        tab === 'purchasing' ? `Purchases (${selectedCalculatedProject.purchasingItems.length})` :
-                        tab === 'reimburse' ? `Reimbursements (${selectedCalculatedProject.reimburseItems.length})` :
-                        tab === 'meal' ? `Meal Benefits (${selectedCalculatedProject.mealItems.length})` :
-                        tab === 'overtime' ? `Overtimes (${selectedCalculatedProject.overtimeItems.length})` :
-                        `Daily Reports (${selectedCalculatedProject.reportItems.length})`
+                      const n = (arr: unknown[]) => detailLoading ? '…' : arr.length
+                      const label =
+                        tab === 'purchasing' ? `Purchases (${n(selectedCalculatedProject.purchasingItems)})` :
+                        tab === 'reimburse' ? `Reimbursements (${n(selectedCalculatedProject.reimburseItems)})` :
+                        tab === 'meal' ? `Meal Benefits (${n(selectedCalculatedProject.mealItems)})` :
+                        tab === 'overtime' ? `Overtimes (${n(selectedCalculatedProject.overtimeItems)})` :
+                        `Daily Reports (${n(selectedCalculatedProject.reportItems)})`
                       const active = detailTab === tab
                       return (
                         <button
@@ -712,8 +746,12 @@ export default function CostControlPage() {
                     })}
                   </div>
 
+                  {detailLoading && (
+                    <div className="flex items-center justify-center h-40 text-xs text-muted-foreground">Loading transaction details…</div>
+                  )}
+
                   {/* Tab Contents: Purchases */}
-                  {detailTab === 'purchasing' && (
+                  {!detailLoading && detailTab === 'purchasing' && (
                     <div className="space-y-2">
                       <h3 className="font-bold text-xs flex items-center gap-1.5 text-foreground">
                         <ShoppingCart className="h-4 w-4 text-sky-500" />
@@ -752,7 +790,7 @@ export default function CostControlPage() {
                   )}
 
                   {/* Tab Contents: Reimbursements */}
-                  {detailTab === 'reimburse' && (
+                  {!detailLoading && detailTab === 'reimburse' && (
                     <div className="space-y-2">
                       <h3 className="font-bold text-xs flex items-center gap-1.5 text-foreground">
                         <Receipt className="h-4 w-4 text-purple-500" />
@@ -788,7 +826,7 @@ export default function CostControlPage() {
                   )}
 
                   {/* Tab Contents: Meal Benefits */}
-                  {detailTab === 'meal' && (
+                  {!detailLoading && detailTab === 'meal' && (
                     <div className="space-y-2">
                       <h3 className="font-bold text-xs flex items-center gap-1.5 text-foreground">
                         <Utensils className="h-4 w-4 text-orange-500" />
@@ -831,7 +869,7 @@ export default function CostControlPage() {
                   )}
 
                   {/* Tab Contents: Overtimes */}
-                  {detailTab === 'overtime' && (
+                  {!detailLoading && detailTab === 'overtime' && (
                     <div className="space-y-2">
                       <h3 className="font-bold text-xs flex items-center gap-1.5 text-foreground">
                         <Clock className="h-4 w-4 text-amber-500" />
@@ -867,7 +905,7 @@ export default function CostControlPage() {
                   )}
 
                   {/* Tab Contents: Daily Reports */}
-                  {detailTab === 'report' && (
+                  {!detailLoading && detailTab === 'report' && (
                     <div className="space-y-2">
                       <h3 className="font-bold text-xs flex items-center gap-1.5 text-foreground">
                         <Clock className="h-4 w-4 text-emerald-500" />

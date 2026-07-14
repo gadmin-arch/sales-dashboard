@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { cachedRoute } from '@/lib/route-cache'
+import { cachedRoute, cachedRouteView } from '@/lib/route-cache'
 import {
   getAllOrders,
   getAllPayroll, getPayrollPayments, getPayrollLists,
@@ -363,9 +363,21 @@ async function compute(searchParams: URLSearchParams) {
 
 const getData = cachedRoute('finance-ap', compute)
 
+// Per-tab projection: the full response (~3.7MB YTD) exceeds Vercel's ~2MB
+// data-cache entry limit and silently never caches, so every page view used to
+// re-read every sheet table from Neon. Each tab slice is small enough to cache,
+// and all six share one compute via the in-process memo.
+const FA_TABS = new Set(['overview', 'poPayments', 'payroll', 'meal', 'loans', 'reimburse'])
+const getTab = cachedRouteView('finance-ap-tab', compute, ['tab'], (full, view) => ({
+  [view.tab]: (full as Record<string, unknown>)[view.tab],
+  dateRange: full.dateRange,
+}))
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
+    const tab = searchParams.get('tab')
+    if (tab && FA_TABS.has(tab)) return NextResponse.json(await getTab(searchParams))
     return NextResponse.json(await getData(searchParams))
   } catch (error) {
     console.error('Finance AP API error:', error)

@@ -16,8 +16,8 @@ import { query } from '@/database/db'
  * sends on first load — honouring it would defeat the cache for the most
  * common request).
  */
-export function canonicalParamsKey(searchParams: URLSearchParams): string {
-  const drop = new Set(['fresh'])
+export function canonicalParamsKey(searchParams: URLSearchParams, extraDrop: string[] = []): string {
+  const drop = new Set(['fresh', ...extraDrop])
   const entries = [...searchParams.entries()]
     .filter(([k, v]) => !drop.has(k) && v !== '')
     .sort(([ak, av], [bk, bv]) => ak.localeCompare(bk) || av.localeCompare(bv))
@@ -48,4 +48,65 @@ export function cachedRoute<T>(routeName: string, compute: (sp: URLSearchParams)
   )
   return async (searchParams: URLSearchParams): Promise<T> =>
     cached(canonicalParamsKey(searchParams), await getDataVersion())
+}
+
+/**
+ * In-process memo of recent full computes. Several cached PROJECTIONS of the
+ * same dataset (main payload, per-tab slices, row pages, per-project details)
+ * can miss the Vercel data cache in quick succession; on a warm instance this
+ * memo makes them share ONE compute execution instead of re-reading every
+ * sheet table from Neon per projection — that read burst is the dominant
+ * Neon egress cost.
+ */
+function memoizeCompute<T>(compute: (sp: URLSearchParams) => Promise<T>) {
+  const TTL_MS = 5 * 60 * 1000
+  const MAX_ENTRIES = 3
+  const memo = new Map<string, { at: number; promise: Promise<T> }>()
+  return (paramsKey: string, version: string): Promise<T> => {
+    const key = `${version}::${paramsKey}`
+    const hit = memo.get(key)
+    if (hit && Date.now() - hit.at < TTL_MS) return hit.promise
+    const promise = compute(new URLSearchParams(paramsKey))
+    promise.catch(() => memo.delete(key))
+    memo.set(key, { at: Date.now(), promise })
+    while (memo.size > MAX_ENTRIES) memo.delete(memo.keys().next().value!)
+    return promise
+  }
+}
+
+/**
+ * Like cachedRoute, but stores small PROJECTIONS of one expensive compute as
+ * separate cache entries (each safely under Vercel's ~2MB per-entry limit)
+ * instead of one giant response that silently fails to cache.
+ *
+ * `viewParams` are the params that select a projection (tab, detail id, sort…);
+ * they are excluded from the dataset key so every view shares the same compute,
+ * and passed to `project(full, view)` to build the response.
+ */
+export function cachedRouteView<T, V>(
+  routeName: string,
+  compute: (sp: URLSearchParams) => Promise<T>,
+  viewParams: string[] | { view: string[]; drop?: string[] },
+  project: (full: T, view: Record<string, string>) => V,
+) {
+  const viewKeys = Array.isArray(viewParams) ? viewParams : viewParams.view
+  // dropParams are excluded from BOTH keys: they're applied by the route handler
+  // AFTER cache retrieval (e.g. offset/limit/search over a cached sorted list),
+  // so they must not multiply cache entries.
+  const dropKeys = Array.isArray(viewParams) ? [] : viewParams.drop ?? []
+  const memoized = memoizeCompute(compute)
+  const cached = unstable_cache(
+    async (paramsKey: string, version: string, viewKey: string) =>
+      project(await memoized(paramsKey, version), Object.fromEntries(new URLSearchParams(viewKey))),
+    [`route:${routeName}`],
+    { revalidate: 60 * 60 * 26 },
+  )
+  return async (searchParams: URLSearchParams): Promise<V> => {
+    const view = new URLSearchParams()
+    for (const p of viewKeys) {
+      const v = searchParams.get(p)
+      if (v) view.set(p, v)
+    }
+    return cached(canonicalParamsKey(searchParams, [...viewKeys, ...dropKeys]), await getDataVersion(), view.toString())
+  }
 }

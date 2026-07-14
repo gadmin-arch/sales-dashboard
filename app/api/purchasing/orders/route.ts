@@ -4,7 +4,8 @@ import {
   getPoStatusLabel, getPaymentTypeLabel, getItemTypeLabel, loadProcurementRefMaps,
 } from '@/database'
 import { parseDashboardParams } from '@/lib/api-helpers'
-import { cachedRoute } from '@/lib/route-cache'
+import { cachedRouteView } from '@/lib/route-cache'
+import { sortRows, searchRows } from '@/lib/sort-utils'
 import { parseDate, formatMonth, sortByPeriod, parseMulti, filterDataByDateRange } from '@/lib/utils-date-currency'
 import { distinct, makeProjectLabeler, makeVendorNamer, makeNamer } from '@/lib/purchasing-helpers'
 
@@ -212,12 +213,41 @@ async function computeOrders(searchParams: URLSearchParams) {
     }
 }
 
-const getOrders = cachedRoute('purchasing-orders', computeOrders)
+// v2: the main response carries only the first page of orders (the full list
+// pushed the payload toward the ~2MB data-cache entry limit as the year grows).
+// Sorting / searching / load-more go through `view=rows`, which slices from a
+// cached sorted list — offset/limit/q are applied AFTER cache retrieval so they
+// don't multiply cache entries or recompute the dataset.
+const ROWS_STEP = 25
+const SEARCH_KEYS = ['poNumber', 'vendor', 'user', 'projects', 'statusLabel', 'paymentTypeLabel']
+
+const getView = cachedRouteView(
+  'purchasing-orders-v2',
+  computeOrders,
+  { view: ['view', 'sortKey', 'sortDir'], drop: ['offset', 'limit', 'q'] },
+  (full, view) => {
+    if (view.view === 'rows') {
+      const sortKey = view.sortKey || 'poDate'
+      const sortDir = view.sortDir === 'asc' ? 'asc' : 'desc'
+      return { rows: sortRows(full.orders, sortKey, sortDir), totalRows: full.totalRows }
+    }
+    return { ...full, orders: full.orders.slice(0, ROWS_STEP) }
+  },
+)
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    return NextResponse.json(await getOrders(searchParams))
+    const data = await getView(searchParams)
+    if (searchParams.get('view') === 'rows' && 'rows' in data) {
+      const q = searchParams.get('q') || ''
+      const rows = q ? searchRows(data.rows, q, SEARCH_KEYS) : data.rows
+      const offset = Math.max(0, parseInt(searchParams.get('offset') || '0', 10) || 0)
+      const limitParam = searchParams.get('limit') || String(ROWS_STEP)
+      const limit = limitParam === 'all' ? rows.length : Math.max(1, parseInt(limitParam, 10) || ROWS_STEP)
+      return NextResponse.json({ rows: rows.slice(offset, offset + limit), totalRows: rows.length })
+    }
+    return NextResponse.json(data)
   } catch (error) {
     console.error('Purchasing orders API error:', error)
     return NextResponse.json({ error: 'Failed to load purchase orders' }, { status: 500 })

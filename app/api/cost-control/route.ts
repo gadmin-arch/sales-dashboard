@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { cachedRoute } from '@/lib/route-cache'
+import { cachedRouteView } from '@/lib/route-cache'
 import { getCostControlData } from '@/database/repos/cost-control'
 import { parseDashboardParams } from '@/lib/api-helpers'
 import { parseMulti, parseDate } from '@/lib/utils-date-currency'
@@ -124,12 +124,35 @@ async function compute(searchParams: URLSearchParams) {
     })
 }
 
-const getData = cachedRoute('cost-control', compute)
+// v2: the list response no longer embeds the five per-project item arrays —
+// they were the bulk of the old ~2MB payload, which exceeded the server data
+// cache's per-entry limit so the route effectively never cached. The modal now
+// requests them per project via ?detail=<prjId>; both views share one compute.
+// Name bumped so stale old-shape cache entries can't be served.
+const getView = cachedRouteView('cost-control-v2', compute, ['detail'], (full, view) => {
+  if (view.detail) {
+    const p = full.projects.find((x) => x.prjId === view.detail)
+    return {
+      detail: p ? {
+        prjId: p.prjId,
+        purchasingItems: p.purchasingItems,
+        reimburseItems: p.reimburseItems,
+        overtimeItems: p.overtimeItems,
+        reportItems: p.reportItems,
+        mealItems: p.mealItems,
+      } : null,
+    }
+  }
+  return {
+    ...full,
+    projects: full.projects.map(({ purchasingItems, reimburseItems, overtimeItems, reportItems, mealItems, ...rest }) => rest),
+  }
+})
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    return NextResponse.json(await getData(searchParams))
+    return NextResponse.json(await getView(searchParams))
   } catch (error: any) {
     console.error('Cost Control API error:', error)
     return NextResponse.json({ error: error.message || 'Unknown error' }, { status: 500 })

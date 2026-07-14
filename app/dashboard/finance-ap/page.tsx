@@ -33,7 +33,9 @@ type TabKey = typeof TABS[number]['key']
 
 export default function FinanceAPPage() {
   const { user } = useAuth()
-  const [data, setData] = useState<FA | null>(null)
+  // Tab slices load lazily (?tab=…): each response is small enough for the
+  // server data cache, and tabs the user never opens are never computed.
+  const [slices, setSlices] = useState<Partial<FA>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [tab, setTab] = useState<TabKey>('overview')
@@ -48,33 +50,76 @@ export default function FinanceAPPage() {
   const tabs = useMemo(() => TABS.filter((t) => !t.role || (user?.roles as any)?.[t.role]), [user])
   useEffect(() => { if (!tabs.some((t) => t.key === tab)) setTab('overview') }, [tabs, tab])
 
-  const doFetch = useCallback(async (p: Record<string, string>) => {
+  const doFetchTab = useCallback(async (tabKey: TabKey, p: Record<string, string>, reset: boolean): Promise<boolean> => {
     setLoading(true); setError(null)
     try {
-      const res = await fetch('/api/finance-ap?' + buildQuery(p))
+      const res = await fetch('/api/finance-ap?' + buildQuery({ ...p, tab: tabKey }))
       if (!res.ok) throw new Error('Failed to load data')
-      setData(await res.json())
-    } catch (e) { setError(e instanceof Error ? e.message : 'Failed to load data') } finally { setLoading(false) }
+      const json = await res.json()
+      setSlices((prev) => (reset ? json : { ...prev, ...json }))
+      return true
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load data')
+      return false
+    } finally { setLoading(false) }
   }, [])
 
   const firstLoad = useRef(true)
+  const paramsSigRef = useRef('')
+  const loadedTabsRef = useRef<Set<TabKey>>(new Set())
   useEffect(() => {
     const fresh = firstLoad.current; firstLoad.current = false
-    doFetch({
+    const sig = JSON.stringify([dateFrom, dateTo, chartFilter?.type ?? '', chartFilter?.value ?? ''])
+    // Filter change invalidates every previously loaded tab, not just the active one.
+    const reset = sig !== paramsSigRef.current
+    if (reset) { paramsSigRef.current = sig; loadedTabsRef.current = new Set() }
+    if (!reset && loadedTabsRef.current.has(tab)) return
+    loadedTabsRef.current.add(tab)
+    doFetchTab(tab, {
       dateFrom,
       dateTo,
       ...(chartFilter ? { cType: chartFilter.type, cVal: chartFilter.value } : {}),
-      ...(fresh ? { fresh: '1' } : {})
-    })
-  }, [doFetch, dateFrom, dateTo, chartFilter])
+      ...(fresh ? { fresh: '1' } : {}),
+    }, reset).then((ok) => { if (!ok) loadedTabsRef.current.delete(tab) })
+  }, [doFetchTab, dateFrom, dateTo, chartFilter, tab])
 
   const onApply = () => { dateFrom !== lFrom || dateTo !== lTo ? (setDateFrom(lFrom), setDateTo(lTo)) : null }
   const onClear = () => { const d = getYTD(); setLFrom(d.from); setLTo(d.to); setDateFrom(d.from); setDateTo(d.to); setChartFilter(null) }
   const hasUnapplied = lFrom !== dateFrom || lTo !== dateTo
 
-  if (loading && !data) return <div className="flex items-center justify-center min-h-[80vh]"><Loader2 className="animate-spin h-8 w-8 text-primary" /></div>
-  if (error && !data) return <div className="flex flex-col items-center justify-center min-h-[80vh] space-y-4"><p className="text-destructive">{error}</p><Button onClick={onClear}>Retry</Button></div>
-  if (!data) return null
+  const anyLoaded = Object.keys(slices).length > 0
+  const active = slices[tab]
+
+  if (loading && !anyLoaded) return <div className="flex items-center justify-center min-h-[80vh]"><Loader2 className="animate-spin h-8 w-8 text-primary" /></div>
+  if (error && !anyLoaded) return <div className="flex flex-col items-center justify-center min-h-[80vh] space-y-4"><p className="text-destructive">{error}</p><Button onClick={onClear}>Retry</Button></div>
+  if (!anyLoaded) return null
+
+  const tabBody = () => {
+    if (!active) {
+      if (error) {
+        return (
+          <div className="flex flex-col items-center justify-center h-64 space-y-3">
+            <p className="text-sm text-destructive">{error}</p>
+            <Button size="sm" variant="outline" onClick={() => {
+              doFetchTab(tab, {
+                dateFrom, dateTo,
+                ...(chartFilter ? { cType: chartFilter.type, cVal: chartFilter.value } : {}),
+              }, false).then((ok) => { if (ok) loadedTabsRef.current.add(tab) })
+            }}>Retry</Button>
+          </div>
+        )
+      }
+      return <div className="flex items-center justify-center h-64"><Loader2 className="animate-spin h-6 w-6 text-primary" /></div>
+    }
+    switch (tab) {
+      case 'overview': return <OverviewTab d={slices.overview!} setTab={setTab} />
+      case 'poPayments': return <PoPaymentsTab d={slices.poPayments!} handleChartClick={handleChartClick} />
+      case 'payroll': return <PayrollTab d={slices.payroll!} handleChartClick={handleChartClick} hideTable={true} />
+      case 'meal': return <MealTab d={slices.meal!} handleChartClick={handleChartClick} />
+      case 'loans': return <LoansTab d={slices.loans!} handleChartClick={handleChartClick} />
+      case 'reimburse': return <ReimburseTab d={slices.reimburse!} handleChartClick={handleChartClick} />
+    }
+  }
 
   return (
     <SalesPageShell>
@@ -101,7 +146,7 @@ export default function FinanceAPPage() {
             <Button variant="outline" size="sm" onClick={onClear}>Clear</Button>
             <Button size="sm" onClick={onApply} className="relative">Apply{hasUnapplied && <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-orange-500 border-2 border-background" />}</Button>
           </div>
-          {loading && data && <div className="w-full h-1 bg-border overflow-hidden rounded-full mt-3"><div className="h-1/3 bg-primary rounded-full loading-bar-inner" /></div>}
+          {loading && anyLoaded && <div className="w-full h-1 bg-border overflow-hidden rounded-full mt-3"><div className="h-1/3 bg-primary rounded-full loading-bar-inner" /></div>}
         </CardContent></Card>
 
         <div id="finance-tables-section" className="flex flex-wrap gap-1.5 border-b border-border">
@@ -112,12 +157,7 @@ export default function FinanceAPPage() {
           ))}
         </div>
 
-        {tab === 'overview' && <OverviewTab d={data.overview} setTab={setTab} />}
-        {tab === 'poPayments' && <PoPaymentsTab d={data.poPayments} handleChartClick={handleChartClick} />}
-        {tab === 'payroll' && <PayrollTab d={data.payroll} handleChartClick={handleChartClick} hideTable={true} />}
-        {tab === 'meal' && <MealTab d={data.meal} handleChartClick={handleChartClick} />}
-        {tab === 'loans' && <LoansTab d={data.loans} handleChartClick={handleChartClick} />}
-        {tab === 'reimburse' && <ReimburseTab d={data.reimburse} handleChartClick={handleChartClick} />}
+        {tabBody()}
       </div>
     </SalesPageShell>
   )
