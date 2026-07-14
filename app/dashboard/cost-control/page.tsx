@@ -4,8 +4,9 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { KPICard } from '@/components/kpi-card'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Wallet, ShoppingCart, AlertCircle, CheckCircle2, X, Lightbulb, TrendingUp, Activity, Clock, Settings2, Receipt } from 'lucide-react'
+import { Wallet, ShoppingCart, AlertCircle, CheckCircle2, X, Lightbulb, TrendingUp, Activity, Clock, Settings2, Receipt, Users } from 'lucide-react'
 import { SalesPageShell } from '@/components/theme-toggle'
+import Link from 'next/link'
 import { MultiSelect } from '@/components/multi-select'
 import { PageHeader } from '@/components/page-header'
 import { FilterCard } from '@/components/filter-card'
@@ -245,7 +246,19 @@ export default function CostControlPage() {
   return (
     <SalesPageShell>
       <div className="bg-background text-foreground min-h-screen space-y-6">
-        <PageHeader title="Cost Control" subtitle="PT. Multi Daya Mitra — Project Budget vs Actual Spend" />
+        <PageHeader 
+          title="Cost Control" 
+          subtitle="PT. Multi Daya Mitra — Project Budget vs Actual Spend" 
+          actions={
+            <Link
+              href="/dashboard/cost-control/workers"
+              className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground shadow-sm transition-all hover:bg-primary/95 hover:shadow cursor-pointer"
+            >
+              <Users className="h-3.5 w-3.5" />
+              Worker KPIs
+            </Link>
+          }
+        />
 
         {/* Filter Card */}
         <FilterCard from={lFrom} to={lTo} onDateChange={(f, t) => { setLFrom(f); setLTo(t) }} onApply={onApply} onClear={onClear} hasUnapplied={hasUnapplied} loading={loading && !!data} dateLabel="PO / Project Date">

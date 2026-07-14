@@ -33,6 +33,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [lastSynced, setLastSynced] = useState<string | null>(null)
+  const [syncStatus, setSyncStatus] = useState<string | null>(null)
+  const [syncErrorMessage, setSyncErrorMessage] = useState<string | null>(null)
+  const [syncHistory, setSyncHistory] = useState<any[]>([])
+  const [historyModalOpen, setHistoryModalOpen] = useState(false)
 
   const roles = user?.roles as Roles | undefined
   const visibleNavItems = roles ? NAV.filter((item) => roles[item.role]) : []
@@ -46,16 +50,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     try {
       const res = await fetch('/api/sync/status')
       const data = await res.json()
-      if (data.success && data.lastSyncTime) {
-        const date = new Date(data.lastSyncTime)
-        setLastSynced(date.toLocaleString('en-US', {
-          day: 'numeric',
-          month: 'short',
-          year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit'
-        }))
+      if (data.success) {
+        if (data.lastSyncTime) {
+          const date = new Date(data.lastSyncTime)
+          setLastSynced(date.toLocaleString('en-US', {
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+          }))
+        }
+        setSyncStatus(data.status || null)
+        setSyncErrorMessage(data.errorMessage || null)
+        setSyncHistory(data.history || [])
       }
     } catch (e) {
       console.error('Failed to fetch sync status', e)
@@ -154,9 +163,35 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           )}
         </button>
         {lastSynced && (
-          <span className="text-[10px] text-muted-foreground text-center font-medium mt-0.5">
-            Last updated: {lastSynced}
-          </span>
+          <div className="flex flex-col gap-1 mt-0.5 items-center">
+            <span className="text-[10px] text-muted-foreground text-center font-medium">
+              Last updated: {lastSynced}
+            </span>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              {syncStatus === 'SUCCESS' && (
+                <span className="inline-flex items-center gap-1 text-[9px] font-semibold text-emerald-600 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-950/30 px-1.5 py-0.5 rounded">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Success
+                </span>
+              )}
+              {syncStatus === 'FAILED' && (
+                <span 
+                  title={syncErrorMessage || 'Unknown sync error'}
+                  className="inline-flex items-center gap-1 text-[9px] font-semibold text-rose-600 bg-rose-50 dark:text-rose-400 dark:bg-rose-950/30 px-1.5 py-0.5 rounded cursor-help"
+                >
+                  <span className="h-1.5 w-1.5 rounded-full bg-rose-500 animate-bounce" />
+                  Failed
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => setHistoryModalOpen(true)}
+                className="text-[9px] text-primary hover:underline font-semibold"
+              >
+                History
+              </button>
+            </div>
+          </div>
         )}
       </div>
     </div>
@@ -258,6 +293,93 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           )}
         </div>
       </main>
+
+      {/* Sync History Modal */}
+      {historyModalOpen && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="flex flex-col w-full max-w-lg rounded-2xl bg-card border border-border shadow-2xl overflow-hidden max-h-[85vh]">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-border p-4 bg-muted/30">
+              <h3 className="font-semibold text-lg text-foreground font-sans">Sync History & Status</h3>
+              <button 
+                onClick={() => setHistoryModalOpen(false)}
+                className="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 font-sans">
+              <div className="text-xs text-muted-foreground bg-muted/40 p-3 rounded-lg border border-border">
+                <p className="font-medium text-foreground mb-1">Vercel Cron Information</p>
+                <p>Scheduled: <code className="bg-background px-1 py-0.5 rounded font-mono text-[11px]">0 23 * * *</code> UTC (06:00 WIB daily).</p>
+                <p className="mt-1">Below are the last 5 sync execution records stored in the database.</p>
+              </div>
+
+              <div className="space-y-3">
+                {syncHistory.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-6">No sync records found in the database.</p>
+                ) : (
+                  syncHistory.map((run) => {
+                    const runDate = new Date(run.lastSyncTime)
+                    const formattedDate = runDate.toLocaleString('en-US', {
+                      day: 'numeric',
+                      month: 'short',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      second: '2-digit',
+                      timeZoneName: 'short'
+                    })
+                    const isSuccess = run.status === 'SUCCESS'
+
+                    return (
+                      <div 
+                        key={run.id} 
+                        className={cn(
+                          "p-3 rounded-xl border transition-all text-sm",
+                          isSuccess 
+                            ? "bg-emerald-50/30 border-emerald-100 dark:bg-emerald-950/10 dark:border-emerald-900/30" 
+                            : "bg-rose-50/30 border-rose-100 dark:bg-rose-950/10 dark:border-rose-900/30"
+                        )}
+                      >
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="font-semibold text-[11px] text-muted-foreground">ID: #{run.id}</span>
+                          <span className={cn(
+                            "inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full",
+                            isSuccess 
+                              ? "text-emerald-700 bg-emerald-100 dark:text-emerald-400 dark:bg-emerald-900/30" 
+                              : "text-rose-700 bg-rose-100 dark:text-rose-400 dark:bg-rose-900/30"
+                          )}>
+                            {run.status}
+                          </span>
+                        </div>
+                        <div className="text-foreground font-medium text-xs mb-1">
+                          {formattedDate}
+                        </div>
+                        {run.errorMessage && (
+                          <div className="mt-1.5 bg-rose-100/40 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 text-xs p-2 rounded border border-rose-200/50 dark:border-rose-900/30 font-mono overflow-x-auto whitespace-pre-wrap">
+                            {run.errorMessage}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+            </div>
+            {/* Footer */}
+            <div className="border-t border-border p-4 bg-muted/10 flex justify-end font-sans">
+              <button
+                onClick={() => setHistoryModalOpen(false)}
+                className="px-4 py-2 text-sm font-medium bg-muted hover:bg-muted/80 rounded-lg transition-colors border border-border cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
