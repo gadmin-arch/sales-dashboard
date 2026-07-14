@@ -14,9 +14,20 @@ export async function GET(request: NextRequest) {
     secret !== process.env.CRON_SECRET &&
     !isVercelCron
   ) {
+    // Diagnostik di Vercel logs: bedakan CRON_SECRET belum di-set vs nilai tidak cocok.
+    console.warn('[sync] Unauthorized sync attempt', {
+      cronSecretConfigured: Boolean(process.env.CRON_SECRET),
+      hasAuthHeader: Boolean(authHeader),
+      hasSecretParam: Boolean(secret),
+      userAgent: request.headers.get('user-agent'),
+    })
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  console.log('[sync] Sync start', {
+    via: isVercelCron ? 'vercel-cron' : secret ? 'secret-param' : 'dev',
+    userAgent: request.headers.get('user-agent'),
+  })
   const result = await syncAllSheets()
   return NextResponse.json(result)
 }
