@@ -1,4 +1,4 @@
-import { fetchSheet } from '@/database/client'
+import { fetchSheetsBatch } from '@/database/client'
 import { GOOGLE_CONFIG } from '@/database/config'
 import { query } from '@/database/db'
 import { initDatabase } from '@/database/init'
@@ -146,39 +146,52 @@ export async function syncAllSheets(): Promise<{ success: boolean; syncedCount: 
 
     let syncedCount = 0
 
-    // 2. Fetch and save each sheet
-    for (const target of syncTargets) {
-      const key = `${target.spreadsheetId}::${target.sheetName}`
-      console.log(`[sync] Syncing sheet: ${target.sheetName} (${target.spreadsheetId.substring(0, 8)}...)`)
-      
+    // 2. Fetch per spreadsheet (one values.batchGet each) instead of one
+    // values.get per sheet: 74 requests → ~24, comfortably under the Sheets
+    // read quota (60 req/min/user) that single-sheet fetches regularly tripped.
+    const bySpreadsheet = new Map<string, SyncTarget[]>()
+    for (const t of syncTargets) {
+      const list = bySpreadsheet.get(t.spreadsheetId) || []
+      list.push(t)
+      bySpreadsheet.set(t.spreadsheetId, list)
+    }
+
+    for (const [spreadsheetId, targets] of bySpreadsheet) {
+      console.log(`[sync] Fetching ${targets.length} sheet(s) from ${spreadsheetId.substring(0, 8)}...`)
+
       // Spacing delay to stay under Sheets API rate limits
       await new Promise((resolve) => setTimeout(resolve, 200))
 
-      try {
-        let rawData;
-        let retries = 3;
-        while (retries > 0) {
-          try {
-            rawData = await fetchSheet(target.spreadsheetId, `${target.sheetName}!A:ZZZ`)
-            break;
-          } catch (fetchErr: any) {
-            const isQuotaError = 
-              fetchErr?.message?.includes('Quota exceeded') || 
-              fetchErr?.status === 429 ||
-              String(fetchErr).includes('Read requests per minute');
-              
-            if (isQuotaError && retries > 1) {
-              console.warn(`[sync] Sheets API Quota exceeded for "${target.sheetName}". Waiting 5s before retry... (${retries - 1} retries left)`)
-              await new Promise((resolve) => setTimeout(resolve, 5000))
-              retries--
-            } else {
-              throw fetchErr
-            }
+      let sheetsData: string[][][] | undefined
+      let retries = 3
+      while (retries > 0) {
+        try {
+          sheetsData = await fetchSheetsBatch(spreadsheetId, targets.map((t) => `${t.sheetName}!A:ZZZ`))
+          break
+        } catch (fetchErr: any) {
+          const isQuotaError =
+            fetchErr?.message?.includes('Quota exceeded') ||
+            fetchErr?.status === 429 ||
+            String(fetchErr).includes('Read requests per minute')
+
+          if (isQuotaError && retries > 1) {
+            console.warn(`[sync] Sheets API Quota exceeded for spreadsheet ${spreadsheetId.substring(0, 8)}... Waiting 5s before retry... (${retries - 1} retries left)`)
+            await new Promise((resolve) => setTimeout(resolve, 5000))
+            retries--
+          } else {
+            console.error(`[sync] Failed to fetch spreadsheet ${spreadsheetId.substring(0, 8)}... — keeping its previously synced data:`, fetchErr)
+            break
           }
         }
+      }
+      if (!sheetsData) continue // this spreadsheet failed; others still sync
 
-        if (!rawData) throw new Error(`Empty response for sheet ${target.sheetName}`)
-        
+      for (let ti = 0; ti < targets.length; ti++) {
+        const target = targets[ti]
+        const key = `${target.spreadsheetId}::${target.sheetName}`
+
+      try {
+        const rawData = sheetsData[ti] || []
         const headers = rawData.length > 0 ? rawData[0] : []
         const rows = rawData.length > 1 ? rawData.slice(1) : []
 
@@ -251,6 +264,7 @@ export async function syncAllSheets(): Promise<{ success: boolean; syncedCount: 
       } catch (sheetErr) {
         console.error(`[sync] Failed to sync sheet "${target.sheetName}":`, sheetErr)
         // Continue with other sheets if one fails to keep partial availability
+      }
       }
     }
 

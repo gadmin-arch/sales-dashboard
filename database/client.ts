@@ -25,6 +25,20 @@ export async function fetchSheet(
   return response.data.values || []
 }
 
+/**
+ * One batchGet per spreadsheet instead of one values.get per sheet — the
+ * Sheets read quota (60 req/min/user) is the scarce resource, not bytes.
+ * valueRanges come back in request order.
+ */
+export async function fetchSheetsBatch(
+  spreadsheetId: string,
+  ranges: string[]
+): Promise<string[][][]> {
+  const sheets = getSheetsClient()
+  const response = await sheets.spreadsheets.values.batchGet({ spreadsheetId, ranges })
+  return (response.data.valueRanges || []).map((vr) => vr.values || [])
+}
+
 type SheetRows = { headers: string[]; rows: string[][] }
 
 // Two layers:
@@ -102,6 +116,24 @@ export async function fetchAllRows(
       const data = await fetchSheet(spreadsheetId, `${sheetName}!A:ZZZ`)
       const parsed: SheetRows = data.length < 1 ? { headers: [], rows: [] } : { headers: data[0], rows: data.slice(1) }
       lastGood.set(key, parsed) // remember the latest good copy for fallback
+      // Write back to Neon so other server instances read the DB copy instead
+      // of re-hitting the Sheets API (DB writes are free ingress; the Sheets
+      // per-minute read quota is the scarce resource on this path).
+      if (typeof window === 'undefined') {
+        try {
+          const { query } = require('./db')
+          await query(`
+            INSERT INTO sheets_cache (key, headers, rows, updated_at)
+            VALUES ($1, $2, $3, NOW())
+            ON CONFLICT (key) DO UPDATE
+            SET headers = EXCLUDED.headers,
+                rows = EXCLUDED.rows,
+                updated_at = NOW();
+          `, [key, JSON.stringify(parsed.headers), JSON.stringify(parsed.rows)])
+        } catch (writeErr) {
+          console.warn(`[sheets] write-back to sheets_cache failed for "${sheetName}":`, writeErr)
+        }
+      }
       return parsed
     } catch (err) {
       rowsCache.delete(key) // don't keep a failed read cached
