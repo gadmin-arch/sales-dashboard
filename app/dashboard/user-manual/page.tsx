@@ -275,7 +275,6 @@ export default function UserManualPage() {
                   <p>
                     Filter yang tersedia: Sales User, PE PIC, PE Team, Project Type, Project Status, Invoice Status, dan Project Flag. Tabel menampilkan <em>Material Util %</em>, <em>Service Util %</em>, dan <em>Total Util %</em> (persentase pemakaian anggaran) per proyek.
                   </p>
-                  <Def name="Workforce Pricing Calculator">mengubah laporan kerja menjadi biaya tenaga kerja secara dinamis. Atur <em>Overtime Rate/hr</em>, pilih <em>Report Basis</em> (per jam atau flat per laporan), lalu isi tarifnya — biaya hasil hitungan otomatis ditambahkan ke pemakaian anggaran jasa.</Def>
                   <Def name="Detail proyek">klik baris proyek untuk membuka jendela detail berisi tab <em>Purchases</em>, <em>Reimbursements</em>, <em>Meal Benefits</em>, <em>Overtimes</em>, dan <em>Daily Reports</em> milik proyek tersebut.</Def>
                 </PageManual>
 
