@@ -4,7 +4,7 @@ import { useAuth } from '@/lib/auth-context'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState, type ReactNode } from 'react'
 import Link from 'next/link'
-import { BarChart3, FileText, CreditCard, FolderOpen, LogOut, Menu, X, ListTodo, Users, Lock, ClipboardList, ShoppingCart, Store, Loader2, CalendarClock, ClipboardCheck, Banknote, Gauge, ChevronDown, ChevronRight, Shield } from 'lucide-react'
+import { BarChart3, FileText, CreditCard, FolderOpen, LogOut, Menu, X, ListTodo, Users, Lock, ClipboardList, ShoppingCart, Store, Loader2, CalendarClock, ClipboardCheck, Banknote, Gauge, ChevronDown, ChevronRight, Shield, BookOpen } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { NAV, NAV_GROUPS, navItemForPath, firstAllowedHref, type Roles } from '@/lib/nav'
 
@@ -110,6 +110,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const handleManualSync = async () => {
     if (syncing) return
+    const confirmed = window.confirm("Apakah Anda yakin ingin melakukan sinkronisasi data dari Google Sheets?")
+    if (!confirmed) return
     setSyncing(true)
     try {
       const res = await fetch('/api/sync/manual', { method: 'POST' })
@@ -205,6 +207,24 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
         )
       })}
+      
+      {/* Divider */}
+      <div className="h-px bg-border my-3 mx-3" />
+
+      {/* User Manual link */}
+      <Link
+        href="/dashboard/user-manual"
+        onClick={onNavigate}
+        className={cn(
+          'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+          pathname === '/dashboard/user-manual'
+            ? 'bg-primary/10 text-primary font-bold'
+            : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+        )}
+      >
+        <BookOpen className="h-4 w-4 shrink-0 text-violet-500" />
+        User Manual
+      </Link>
     </nav>
   )
 

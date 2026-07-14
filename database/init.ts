@@ -16,6 +16,17 @@ export async function initDatabase() {
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `)
+
+    // Create sheet_metadata table
+    await query(`
+      CREATE TABLE IF NOT EXISTS sheet_metadata (
+        key VARCHAR(500) PRIMARY KEY,
+        table_name VARCHAR(500) NOT NULL,
+        headers JSONB NOT NULL,
+        col_names JSONB NOT NULL,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `)
     
     // Create sync_metadata table
     await query(`

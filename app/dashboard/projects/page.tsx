@@ -62,7 +62,7 @@ export default function ProjectsDashboardPage() {
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [selectedProject, setSelectedProject] = useState<ProjectDashboardData | null>(null)
-  const [activeTab, setActiveTab] = useState<'purchasing' | 'reimburse' | 'overtime' | 'report'>('purchasing')
+  const [activeTab, setActiveTab] = useState<'purchasing' | 'reimburse' | 'meal' | 'overtime' | 'report'>('purchasing')
 
   // Workforce Pricing Calculator States
   const [overtimeRate, setOvertimeRate] = useState<number>(0)
@@ -587,10 +587,11 @@ export default function ProjectsDashboardPage() {
               <div className="lg:col-span-7 space-y-4">
                 {/* Tabs Header */}
                 <div className="flex border-b border-border gap-2 text-xs overflow-x-auto pb-1">
-                  {(['purchasing', 'reimburse', 'overtime', 'report'] as const).map((tab) => {
+                  {(['purchasing', 'reimburse', 'meal', 'overtime', 'report'] as const).map((tab) => {
                     const label = 
                       tab === 'purchasing' ? `Purchases (${selectedCalculatedProject.purchasingItems.length})` :
                       tab === 'reimburse' ? `Reimbursements (${selectedCalculatedProject.reimburseItems.length})` :
+                      tab === 'meal' ? `Meal Benefits (${selectedCalculatedProject.mealItems.length})` :
                       tab === 'overtime' ? `Overtimes (${selectedCalculatedProject.overtimeItems.length})` :
                       `Daily Reports (${selectedCalculatedProject.reportItems.length})`
                     
@@ -647,6 +648,26 @@ export default function ProjectsDashboardPage() {
                       ))
                     ) : (
                       <div className="text-center py-8 text-muted-foreground text-xs">No reimburse records found.</div>
+                    )
+                  )}
+
+                  {activeTab === 'meal' && (
+                    selectedCalculatedProject.mealItems.length > 0 ? (
+                      selectedCalculatedProject.mealItems.map((item, idx) => (
+                        <div key={idx} className="bg-card border rounded p-3 text-xs flex flex-col gap-1 shadow-sm">
+                          <div className="flex justify-between items-start">
+                            <span className="font-semibold text-foreground">{item.requestor || '-'}</span>
+                            <div className="flex items-center gap-1.5">
+                              <Badge variant="outline" className="text-[9px]">Meal</Badge>
+                              <span className="font-bold text-foreground font-mono">{fmtRp(item.amount)}</span>
+                            </div>
+                          </div>
+                          <span className="text-muted-foreground">{item.description || 'Meal Benefit.'}</span>
+                          <span className="text-[10px] text-muted-foreground/75">{item.date}</span>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-center py-8 text-muted-foreground text-xs">No meal benefit records found.</div>
                     )
                   )}
 

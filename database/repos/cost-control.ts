@@ -39,6 +39,7 @@ export interface ProjectCostControl {
   reimburseItems: Array<{ date: string; description: string; type: 'Material' | 'Service'; requestor: string; amount: number }>
   overtimeItems: Array<{ date: string; hours: number; workerName: string; reason: string }>
   reportItems: Array<{ date: string; hours: number; workerName: string; remarks: string }>
+  mealItems: Array<{ date: string; amount: number; approved: number; userId: string; userName: string; notes: string; type: string }>
 }
 
 // Material = type id 'M' / 'M-*', everything else service. Reimburse cash_out_types
@@ -114,6 +115,7 @@ export async function getCostControlData(f: CostControlFilter = {}): Promise<Pro
   // mbd_mb_id (1), mbd_approved (6), mbd_project_id (7), deleted_at (20)
   const mealByPrj = new Map<string, number>()
   const mealCountByPrj = new Map<string, number>()
+  const mealItemsByPrj = new Map<string, Array<{ date: string; amount: number; approved: number; userId: string; userName: string; notes: string; type: string }>>()
   for (const r of mbdRes.rows) {
     if (!r[0] || r[0] === 'mbd_id' || r[20]) continue // deleted
     
@@ -123,9 +125,28 @@ export async function getCostControlData(f: CostControlFilter = {}): Promise<Pro
     const prjId = r[7]
     if (!prjId) continue
     
+    const amount = parseNum(r[5])
     const approved = parseNum(r[6])
     mealByPrj.set(prjId, (mealByPrj.get(prjId) || 0) + approved)
     mealCountByPrj.set(prjId, (mealCountByPrj.get(prjId) || 0) + 1)
+
+    const userId = r[13] || ''
+    let userName = r[14] || ''
+    if (!userName && userId) {
+      const user = salesUsers.find(u => u.userId === userId)
+      if (user) userName = user.name
+    }
+
+    if (!mealItemsByPrj.has(prjId)) mealItemsByPrj.set(prjId, [])
+    mealItemsByPrj.get(prjId)!.push({
+      date: r[10] || '',
+      amount,
+      approved,
+      userId,
+      userName,
+      notes: r[8] || '',
+      type: r[11] || '',
+    })
   }
 
   // Aggregate Overtimes per project
@@ -324,6 +345,7 @@ export async function getCostControlData(f: CostControlFilter = {}): Promise<Pro
       reimburseItems: reimburseItemsByPrj.get(pId) || [],
       overtimeItems: overtimeItemsByPrj.get(pId) || [],
       reportItems: reportItemsByPrj.get(pId) || [],
+      mealItems: mealItemsByPrj.get(pId) || [],
     }
   })
 

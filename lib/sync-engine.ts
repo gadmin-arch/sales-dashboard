@@ -61,7 +61,7 @@ const syncTargets: SyncTarget[] = [
   // Finance AP
   { spreadsheetId: GOOGLE_CONFIG.financeAP.paymentRequestSpreadsheetId, sheetName: GOOGLE_CONFIG.financeAP.sheets.paymentRequests },
   { spreadsheetId: GOOGLE_CONFIG.financeAP.paymentRequestSpreadsheetId, sheetName: GOOGLE_CONFIG.financeAP.sheets.paymentStatuses },
-  { spreadsheetId: GOOGLE_CONFIG.financeAP.paymentSpreadsheetId, sheetName: GOOGLE_CONFIG.financeAP.sheets.logPayments },
+  { spreadsheetId: GOOGLE_CONFIG.financeAP.paymentRequestSpreadsheetId, sheetName: GOOGLE_CONFIG.financeAP.sheets.logPayments },
   { spreadsheetId: GOOGLE_CONFIG.financeAP.paymentSpreadsheetId, sheetName: GOOGLE_CONFIG.financeAP.sheets.payments },
   { spreadsheetId: GOOGLE_CONFIG.financeAP.reimburseSpreadsheetId, sheetName: GOOGLE_CONFIG.financeAP.sheets.reimburseCashIn },
   { spreadsheetId: GOOGLE_CONFIG.financeAP.reimburseSpreadsheetId, sheetName: GOOGLE_CONFIG.financeAP.sheets.reimburseCashOut },
@@ -114,6 +114,30 @@ const syncTargets: SyncTarget[] = [
   { spreadsheetId: GOOGLE_CONFIG.reports.overtimeSpreadsheetId, sheetName: GOOGLE_CONFIG.reports.sheets.overtimes }
 ]
 
+function getTableName(spreadsheetId: string, sheetName: string): string {
+  const prefix = spreadsheetId.substring(0, 8).toLowerCase().replace(/[^a-z0-9_]/g, '_')
+  const name = sheetName.toLowerCase().replace(/[^a-z0-9_]/g, '_')
+  return `sheet_${prefix}_${name}`
+}
+
+function getSafeColNames(headers: string[]): string[] {
+  const seenNames = new Set<string>()
+  seenNames.add('id') // Reserve primary key name 'id'
+  return headers.map((h, i) => {
+    let clean = h.toLowerCase().trim().replace(/[^a-z0-9_]/g, '_').replace(/^_+|_+$/g, '')
+    if (!clean || /^[0-9]/.test(clean) || clean === 'id') {
+      clean = `col_${i}_${clean || 'field'}`
+    }
+    let uniqueName = clean
+    let counter = 1
+    while (seenNames.has(uniqueName)) {
+      uniqueName = `${clean}_${counter++}`
+    }
+    seenNames.add(uniqueName)
+    return uniqueName
+  })
+}
+
 export async function syncAllSheets(): Promise<{ success: boolean; syncedCount: number; error?: string }> {
   console.log('[sync] Starting Google Sheets synchronization...')
   try {
@@ -127,12 +151,38 @@ export async function syncAllSheets(): Promise<{ success: boolean; syncedCount: 
       const key = `${target.spreadsheetId}::${target.sheetName}`
       console.log(`[sync] Syncing sheet: ${target.sheetName} (${target.spreadsheetId.substring(0, 8)}...)`)
       
+      // Spacing delay to stay under Sheets API rate limits
+      await new Promise((resolve) => setTimeout(resolve, 200))
+
       try {
-        const rawData = await fetchSheet(target.spreadsheetId, `${target.sheetName}!A:ZZZ`)
+        let rawData;
+        let retries = 3;
+        while (retries > 0) {
+          try {
+            rawData = await fetchSheet(target.spreadsheetId, `${target.sheetName}!A:ZZZ`)
+            break;
+          } catch (fetchErr: any) {
+            const isQuotaError = 
+              fetchErr?.message?.includes('Quota exceeded') || 
+              fetchErr?.status === 429 ||
+              String(fetchErr).includes('Read requests per minute');
+              
+            if (isQuotaError && retries > 1) {
+              console.warn(`[sync] Sheets API Quota exceeded for "${target.sheetName}". Waiting 5s before retry... (${retries - 1} retries left)`)
+              await new Promise((resolve) => setTimeout(resolve, 5000))
+              retries--
+            } else {
+              throw fetchErr
+            }
+          }
+        }
+
+        if (!rawData) throw new Error(`Empty response for sheet ${target.sheetName}`)
         
         const headers = rawData.length > 0 ? rawData[0] : []
         const rows = rawData.length > 1 ? rawData.slice(1) : []
 
+        // Backup in sheets_cache
         await query(`
           INSERT INTO sheets_cache (key, headers, rows, updated_at)
           VALUES ($1, $2, $3, NOW())
@@ -141,6 +191,61 @@ export async function syncAllSheets(): Promise<{ success: boolean; syncedCount: 
               rows = EXCLUDED.rows,
               updated_at = NOW();
         `, [key, JSON.stringify(headers), JSON.stringify(rows)])
+
+        // Create and populate structured SQL table
+        if (headers.length > 0) {
+          const tableName = getTableName(target.spreadsheetId, target.sheetName)
+          const colNames = getSafeColNames(headers)
+
+          // 1. Drop old table if exists
+          await query(`DROP TABLE IF EXISTS "${tableName}"`)
+
+          // 2. Create structured table (all columns are TEXT to handle mixed format safely)
+          const colDefs = colNames.map(col => `"${col}" TEXT`).join(',\n')
+          await query(`
+            CREATE TABLE "${tableName}" (
+              id SERIAL PRIMARY KEY,
+              ${colDefs}
+            )
+          `)
+
+          // 3. Batch insert rows in chunks of 100
+          if (rows.length > 0) {
+            const batchSize = 100
+            for (let i = 0; i < rows.length; i += batchSize) {
+              const batch = rows.slice(i, i + batchSize)
+              const valuesPlaceholder: string[] = []
+              const flatValues: any[] = []
+              
+              batch.forEach((row) => {
+                const rowPlaceholders: string[] = []
+                colNames.forEach((_, colIndex) => {
+                  const val = row[colIndex] !== undefined ? String(row[colIndex]) : null
+                  flatValues.push(val)
+                  rowPlaceholders.push(`$${flatValues.length}`)
+                })
+                valuesPlaceholder.push(`(${rowPlaceholders.join(', ')})`)
+              })
+
+              const insertQuery = `
+                INSERT INTO "${tableName}" (${colNames.map(c => `"${c}"`).join(', ')})
+                VALUES ${valuesPlaceholder.join(', ')}
+              `
+              await query(insertQuery, flatValues)
+            }
+          }
+
+          // 4. Record metadata
+          await query(`
+            INSERT INTO sheet_metadata (key, table_name, headers, col_names, updated_at)
+            VALUES ($1, $2, $3, $4, NOW())
+            ON CONFLICT (key) DO UPDATE
+            SET table_name = EXCLUDED.table_name,
+                headers = EXCLUDED.headers,
+                col_names = EXCLUDED.col_names,
+                updated_at = NOW();
+          `, [key, tableName, JSON.stringify(headers), JSON.stringify(colNames)])
+        }
 
         syncedCount++
       } catch (sheetErr) {

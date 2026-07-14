@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { KPICard } from '@/components/kpi-card'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Wallet, ShoppingCart, AlertCircle, CheckCircle2, X, Lightbulb, TrendingUp, Activity, Clock, Settings2, Receipt, Users } from 'lucide-react'
+import { Wallet, ShoppingCart, AlertCircle, CheckCircle2, X, Lightbulb, TrendingUp, Activity, Clock, Settings2, Receipt, Users, Utensils } from 'lucide-react'
 import { SalesPageShell } from '@/components/theme-toggle'
 import Link from 'next/link'
 import { MultiSelect } from '@/components/multi-select'
@@ -47,6 +47,7 @@ interface CostControlRow {
   reimburseItems: Array<{ date: string; description: string; type: 'Material' | 'Service'; requestor: string; amount: number }>
   overtimeItems: Array<{ date: string; hours: number; workerName: string; reason: string }>
   reportItems: Array<{ date: string; hours: number; workerName: string; remarks: string }>
+  mealItems: Array<{ date: string; amount: number; approved: number; userId: string; userName: string; notes: string; type: string }>
 }
 
 interface Option { value: string; label: string }
@@ -68,7 +69,7 @@ export default function CostControlPage() {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'safe' | 'overbudget'>('all')
   const [selectedProject, setSelectedProject] = useState<CostControlRow | null>(null)
-  const [detailTab, setDetailTab] = useState<'purchasing' | 'reimburse' | 'overtime' | 'report'>('purchasing')
+  const [detailTab, setDetailTab] = useState<'purchasing' | 'reimburse' | 'meal' | 'overtime' | 'report'>('purchasing')
 
   // Workforce Pricing Calculator States
   const [overtimeRate, setOvertimeRate] = useState<number>(0)
@@ -691,10 +692,11 @@ export default function CostControlPage() {
                 <div className="lg:col-span-7 space-y-4">
                   {/* Tabs Header */}
                   <div className="flex border-b border-border gap-2 text-xs overflow-x-auto pb-1">
-                    {(['purchasing', 'reimburse', 'overtime', 'report'] as const).map((tab) => {
+                    {(['purchasing', 'reimburse', 'meal', 'overtime', 'report'] as const).map((tab) => {
                       const label = 
                         tab === 'purchasing' ? `Purchases (${selectedCalculatedProject.purchasingItems.length})` :
                         tab === 'reimburse' ? `Reimbursements (${selectedCalculatedProject.reimburseItems.length})` :
+                        tab === 'meal' ? `Meal Benefits (${selectedCalculatedProject.mealItems.length})` :
                         tab === 'overtime' ? `Overtimes (${selectedCalculatedProject.overtimeItems.length})` :
                         `Daily Reports (${selectedCalculatedProject.reportItems.length})`
                       const active = detailTab === tab
@@ -781,6 +783,49 @@ export default function CostControlPage() {
                         </div>
                       ) : (
                         <div className="text-center py-8 text-muted-foreground border border-dashed rounded-xl bg-muted/10 text-xs">No reimbursement transactions found</div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Tab Contents: Meal Benefits */}
+                  {detailTab === 'meal' && (
+                    <div className="space-y-2">
+                      <h3 className="font-bold text-xs flex items-center gap-1.5 text-foreground">
+                        <Utensils className="h-4 w-4 text-orange-500" />
+                        Detail Meal Benefits
+                      </h3>
+                      {selectedCalculatedProject.mealItems && selectedCalculatedProject.mealItems.length > 0 ? (
+                        <div className="max-h-[400px] overflow-y-auto border rounded-xl shadow-inner bg-card">
+                          <Table className="text-[11px]">
+                            <TableHeader className="bg-muted/40 sticky top-0 z-10">
+                              <TableRow>
+                                <TableHead className="py-2.5">Date</TableHead>
+                                <TableHead className="py-2.5">User</TableHead>
+                                <TableHead className="py-2.5">Notes / Type</TableHead>
+                                <TableHead className="py-2.5 text-right">Request Amount</TableHead>
+                                <TableHead className="py-2.5 text-right">Real Price (Approved)</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {selectedCalculatedProject.mealItems.map((item, idx) => (
+                                <TableRow key={idx} className="hover:bg-muted/30">
+                                  <TableCell className="py-2 whitespace-nowrap text-muted-foreground">{item.date}</TableCell>
+                                  <TableCell className="py-2 font-medium text-foreground">
+                                    {item.userName || item.userId || '-'}
+                                  </TableCell>
+                                  <TableCell className="py-2 max-w-[220px] truncate text-muted-foreground" title={item.notes}>
+                                    <div className="font-semibold text-[10px]">{item.type || 'Meal'}</div>
+                                    <div className="text-[9px] truncate">{item.notes || '-'}</div>
+                                  </TableCell>
+                                  <TableCell className="py-2 text-right font-mono text-muted-foreground">{fmtRp(item.amount)}</TableCell>
+                                  <TableCell className="py-2 text-right font-mono font-semibold text-foreground">{fmtRp(item.approved)}</TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      ) : (
+                        <div className="text-center py-8 text-muted-foreground border border-dashed rounded-xl bg-muted/10 text-xs">No meal benefit records found</div>
                       )}
                     </div>
                   )}

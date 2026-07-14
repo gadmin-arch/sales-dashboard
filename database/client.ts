@@ -55,6 +55,29 @@ export async function fetchAllRows(
         const { initDatabase } = require('./init')
         await initDatabase()
         
+        // A. Try sheet_metadata and structured table
+        const { rows: metaRows } = await query(
+          'SELECT table_name, headers, col_names FROM sheet_metadata WHERE key = $1 LIMIT 1',
+          [key]
+        )
+
+        if (metaRows.length > 0) {
+          const tableName = metaRows[0].table_name
+          const headers = (typeof metaRows[0].headers === 'string' ? JSON.parse(metaRows[0].headers) : metaRows[0].headers) as string[]
+          const colNames = (typeof metaRows[0].col_names === 'string' ? JSON.parse(metaRows[0].col_names) : metaRows[0].col_names) as string[]
+
+          // Query the structured table
+          const { rows: dataRows } = await query(`SELECT * FROM "${tableName}" ORDER BY id ASC`)
+          const rows = dataRows.map((r: any) => 
+            colNames.map(col => r[col] !== null && r[col] !== undefined ? String(r[col]) : '')
+          )
+
+          const parsed = { headers, rows }
+          lastGood.set(key, parsed)
+          return parsed
+        }
+        
+        // B. Fallback to sheets_cache if not found in structured tables
         const { rows: dbRows } = await query(
           'SELECT headers, rows FROM sheets_cache WHERE key = $1 LIMIT 1',
           [key]
