@@ -182,52 +182,55 @@ async function compute(searchParams: URLSearchParams) {
       const latestReportDate = sortedDates[sortedDates.length - 1] ? new Date(sortedDates[sortedDates.length - 1]) : null
 
       if (ord) {
-        plannedStartStr = benchmarkStart(ord)
-        plannedEndStr = benchmarkEnd(ord)
-        
-        const aStart = actualStart(ord, nsToIp)
-        const aEnd = actualEnd(ord, ipToD)
-        const bastSubmit = bastSubmitMap.get(ord.prjId) || null
-
-        if (overdueMethod === 'worker') {
-          actualStartStr = formatDateOnly(firstReportDate)
-          actualEndStr = formatDateOnly(latestReportDate)
-
-          const targetEndDate = parseDate(plannedEndStr)
-          if (targetEndDate && latestReportDate) {
-            if (startOfDay(latestReportDate).getTime() > startOfDay(targetEndDate).getTime()) {
-              isOverdue = true
-              const diffTime = Math.abs(startOfDay(latestReportDate).getTime() - startOfDay(targetEndDate).getTime())
-              overdueDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-              overdueStatus = 'Overdue (Log)'
-            } else {
-              overdueStatus = 'On Track (Log)'
-            }
-          } else {
-            overdueStatus = 'Active'
-          }
+        const statusCode = (ord.prjPeStatus || '').trim().toUpperCase()
+        if (statusCode === 'CC') {
+          overdueStatus = 'Cancelled'
         } else {
-          const isDone = (ord.prjPeStatus || '').trim().toUpperCase() === 'DONE' || 
-                         (ord.prjPeStatus || '').trim().toUpperCase() === 'COMPLETED' || 
-                         !!aEnd || !!bastSubmit
+          plannedStartStr = benchmarkStart(ord)
+          plannedEndStr = benchmarkEnd(ord)
+          
+          const aStart = actualStart(ord, nsToIp)
+          const aEnd = actualEnd(ord, ipToD)
+          const bastSubmit = bastSubmitMap.get(ord.prjId) || null
 
-          actualStartStr = aStart ? formatDateOnly(aStart) : formatDateOnly(firstReportDate)
-          const compDate = bastSubmit || aEnd
-          actualEndStr = compDate ? formatDateOnly(compDate) : formatDateOnly(latestReportDate)
+          if (overdueMethod === 'worker') {
+            actualStartStr = formatDateOnly(firstReportDate)
+            actualEndStr = formatDateOnly(latestReportDate)
 
-          const targetEndDate = parseDate(plannedEndStr)
-          if (targetEndDate) {
-            const benchmarkDate = isDone ? (compDate || latestReportDate || new Date()) : new Date()
-            if (startOfDay(benchmarkDate).getTime() > startOfDay(targetEndDate).getTime()) {
-              isOverdue = true
-              const diffTime = Math.abs(startOfDay(benchmarkDate).getTime() - startOfDay(targetEndDate).getTime())
-              overdueDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-              overdueStatus = isDone ? 'Overdue (Done)' : 'Overdue (Active)'
+            const targetEndDate = parseDate(plannedEndStr)
+            if (targetEndDate && latestReportDate) {
+              if (startOfDay(latestReportDate).getTime() > startOfDay(targetEndDate).getTime()) {
+                isOverdue = true
+                const diffTime = Math.abs(startOfDay(latestReportDate).getTime() - startOfDay(targetEndDate).getTime())
+                overdueDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+                overdueStatus = 'Overdue (Log)'
+              } else {
+                overdueStatus = 'On Track (Log)'
+              }
             } else {
-              overdueStatus = isDone ? 'On Time' : 'On Track'
+              overdueStatus = 'Active'
             }
           } else {
-            overdueStatus = isDone ? 'Completed' : 'Active'
+            const isDone = statusCode === 'D' || statusCode === 'C' || !!aEnd || !!bastSubmit
+
+            actualStartStr = aStart ? formatDateOnly(aStart) : formatDateOnly(firstReportDate)
+            const compDate = bastSubmit || aEnd
+            actualEndStr = compDate ? formatDateOnly(compDate) : formatDateOnly(latestReportDate)
+
+            const targetEndDate = parseDate(plannedEndStr)
+            if (targetEndDate) {
+              const benchmarkDate = isDone ? (compDate || latestReportDate || new Date()) : new Date()
+              if (startOfDay(benchmarkDate).getTime() > startOfDay(targetEndDate).getTime()) {
+                isOverdue = true
+                const diffTime = Math.abs(startOfDay(benchmarkDate).getTime() - startOfDay(targetEndDate).getTime())
+                overdueDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+                overdueStatus = isDone ? 'Overdue (Done)' : 'Overdue (Active)'
+              } else {
+                overdueStatus = isDone ? 'On Time' : 'On Track'
+              }
+            } else {
+              overdueStatus = isDone ? 'Completed' : 'Active'
+            }
           }
         }
       } else {
@@ -250,7 +253,8 @@ async function compute(searchParams: URLSearchParams) {
         actualEnd: actualEndStr,
         overdueStatus,
         isOverdue,
-        overdueDays
+        overdueDays,
+        orderNominal: ord ? ord.prjPoTotal : 0
       }
     }).sort((a, b) => b.hours - a.hours)
 
@@ -373,7 +377,10 @@ async function compute(searchParams: URLSearchParams) {
           actualEndStr = formatDateOnly(workerActualEnd)
           
           const targetEndDate = parseDate(pEndStr)
-          if (targetEndDate && workerActualEnd) {
+          const statusCode = ord ? (ord.prjPeStatus || '').trim().toUpperCase() : ''
+          if (statusCode === 'CC') {
+            overdueStatus = 'Cancelled'
+          } else if (targetEndDate && workerActualEnd) {
             const targetTime = startOfDay(targetEndDate).getTime()
             const lastReportTime = startOfDay(workerActualEnd).getTime()
             if (lastReportTime > targetTime) {

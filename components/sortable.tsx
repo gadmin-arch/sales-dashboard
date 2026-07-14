@@ -70,6 +70,8 @@ interface SortHeadProps {
 }
 
 export function SortHead({ label, column, sortKey, sortDir, onSort, className }: SortHeadProps) {
+  const isRight = className?.includes('text-right')
+  const isCenter = className?.includes('text-center')
   return (
     <TableHead
       onClick={() => onSort(column)}
@@ -78,7 +80,11 @@ export function SortHead({ label, column, sortKey, sortDir, onSort, className }:
         className
       )}
     >
-      <span className="inline-flex items-center gap-1">
+      <span className={cn(
+        "inline-flex items-center gap-1",
+        isRight && "justify-end w-full",
+        isCenter && "justify-center w-full"
+      )}>
         {label}
         <SortIcon column={column} sortKey={sortKey} sortDir={sortDir} />
       </span>

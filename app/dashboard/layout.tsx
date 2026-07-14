@@ -4,27 +4,18 @@ import { useAuth } from '@/lib/auth-context'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState, type ReactNode } from 'react'
 import Link from 'next/link'
-import { BarChart3, FileText, CreditCard, FolderOpen, LogOut, Menu, X, ListTodo, Users, Lock, ClipboardList, ShoppingCart, Store, Loader2, CalendarClock, ClipboardCheck, Banknote, Gauge } from 'lucide-react'
+import { BarChart3, FileText, CreditCard, FolderOpen, LogOut, Menu, X, ListTodo, Users, Lock, ClipboardList, ShoppingCart, Store, Loader2, CalendarClock, ClipboardCheck, Banknote, Gauge, ChevronDown, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { NAV, navItemForPath, firstAllowedHref, type Roles } from '@/lib/nav'
+import { NAV, NAV_GROUPS, navItemForPath, firstAllowedHref, type Roles } from '@/lib/nav'
 
-// Icons live here (JSX) keyed by the pure NAV entries in lib/nav.
-const ICONS: Record<string, ReactNode> = {
-  '/dashboard/sales': <BarChart3 className="h-4 w-4" />,
-  '/dashboard/sales/activities': <ListTodo className="h-4 w-4" />,
-  '/dashboard/leads-opps': <Users className="h-4 w-4" />,
-  '/dashboard/invoices': <FileText className="h-4 w-4" />,
-  '/dashboard/customers': <Users className="h-4 w-4" />,
-  '/dashboard/payments': <CreditCard className="h-4 w-4" />,
-  '/dashboard/finance-ap': <CreditCard className="h-4 w-4" />,
-  '/dashboard/projects': <FolderOpen className="h-4 w-4" />,
-  '/dashboard/delivery': <CalendarClock className="h-4 w-4" />,
-  '/dashboard/reports': <ClipboardCheck className="h-4 w-4" />,
-  '/dashboard/purchasing/requests': <ClipboardList className="h-4 w-4" />,
-  '/dashboard/purchasing/orders': <ShoppingCart className="h-4 w-4" />,
-  '/dashboard/purchasing/vendors': <Store className="h-4 w-4" />,
-  '/dashboard/payroll': <Banknote className="h-4 w-4" />,
-  '/dashboard/cost-control': <Gauge className="h-4 w-4" />,
+// Group icons mapped by department/role key
+const GROUP_ICONS: Record<string, ReactNode> = {
+  'sales': <BarChart3 className="h-4 w-4" />,
+  'finance': <CreditCard className="h-4 w-4" />,
+  'project': <FolderOpen className="h-4 w-4" />,
+  'purchasing': <ShoppingCart className="h-4 w-4" />,
+  'payroll': <Banknote className="h-4 w-4" />,
+  'cost control': <Gauge className="h-4 w-4" />,
 }
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -40,6 +31,38 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const roles = user?.roles as Roles | undefined
   const visibleNavItems = roles ? NAV.filter((item) => roles[item.role]) : []
+
+  // Track collapsible group open states
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
+    const initial: Record<string, boolean> = {}
+    if (roles) {
+      NAV_GROUPS.forEach(g => {
+        initial[g.role] = g.items.some(item => pathname === item.href || pathname.startsWith(item.href + '/'))
+      })
+    }
+    return initial
+  })
+
+  // Ensure active group automatically expands when pathname changes
+  useEffect(() => {
+    const activeGroup = NAV_GROUPS.find(g => g.items.some(item => pathname === item.href || pathname.startsWith(item.href + '/')))
+    if (activeGroup) {
+      setOpenGroups(prev => {
+        if (prev[activeGroup.role]) return prev
+        return {
+          ...prev,
+          [activeGroup.role]: true
+        }
+      })
+    }
+  }, [pathname])
+
+  const toggleGroup = (role: string) => {
+    setOpenGroups(prev => ({
+      ...prev,
+      [role]: !prev[role]
+    }))
+  }
 
   // Route guard: block direct access to a page whose role the user lacks.
   const currentItem = navItemForPath(pathname)
@@ -117,21 +140,68 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const navList = (onNavigate?: () => void) => (
     <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
-      {visibleNavItems.map((item) => {
-        const isActive = pathname === item.href
+      {NAV_GROUPS.map((group) => {
+        if (!roles || !roles[group.role]) return null
+
+        if (group.items.length === 1) {
+          const item = group.items[0]
+          const isActive = pathname === item.href
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              onClick={onNavigate}
+              className={cn(
+                'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                isActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+              )}
+            >
+              {GROUP_ICONS[group.role]}
+              {item.label}
+            </Link>
+          )
+        }
+
+        const isOpen = !!openGroups[group.role]
         return (
-          <Link
-            key={item.href}
-            href={item.href}
-            onClick={onNavigate}
-            className={cn(
-              'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-              isActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+          <div key={group.role} className="space-y-1">
+            <button
+              onClick={() => toggleGroup(group.role)}
+              className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-muted text-muted-foreground hover:text-foreground"
+            >
+              <div className="flex items-center gap-3">
+                {GROUP_ICONS[group.role]}
+                <span>{group.label}</span>
+              </div>
+              {isOpen ? (
+                <ChevronDown className="h-4 w-4 shrink-0 opacity-70" />
+              ) : (
+                <ChevronRight className="h-4 w-4 shrink-0 opacity-70" />
+              )}
+            </button>
+            {isOpen && (
+              <div className="ml-[38px] border-l border-border pl-3 space-y-1 py-0.5 font-sans">
+                {group.items.map((item) => {
+                  const isActive = pathname === item.href
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={onNavigate}
+                      className={cn(
+                        'flex items-center rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors',
+                        isActive 
+                          ? 'text-primary font-semibold bg-primary/5' 
+                          : 'text-muted-foreground hover:text-foreground hover:bg-muted/30'
+                      )}
+                    >
+                      {item.label}
+                    </Link>
+                  )
+                })}
+              </div>
             )}
-          >
-            {ICONS[item.href]}
-            {item.label}
-          </Link>
+          </div>
         )
       })}
     </nav>

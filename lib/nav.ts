@@ -9,23 +9,68 @@ export interface NavMeta {
 
 export type RoleKey = 'sales' | 'finance' | 'project' | 'purchasing' | 'payroll' | 'cost control'
 
-export const NAV: NavMeta[] = [
-  { href: '/dashboard/sales', label: 'Sales Overview', role: 'sales' },
-  { href: '/dashboard/sales/activities', label: 'Sales Activities', role: 'sales' },
-  { href: '/dashboard/leads-opps', label: 'Leads & Opportunities', role: 'sales' },
-  { href: '/dashboard/customers', label: 'Customer Scorecard', role: 'sales' },
-  { href: '/dashboard/invoices', label: 'Invoices & Receivables', role: 'finance' },
-  { href: '/dashboard/payments', label: 'Payments Collection', role: 'finance' },
-  { href: '/dashboard/finance-ap', label: 'Finance AP & Reimburse', role: 'finance' },
-  { href: '/dashboard/projects', label: 'Projects', role: 'project' },
-  { href: '/dashboard/delivery', label: 'Project Delivery', role: 'project' },
-  { href: '/dashboard/reports', label: 'Worker Reports', role: 'project' },
-  { href: '/dashboard/purchasing/requests', label: 'Purchase Requests', role: 'purchasing' },
-  { href: '/dashboard/purchasing/orders', label: 'Purchase Orders', role: 'purchasing' },
-  { href: '/dashboard/purchasing/vendors', label: 'Vendor Scorecard', role: 'purchasing' },
-  { href: '/dashboard/payroll', label: 'Payroll & Salaries', role: 'payroll' },
-  { href: '/dashboard/cost-control', label: 'Cost Control', role: 'cost control' },
+export interface NavGroup {
+  label: string
+  role: RoleKey
+  items: NavMeta[]
+}
+
+export const NAV_GROUPS: NavGroup[] = [
+  {
+    label: 'Sales',
+    role: 'sales',
+    items: [
+      { href: '/dashboard/sales', label: 'Sales Overview', role: 'sales' },
+      { href: '/dashboard/sales/activities', label: 'Sales Activities', role: 'sales' },
+      { href: '/dashboard/leads-opps', label: 'Leads & Opportunities', role: 'sales' },
+      { href: '/dashboard/customers', label: 'Customer Scorecard', role: 'sales' },
+    ]
+  },
+  {
+    label: 'Finance',
+    role: 'finance',
+    items: [
+      { href: '/dashboard/invoices', label: 'Invoices & Receivables', role: 'finance' },
+      { href: '/dashboard/payments', label: 'Payments Collection', role: 'finance' },
+      { href: '/dashboard/finance-ap', label: 'Finance AP & AP Reimburse', role: 'finance' },
+    ]
+  },
+  {
+    label: 'Project Management',
+    role: 'project',
+    items: [
+      { href: '/dashboard/projects', label: 'Projects', role: 'project' },
+      { href: '/dashboard/delivery', label: 'Project Delivery', role: 'project' },
+      { href: '/dashboard/reports', label: 'Worker Reports', role: 'project' },
+    ]
+  },
+  {
+    label: 'Purchasing',
+    role: 'purchasing',
+    items: [
+      { href: '/dashboard/purchasing/requests', label: 'Purchase Requests', role: 'purchasing' },
+      { href: '/dashboard/purchasing/orders', label: 'Purchase Orders', role: 'purchasing' },
+      { href: '/dashboard/purchasing/vendors', label: 'Vendor Scorecard', role: 'purchasing' },
+    ]
+  },
+  {
+    label: 'Payroll',
+    role: 'payroll',
+    items: [
+      { href: '/dashboard/payroll', label: 'Payroll & Salaries', role: 'payroll' },
+    ]
+  },
+  {
+    label: 'Cost Control',
+    role: 'cost control',
+    items: [
+      { href: '/dashboard/cost-control', label: 'Cost Control Overview', role: 'cost control' },
+      { href: '/dashboard/cost-control/workers', label: 'Worker KPIs', role: 'cost control' },
+    ]
+  }
 ]
+
+export const NAV: NavMeta[] = NAV_GROUPS.flatMap((g) => g.items)
 
 export type Roles = Record<RoleKey, boolean>
 

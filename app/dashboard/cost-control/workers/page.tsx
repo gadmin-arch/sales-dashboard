@@ -41,6 +41,7 @@ interface ProjectRow {
   plannedStart: string; plannedEnd: string
   actualStart: string; actualEnd: string
   overdueStatus: string; isOverdue: boolean; overdueDays: number
+  orderNominal?: number
 }
 interface ReportsData {
   kpis: { 
@@ -160,7 +161,7 @@ export default function CostControlWorkerKPIsPage() {
   const k = data.kpis
 
   // Summary order value metric
-  const overallOrderNominalSum = data.workers.reduce((acc, w) => acc + w.totalOrderNominal, 0)
+  const overallOrderNominalSum = data.projectHours.reduce((acc, p) => acc + (p.orderNominal || 0), 0)
 
   return (
     <SalesPageShell>
