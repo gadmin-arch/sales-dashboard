@@ -10,6 +10,7 @@ export interface AccessUser {
   purchasing: boolean
   payroll: boolean
   'cost control': boolean
+  admin: boolean
 }
 
 // ── sales users sheet (employee directory) ──

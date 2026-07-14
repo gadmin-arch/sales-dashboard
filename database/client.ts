@@ -9,7 +9,7 @@ export function getSheetsClient(): sheets_v4.Sheets {
   const credentials = GOOGLE_CONFIG.getServiceAccountCredentials()
   const auth = new google.auth.GoogleAuth({
     credentials,
-    scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
+    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
   })
 
   sheetsClient = google.sheets({ version: 'v4', auth })

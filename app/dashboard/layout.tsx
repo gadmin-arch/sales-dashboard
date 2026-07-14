@@ -4,7 +4,7 @@ import { useAuth } from '@/lib/auth-context'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState, type ReactNode } from 'react'
 import Link from 'next/link'
-import { BarChart3, FileText, CreditCard, FolderOpen, LogOut, Menu, X, ListTodo, Users, Lock, ClipboardList, ShoppingCart, Store, Loader2, CalendarClock, ClipboardCheck, Banknote, Gauge, ChevronDown, ChevronRight } from 'lucide-react'
+import { BarChart3, FileText, CreditCard, FolderOpen, LogOut, Menu, X, ListTodo, Users, Lock, ClipboardList, ShoppingCart, Store, Loader2, CalendarClock, ClipboardCheck, Banknote, Gauge, ChevronDown, ChevronRight, Shield } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { NAV, NAV_GROUPS, navItemForPath, firstAllowedHref, type Roles } from '@/lib/nav'
 
@@ -16,6 +16,7 @@ const GROUP_ICONS: Record<string, ReactNode> = {
   'purchasing': <ShoppingCart className="h-4 w-4" />,
   'payroll': <Banknote className="h-4 w-4" />,
   'cost control': <Gauge className="h-4 w-4" />,
+  'admin': <Shield className="h-4 w-4 text-violet-500" />,
 }
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {

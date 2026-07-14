@@ -7,7 +7,7 @@ export interface NavMeta {
   role: RoleKey
 }
 
-export type RoleKey = 'sales' | 'finance' | 'project' | 'purchasing' | 'payroll' | 'cost control'
+export type RoleKey = 'sales' | 'finance' | 'project' | 'purchasing' | 'payroll' | 'cost control' | 'admin'
 
 export interface NavGroup {
   label: string
@@ -66,6 +66,13 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: '/dashboard/cost-control', label: 'Cost Control Overview', role: 'cost control' },
       { href: '/dashboard/cost-control/workers', label: 'Worker KPIs', role: 'cost control' },
+    ]
+  },
+  {
+    label: 'Admin',
+    role: 'admin',
+    items: [
+      { href: '/dashboard/admin/users', label: 'User Management', role: 'admin' },
     ]
   }
 ]

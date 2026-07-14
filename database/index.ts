@@ -1,7 +1,7 @@
 export { GOOGLE_CONFIG } from './config'
 export { getSheetsClient, fetchSheet, fetchAllRows, getSheetHeaders } from './client'
 
-export { getAllAccessUsers, findAccessUserByEmail } from './repos/users'
+export { getAllAccessUsers, findAccessUserByEmail, saveAccessUser } from './repos/users'
 export { getAllSalesUsers, getSalesUserById, getSalesUserName } from './repos/sales-users'
 export { getAllOrders, getProjectOrders, getOrderTypeLabel, getFlagLabel, getProjectLogs, getBasts, getFinanceLogs, getAllOrderTypes, getAllPeStatuses, getPeStatusLabelSync, getAllProjectLogs, getAllBasts, loadRefMaps as loadOrdersRefMaps } from './repos/orders'
 export { getAllReports } from './repos/reports'

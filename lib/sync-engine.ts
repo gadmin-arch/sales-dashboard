@@ -9,9 +9,6 @@ interface SyncTarget {
 }
 
 const syncTargets: SyncTarget[] = [
-  // Users
-  { spreadsheetId: GOOGLE_CONFIG.users.spreadsheetId, sheetName: 'users' },
-
   // Sales Users
   { spreadsheetId: GOOGLE_CONFIG.salesUsers.spreadsheetId, sheetName: GOOGLE_CONFIG.salesUsers.sheets.users },
   { spreadsheetId: GOOGLE_CONFIG.salesUsers.spreadsheetId, sheetName: GOOGLE_CONFIG.salesUsers.sheets.roles },
