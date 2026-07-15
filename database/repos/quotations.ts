@@ -31,12 +31,17 @@ export async function loadRefMaps() {
   }
 }
 
+// Columns mapQuotation + the deleted filter read (30-col sheet) — drops
+// q_file(17) and the created/updated audit columns 26-28.
+const QUOTATION_COLS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 18, 19, 20, 21, 22, 23, 24, 25, 29]
+
 export async function getAllQuotations(): Promise<Quotation[]> {
   const { rows } = await fetchAllRows(
     GOOGLE_CONFIG.quotations.spreadsheetId,
-    GOOGLE_CONFIG.quotations.sheets.quotations
+    GOOGLE_CONFIG.quotations.sheets.quotations,
+    QUOTATION_COLS
   )
-  // Filter out header row and deleted rows (deleted_at at index 30)
+  // Filter out header row and deleted rows (deleted_at at index 29)
   return rows.filter((r) => r[0] && r[0] !== 'q_id' && !r[29]).map(mapQuotation)
 }
 

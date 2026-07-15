@@ -26,9 +26,13 @@ interface InvoicingData {
 async function load(): Promise<InvoicingData> {
   const ss = GOOGLE_CONFIG.invoicing.spreadsheetId
   const s = GOOGLE_CONFIG.invoicing.sheets
+  // Columns the mappers + soft-delete filters actually read — invoices is a
+  // 38-col sheet where inv_additional_file alone was ~29% of the bytes.
+  const INV_COLS = [0, 1, 3, 4, 5, 10, 11, 13, 16, 17, 18, 19, 20, 25, 36]
+  const PAY_COLS = [0, 1, 3, 4, 5, 10, 11, 16]
   const [invRes, payRes, invDetRes, payDetRes] = await Promise.all([
-    fetchAllRows(ss, s.invoices),
-    fetchAllRows(ss, s.payments),
+    fetchAllRows(ss, s.invoices, INV_COLS),
+    fetchAllRows(ss, s.payments, PAY_COLS),
     fetchAllRows(ss, s.invoiceDetails),
     fetchAllRows(ss, s.paymentDetails),
   ])

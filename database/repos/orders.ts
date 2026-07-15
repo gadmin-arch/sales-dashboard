@@ -82,10 +82,16 @@ export async function getAllFinanceStatuses(): Promise<FinanceStatus[]> {
   return rows.filter((r) => r[0]).map(mapFinanceStatus)
 }
 
+// Columns mapOrder + the soft-delete filter actually read (48-col sheet).
+// Drops prj_po_file(12)/prj_file(27)/audit columns — keep in sync with the
+// mapper comments in mappers/orders.ts.
+const ORDER_COLS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 29, 30, 31, 33, 34, 35, 36, 37, 41, 42, 43, 46]
+
 export async function getAllOrders(): Promise<Order[]> {
   const { rows } = await fetchAllRows(
     GOOGLE_CONFIG.orders.spreadsheetId,
-    GOOGLE_CONFIG.orders.sheets.orders
+    GOOGLE_CONFIG.orders.sheets.orders,
+    ORDER_COLS
   )
   return rows.filter((r) => r[0] && r[0] !== 'prj_id' && !r[46]).map(mapOrder)
 }

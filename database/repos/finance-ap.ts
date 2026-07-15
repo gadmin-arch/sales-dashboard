@@ -2,6 +2,9 @@ import { fetchAllRows } from '../client'
 import { GOOGLE_CONFIG } from '../config'
 import { parseNum } from '../mappers/orders'
 
+// Interfaces below carry only the fields the dashboards actually read; unused
+// heavy sheet columns (files, images, admin audit fields) are excluded from the
+// Neon SELECT via the *_COLS lists so they never leave the database.
 export interface PaymentRequest {
   payreqId: string
   payreqPoId: string
@@ -13,8 +16,6 @@ export interface PaymentRequest {
   payreqAmount: number
   payreqPayAmount: number
   payreqDuedate: string
-  payreqFile: string
-  payreqInvFile: string
   payreqRemarks: string
   payreqStatus: string
   payreqCreatedAt: string
@@ -26,20 +27,10 @@ export interface PaymentRequest {
 }
 
 export interface FinancePayment {
-  pId: string
   pPayreqId: string
-  pPercentage: string
   pAmount: number
-  pEvidence: string
-  pRemarks: string
-  pBank: string
-  pSite: string
   pCreatedAt: string
-  pUpdatedAt: string
   pDeletedAt?: string
-  pCreatedBy: string
-  pUpdatedBy: string
-  pNotif: string
 }
 
 export interface ReimburseCashIn {
@@ -68,18 +59,11 @@ export interface ReimburseCashOut {
   reimburseDescription: string
   reimburseTypeIdFk: string
   reimburseAmount: number
-  reimburseImage: string
   reimburseRemarks: string
   reimburseStatus: string
   reimburseUserIdFk: string
   reimburseUserName: string
-  reimburseAdminUserIdFk: string
-  reimburseAdminUserName: string
-  reimburseCreatedAt: string
-  reimburseApprovedAt: string
   reimburseDeletedAt?: string
-  reimburseAdminStatus: string
-  reimburseApprover: string
   reimbursePayroll: string
 }
 
@@ -99,6 +83,15 @@ export async function getFinanceAPData(): Promise<FinanceAPData> {
   
   const s = GOOGLE_CONFIG.financeAP.sheets
 
+  // Column subsets actually read (mapper indices + soft-delete filter index).
+  // Dropped: payreq_file(10)/payreq_inv_file(11); payments keeps only
+  // payreq-fk(1)/amount(3)/created_at(8)/deleted_at(10) — evidence(4) alone was
+  // 31% of that table; reimbursecashout drops Reimburse_Image(7) (23% of the
+  // table) + admin/audit columns 12-15/17/18.
+  const PAYREQ_COLS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 12, 13, 14, 15, 16, 17, 18, 19]
+  const PAY_COLS = [0, 1, 3, 8, 10]
+  const RCO_COLS = [0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 16, 19]
+
   const [
     payReqRes,
     payStatusRes,
@@ -107,11 +100,11 @@ export async function getFinanceAPData(): Promise<FinanceAPData> {
     reimOutRes,
     reimStatusRes
   ] = await Promise.all([
-    fetchAllRows(ssPayReq, s.paymentRequests),
+    fetchAllRows(ssPayReq, s.paymentRequests, PAYREQ_COLS),
     fetchAllRows(ssPayReq, s.paymentStatuses),
-    fetchAllRows(ssPay, s.payments),
+    fetchAllRows(ssPay, s.payments, PAY_COLS),
     fetchAllRows(ssReim, s.reimburseCashIn),
-    fetchAllRows(ssReim, s.reimburseCashOut),
+    fetchAllRows(ssReim, s.reimburseCashOut, RCO_COLS),
     fetchAllRows(ssReim, s.reimburseStatus)
   ])
 
@@ -147,8 +140,6 @@ export async function getFinanceAPData(): Promise<FinanceAPData> {
       payreqAmount: parseNum(r[7]),
       payreqPayAmount: parseNum(r[8]),
       payreqDuedate: r[9] || '',
-      payreqFile: r[10] || '',
-      payreqInvFile: r[11] || '',
       payreqRemarks: r[12] || '',
       payreqStatus: r[13] || '',
       payreqCreatedAt: r[14] || '',
@@ -163,20 +154,10 @@ export async function getFinanceAPData(): Promise<FinanceAPData> {
   const payments = payRes.rows
     .filter((r) => r[0] && r[0] !== 'p_id' && !r[10]) // deleted_at = col 10
     .map((r): FinancePayment => ({
-      pId: r[0] || '',
       pPayreqId: r[1] || '',
-      pPercentage: r[2] || '',
       pAmount: parseNum(r[3]),
-      pEvidence: r[4] || '',
-      pRemarks: r[5] || '',
-      pBank: r[6] || '',
-      pSite: r[7] || '',
       pCreatedAt: r[8] || '',
-      pUpdatedAt: r[9] || '',
       pDeletedAt: r[10],
-      pCreatedBy: r[11] || '',
-      pUpdatedBy: r[12] || '',
-      pNotif: r[13] || '',
     }))
 
   // Map ReimburseCashIn
@@ -211,18 +192,11 @@ export async function getFinanceAPData(): Promise<FinanceAPData> {
       reimburseDescription: r[4] || '',
       reimburseTypeIdFk: r[5] || '',
       reimburseAmount: parseNum(r[6]),
-      reimburseImage: r[7] || '',
       reimburseRemarks: r[8] || '',
       reimburseStatus: r[9] || '',
       reimburseUserIdFk: r[10] || '',
       reimburseUserName: r[11] || '',
-      reimburseAdminUserIdFk: r[12] || '',
-      reimburseAdminUserName: r[13] || '',
-      reimburseCreatedAt: r[14] || '',
-      reimburseApprovedAt: r[15] || '',
       reimburseDeletedAt: r[16],
-      reimburseAdminStatus: r[17] || '',
-      reimburseApprover: r[18] || '',
       reimbursePayroll: r[19] || '',
     }))
 

@@ -18,7 +18,6 @@ export function mapPurchaseRequest(row: string[]): PurchaseRequest {
     prPurchasedPrice: parseNum(row[6]),
     prVariance: parseNum(row[7]),
     prDuedate: row[8] || '',
-    prRemarks: row[9] || '',
     prApprovalStatus: row[10] || '',
     prStatus: row[11] || '',
     prCompletedAt: row[12] || '',

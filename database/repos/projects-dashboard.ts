@@ -51,7 +51,8 @@ export async function getProjectDashboardData(f: CostControlFilter = {}): Promis
     getAllPoLines(),
     getFinanceAPData(),
     getAllReports(),
-    fetchAllRows(GOOGLE_CONFIG.reports.overtimeSpreadsheetId, GOOGLE_CONFIG.reports.sheets.overtimes),
+    // Same overtime column subset as cost-control (shared cache entry).
+    fetchAllRows(GOOGLE_CONFIG.reports.overtimeSpreadsheetId, GOOGLE_CONFIG.reports.sheets.overtimes, [0, 2, 6, 7, 8, 9, 13, 14]),
     fetchAllRows(GOOGLE_CONFIG.payroll.spreadsheetId, 'meal_benefit_details'),
     fetchAllRows(GOOGLE_CONFIG.payroll.spreadsheetId, 'meal_benefits'),
     getAllSalesUsers(),

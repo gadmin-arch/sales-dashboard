@@ -26,7 +26,6 @@ export function mapOrder(row: string[]): Order {
     prjOtId: row[9] || '',
     prjPoNumber: row[10] || '',
     prjPoDate: row[11] || '',
-    prjPoFile: row[12] || '',
     poCurrency: (row[13] || 'IDR').trim(),
     prjPoMaterial: parseNum(row[14]),
     prjPoService: parseNum(row[15]),

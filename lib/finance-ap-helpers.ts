@@ -1528,7 +1528,6 @@ export function computeReimburse(
       amount: r.reimburseAmount,
       statusLabel: statusLabel(r.reimburseStatus),
       employeeName: getEmpName(r.reimburseUserName, r.reimburseUserIdFk),
-      image: r.reimburseImage || null,
     }))
     .sort((a, b) => (parseDate(b.date)?.getTime() || 0) - (parseDate(a.date)?.getTime() || 0))
 

@@ -78,7 +78,9 @@ export async function getCostControlData(f: CostControlFilter = {}): Promise<Pro
     getAllPoLines(),
     getFinanceAPData(),
     getAllReports(),
-    fetchAllRows(GOOGLE_CONFIG.reports.overtimeSpreadsheetId, GOOGLE_CONFIG.reports.sheets.overtimes),
+    // Only the overtime columns the aggregation below reads — drops
+    // overtime_photo/location/position (~40% of a 1.4MB table).
+    fetchAllRows(GOOGLE_CONFIG.reports.overtimeSpreadsheetId, GOOGLE_CONFIG.reports.sheets.overtimes, [0, 2, 6, 7, 8, 9, 13, 14]),
     fetchAllRows(GOOGLE_CONFIG.payroll.spreadsheetId, 'meal_benefit_details'),
     fetchAllRows(GOOGLE_CONFIG.payroll.spreadsheetId, 'meal_benefits'),
     getAllSalesUsers(),

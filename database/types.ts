@@ -56,7 +56,6 @@ export interface Order {
   prjOtId: string
   prjPoNumber: string
   prjPoDate: string
-  prjPoFile: string
   poCurrency: string
   prjPoMaterial: number
   prjPoService: number
@@ -189,7 +188,6 @@ export interface Quotation {
   qBarecostFinal: number
   qFinalPrice: number
   qFlag: string
-  qFile: string
   qType: string
   qDate: string
   qStatus: string
@@ -376,7 +374,6 @@ export interface PurchaseRequest {
   prPurchasedPrice: number
   prVariance: number
   prDuedate: string
-  prRemarks: string
   prApprovalStatus: string
   prStatus: string
   prCompletedAt: string

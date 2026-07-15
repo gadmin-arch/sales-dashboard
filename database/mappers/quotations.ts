@@ -28,7 +28,6 @@ export function mapQuotation(row: string[]): Quotation {
     qBarecostFinal: parseNum(row[14]),
     qFinalPrice: parseNum(row[15]),
     qFlag: row[16] || '',
-    qFile: row[17] || '',
     qType: row[18] || '',
     qDate: row[19] || '',
     qStatus: row[20] || '',

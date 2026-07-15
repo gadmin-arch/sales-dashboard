@@ -36,7 +36,10 @@ export function getOverdueStatusLabel(id: string): string {
 }
 
 export async function getAllPurchaseRequests(): Promise<PurchaseRequest[]> {
-  const { rows } = await fetchAllRows(ssId, sheets.purchaseRequests)
+  // Columns mapPurchaseRequest + the deleted filter read — drops pr_remarks(9)
+  // (unused, 13% of the table) and the created_by/updated_by audit columns.
+  const PR_COLS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+  const { rows } = await fetchAllRows(ssId, sheets.purchaseRequests, PR_COLS)
   // drop header echo + soft-deleted rows (deleted_at at index 19)
   return rows.filter((r) => r[0] && r[0] !== 'pr_id' && !r[19]).map(mapPurchaseRequest)
 }
