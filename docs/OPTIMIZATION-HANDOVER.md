@@ -26,10 +26,12 @@
 | `0f860dc` | Row-slice tab poPayments & reimburse finance-ap (1.78MB → 20KB / 18KB); agregasi poPayments pindah ke server, filter dropdown per-tab jadi param server, history petty-cash per user via `balanceUser=`; komponen `ServerDataTable`; bump cache `finance-ap-tab-v2` |
 | `8a2bed0` | Column pruning `fetchAllRows(…, columns)`: POs −76% · POLists −50% · Items −28% byte per compute-miss; fix blind spot regex log `[db]` untuk SELECT berkolom |
 | `755b923` | Fix bug data payroll: sheet dapat kolom `occupation_id` di indeks 1 → semua indeks bergeser; filter deleted_at membuang semua payslip (KPI 0). Sekarang 1.679 payslip / Rp3.75B tampil |
+| `725d03a` | Column pruning round 2 — 8 tabel lagi, total −41% (~3.9MB/sapuan compute): reimbursecashout −48% (drop Reimburse_Image) · payments −67% (drop p_evidence) · invoices −49% · overtimes −57% · orders −24% · quotations −31% · payment_requests −27% · purchase_requests −21%. Field mati dihapus dari interface (dijaga tsc) |
+| `0808ba3` | Tab payroll 2.77MB → **337KB**: array detail slip (8 array bersarang + meta) di-strip dari list, drawer fetch `slipUser=<userId>` (~14KB) on-demand; merge tahunan pindah ke handler drawer. Bump cache `finance-ap-tab-v3` |
 
 Ukuran response YTD sesudah optimasi (semua ter-cache, sebelumnya finance-ap & cost-control TIDAK PERNAH ter-cache):
 
-- finance-ap: per tab — overview 1.6KB · poPayments 1.76MB→**20KB** · reimburse 1.74MB→**18KB** · meal 409KB · loans 42KB
+- finance-ap: per tab — overview 1.6KB · poPayments 1.76MB→**20KB** · reimburse 1.74MB→**18KB** · meal 409KB · loans 42KB · payroll 2.77MB→**337KB** (payroll baru terisi setelah fix 755b923 dan langsung menembus limit)
 - cost-control: 2.0MB → **398KB** (detail per proyek on-demand)
 - projects: → **304KB** (detail per proyek on-demand)
 - purchasing/orders: 1.3MB → **297KB** (25 baris pertama; sisanya via `view=rows`)
@@ -56,7 +58,8 @@ const getView = cachedRouteView('nama-route-vN', compute,
 ### Pola tambahan (commit `0f860dc` & `8a2bed0`)
 4. **Tab berat dengan filter dropdown yang mempengaruhi KPI** (finance-ap poPayments): agregasi client-side (useMemo atas full rows) dipindah ke fungsi proyeksi server (`projectPoPaymentsTab` di `lib/finance-ap-helpers.ts`); filter dropdown jadi view param (`fStatus/fTimeliness/fRequester/fTempo`, comma-joined oleh `buildQuery`). Tab component refetch view agregat saat filter berubah; `ServerDataTable` (di `shared.tsx`) = kembaran DataTable berbasis `useServerRows`. Search HANYA memfilter tabel (dulu ikut mempengaruhi KPI — perubahan perilaku yang disengaja; q per keystroke tidak boleh jadi kunci cache).
 5. **Payload didominasi detail bersarang** (reimburse `userBalances[].history`, 690KB): kirim list tanpa nested array, detail via param view (`balanceUser=<nama>`) saat drawer dibuka.
-6. **Column pruning**: `fetchAllRows(ssId, sheet, columns?)` — daftar indeks kolom 0-based; jalur Neon SELECT hanya kolom itu dan mengembalikan baris SPARSE dengan nilai di indeks ASLI, jadi mapper posisional tak berubah. Semua indeks yang dibaca caller (termasuk filter soft-delete!) wajib masuk daftar. Terpasang di repo procurement: `PO_COLS`/`POL_COLS`/`ITEM_COLS`. `reports` TIDAK dipruning — mapper-nya memakai semua 11 kolom (tidak ada yang bisa dihemat).
+6. **Column pruning**: `fetchAllRows(ssId, sheet, columns?)` — daftar indeks kolom 0-based; jalur Neon SELECT hanya kolom itu dan mengembalikan baris SPARSE dengan nilai di indeks ASLI, jadi mapper posisional tak berubah. Semua indeks yang dibaca caller (termasuk filter soft-delete!) wajib masuk daftar. Terpasang di 11 tabel (procurement `PO_COLS`/`POL_COLS`/`ITEM_COLS`; round 2 di finance-ap/orders/quotations/invoicing/purchasing/overtimes). Ronde 2 juga MENGHAPUS field mapped-tapi-mati dari interface (payreqFile, pEvidence, reimburseImage, qFile, prjPoFile, prRemarks, dst.) supaya tsc menjaga regresi. `reports` TIDAK dipruning — mapper-nya memakai semua 11 kolom (tidak ada yang bisa dihemat).
+7. **Payload didominasi detail bersarang per baris** (payroll rows × 8 array detail): strip array dari list view di proyeksi, drawer fetch `slipUser=<userId>` on-demand; agregasi lintas-baris untuk mode grouping (Tahunan) pindah ke handler drawer di client. KPI & filter dropdown tab payroll tetap client-side (baris ringan cukup).
 
 ### Gotchas (pelajaran mahal — jangan diulang)
 - **Bump nama cache** (`'x' → 'x-v2'`) setiap kali BENTUK response berubah — entry cache hidup melewati deploy; tanpa bump, client baru menerima JSON bentuk lama.
@@ -70,11 +73,11 @@ const getView = cachedRouteView('nama-route-vN', compute,
 
 ## 4. Pekerjaan Tersisa (urut prioritas)
 
-> Status 2026-07-15 (malam): item 1, 2, 4, 6 versi lama SELESAI (commit `e26a17a`, `0f860dc`, `8a2bed0`, `755b923`). Sisa di bawah.
+> Status 2026-07-16 (dini hari): semua pekerjaan sisi-repo SELESAI — row-slice semua route/tab berat, column pruning 2 ronde (11 tabel), bug payroll fixed, tab payroll detail-on-demand (commit `e26a17a` `0f860dc` `8a2bed0` `755b923` `725d03a` `0808ba3`). Sisa di bawah.
 
 1. **Cron sync**: config OK di `vercel.json`, tapi **belum pernah jalan**. Penyebab hampir pasti env **`CRON_SECRET` belum di-set di Vercel** (route balas 401; log diagnostik sudah dipasang — cek Vercel → Deployments → Functions log jam 06:00–07:00 WIB). Butuh akses dashboard Vercel — tidak bisa dari repo. Region sudah dipin `sin1` + batchGet supaya sync muat di maxDuration 60s. Kalau masih timeout, naikkan `maxDuration` (butuh Fluid Compute) atau pecah sync.
-2. **Column pruning lanjutan** (opsional): kandidat berikutnya `reimbursecashout` 4.2MB/20 kolom, `orders` 1.8MB/48 kolom, `quotations` 1.6MB/30 kolom — cek indeks yang dipakai mapper dulu; `reports` sudah dicek TIDAK bisa dihemat (11/11 kolom terpakai).
-3. **Route ringan sisanya** ("global bertahap", opsional): invoices, delivery (760KB), reports, sales, dll — konversi ke `useServerRows` hanya kalau mau konsistensi UX; egress mereka sudah aman karena ter-cache.
+2. **Route ringan sisanya** ("global bertahap", opsional): invoices, delivery (760KB), reports (1.1MB — mendekati limit seiring data tumbuh, pantau), sales, dll — konversi ke `useServerRows` hanya kalau mau konsistensi UX; egress mereka sudah aman karena ter-cache.
+3. (Opsional) Column pruning sisa: tabel yang belum dipruning tinggal yang kecil/terpakai-penuh (`reports` 11/11 kolom terpakai — tidak bisa; meal_benefit*, sheet referensi — tidak signifikan).
 4. (Opsional) Cache warming pasca-sync — bukan penghemat egress (hanya UX first-load); tunda.
 
 ## 5. Resep Verifikasi
