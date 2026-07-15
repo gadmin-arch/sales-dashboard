@@ -41,6 +41,42 @@ export async function fetchSheetsBatch(
 
 type SheetRows = { headers: string[]; rows: string[][] }
 
+// ── Google-fallback micro-batching ──
+// The read path only hits the Sheets API when Neon has no copy of a sheet.
+// Those misses arrive in bursts (one compute fetches 5-15 sheets in a
+// Promise.all), and the Sheets READ QUOTA (60 requests/min/user) is the
+// scarce resource there — bytes are not. Concurrent fallback reads for the
+// same spreadsheet therefore coalesce into ONE values.batchGet (one request
+// against the quota regardless of how many ranges it carries).
+type PendingRange = { range: string; resolve: (rows: string[][]) => void; reject: (err: unknown) => void }
+const FALLBACK_BATCH_WINDOW_MS = 25
+const pendingFallbacks = new Map<string, PendingRange[]>()
+
+export function fetchSheetCoalesced(spreadsheetId: string, range: string): Promise<string[][]> {
+  return new Promise((resolve, reject) => {
+    let pending = pendingFallbacks.get(spreadsheetId)
+    if (!pending) {
+      pendingFallbacks.set(spreadsheetId, (pending = []))
+      setTimeout(async () => {
+        const batch = pendingFallbacks.get(spreadsheetId) || []
+        pendingFallbacks.delete(spreadsheetId)
+        try {
+          if (batch.length === 1) {
+            batch[0].resolve(await fetchSheet(spreadsheetId, batch[0].range))
+          } else {
+            console.log(`[sheets] fallback batchGet ${batch.length} ranges in 1 request (${spreadsheetId.slice(0, 8)}…)`)
+            const results = await fetchSheetsBatch(spreadsheetId, batch.map((b) => b.range))
+            batch.forEach((b, i) => b.resolve(results[i] || []))
+          }
+        } catch (err) {
+          for (const b of batch) b.reject(err)
+        }
+      }, FALLBACK_BATCH_WINDOW_MS)
+    }
+    pending.push({ range, resolve, reject })
+  })
+}
+
 // Two layers:
 // - rowsCache: short-lived cache so filter-applies don't re-download the same
 //   sheets every time. Also de-duplicates concurrent reads (holds the promise).
@@ -133,9 +169,10 @@ export async function fetchAllRows(
       }
     }
 
-    // 2. Fallback to direct Google Sheets API fetch
+    // 2. Fallback to the Sheets API — coalesced so a burst of misses for one
+    // spreadsheet costs one read request instead of one per sheet.
     try {
-      const data = await fetchSheet(spreadsheetId, `${sheetName}!A:ZZZ`)
+      const data = await fetchSheetCoalesced(spreadsheetId, `${sheetName}!A:ZZZ`)
       const parsed: SheetRows = data.length < 1 ? { headers: [], rows: [] } : { headers: data[0], rows: data.slice(1) }
       lastGood.set(cacheKey, parsed) // remember the latest good copy for fallback
       // Write back to Neon so other server instances read the DB copy instead
