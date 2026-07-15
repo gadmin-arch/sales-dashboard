@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { cachedRoute } from '@/lib/route-cache'
+import { cachedRouteView } from '@/lib/route-cache'
 import {
   getAllPurchaseRequests, getItemNameMap, getAllOrders, getAllPurchaseOrders, getAllPoLines,
   getPrStatusLabel, loadPurchasingRefMaps,
 } from '@/database'
 import { getSalesUserNamesMap } from '@/database/repos/sales-users'
 import { parseDashboardParams } from '@/lib/api-helpers'
+import { sortRows, searchRows } from '@/lib/sort-utils'
 import { parseDate, formatMonth, sortByPeriod, parseMulti, filterDataByDateRange } from '@/lib/utils-date-currency'
 import { distinct, startOfDay, makeProjectLabeler, makePrPurchaseDates } from '@/lib/purchasing-helpers'
 
@@ -260,12 +261,42 @@ async function compute(searchParams: URLSearchParams) {
     })
 }
 
-const getData = cachedRoute('purchasing-requests', compute)
+// v2: the main response carries only the first page of requests (the full list
+// was 1.88MB YTD — a hair under Vercel's ~2MB data-cache entry limit, so it was
+// about to silently stop caching as the year grows). Sorting / searching /
+// load-more go through `view=rows`, which slices from a cached sorted list —
+// offset/limit/q are applied AFTER cache retrieval so they don't multiply cache
+// entries or recompute the dataset.
+const ROWS_STEP = 25
+const SEARCH_KEYS = ['prId', 'item', 'project', 'handler', 'requester', 'statusLabel']
+
+const getView = cachedRouteView(
+  'purchasing-requests-v2',
+  compute,
+  { view: ['view', 'sortKey', 'sortDir'], drop: ['offset', 'limit', 'q'] },
+  (full, view) => {
+    if (view.view === 'rows') {
+      const sortKey = view.sortKey || 'createdAt'
+      const sortDir = view.sortDir === 'asc' ? 'asc' : 'desc'
+      return { rows: sortRows(full.requests, sortKey, sortDir), totalRows: full.totalRows }
+    }
+    return { ...full, requests: full.requests.slice(0, ROWS_STEP) }
+  },
+)
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    return NextResponse.json(await getData(searchParams))
+    const data = await getView(searchParams)
+    if (searchParams.get('view') === 'rows' && 'rows' in data) {
+      const q = searchParams.get('q') || ''
+      const rows = q ? searchRows(data.rows, q, SEARCH_KEYS) : data.rows
+      const offset = Math.max(0, parseInt(searchParams.get('offset') || '0', 10) || 0)
+      const limitParam = searchParams.get('limit') || String(ROWS_STEP)
+      const limit = limitParam === 'all' ? rows.length : Math.max(1, parseInt(limitParam, 10) || ROWS_STEP)
+      return NextResponse.json({ rows: rows.slice(offset, offset + limit), totalRows: rows.length })
+    }
+    return NextResponse.json(data)
   } catch (error) {
     console.error('Purchasing requests API error:', error)
     return NextResponse.json({ error: 'Failed to load purchase requests' }, { status: 500 })

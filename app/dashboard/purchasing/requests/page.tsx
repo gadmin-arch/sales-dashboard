@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { KPICard } from '@/components/kpi-card'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -15,8 +15,9 @@ import { PageHeader } from '@/components/page-header'
 import { FilterCard } from '@/components/filter-card'
 import { PageSpinner, PageError } from '@/components/page-states'
 import { SearchInput } from '@/components/search-input'
-import { LoadMore, useLoadMore } from '@/components/load-more'
-import { useSort, SortHead } from '@/components/sortable'
+import { LoadMore } from '@/components/load-more'
+import { SortHead } from '@/components/sortable'
+import { useServerRows } from '@/hooks/use-server-rows'
 import { fmtCurrency, buildQuery, sameSet, getYTD, fmtShortDate as fmtDate } from '@/lib/sales-helpers'
 import { useChartFilter } from '@/hooks/use-chart-filter'
 
@@ -61,11 +62,14 @@ const overdueClass: Record<string, string> = {
   unhandledOverdue: 'bg-rose-500/10 text-rose-600 dark:text-rose-400',
 }
 
+// Stable fallback while data is loading — a fresh `?? []` per render would
+// retrigger useServerRows' reset effect in a loop.
+const EMPTY_ROWS: PRRow[] = []
+
 export default function PurchaseRequestsPage() {
   const [data, setData] = useState<PRData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [search, setSearch] = useState('')
   const { chartFilter, setChartFilter, handleChartClick } = useChartFilter('pr-table-section', undefined, false)
 
   const [dateFrom, setDateFrom] = useState(getYTD().from), [dateTo, setDateTo] = useState(getYTD().to)
@@ -103,14 +107,18 @@ export default function PurchaseRequestsPage() {
     setDateFrom(d.from); setDateTo(d.to); setSt([]); setOv([]); setAp([]); setPrj([]); setHdl([]); setReq([]); setChartFilter(null)
   }
 
-  const tableRows = useMemo(() => {
-    if (!data) return []
-    if (!search) return data.requests
-    const q = search.toLowerCase()
-    return data.requests.filter(r => [r.prId, r.item, r.project, r.handler, r.requester, r.statusLabel].some(s => s?.toLowerCase().includes(q)))
-  }, [data, search])
-  const prSort = useSort(tableRows, 'createdAt', 'desc')
-  const prPage = useLoadMore(prSort.sorted)
+  // Server-backed table: main payload carries only the first page; sorting,
+  // searching, and load-more request slices from the route's cached row view.
+  const pr = useServerRows<PRRow>({
+    endpoint: '/api/purchasing/requests',
+    baseParams: {
+      dateFrom, dateTo, status: st, overdue: ov, approval: ap, project: prj, handler: hdl, requester: req,
+      ...(chartFilter ? { cType: chartFilter.type, cVal: chartFilter.value } : {}),
+    },
+    initialRows: data?.requests ?? EMPTY_ROWS,
+    totalRows: data?.totalRows ?? 0,
+    initialSortKey: 'createdAt',
+  })
 
   const hasUnapplied = lFrom !== dateFrom || lTo !== dateTo || !sameSet(lSt, st) || !sameSet(lOv, ov) || !sameSet(lAp, ap) || !sameSet(lPrj, prj) || !sameSet(lHdl, hdl) || !sameSet(lReq, req)
 
@@ -234,29 +242,29 @@ export default function PurchaseRequestsPage() {
         {/* Requests table */}
         <Card className="overflow-hidden" id="pr-table-section">
           <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <CardTitle className="text-sm font-semibold">Purchase Requests <span className="font-normal text-muted-foreground">({tableRows.length.toLocaleString('en-US')}{tableRows.length !== data.totalRows ? ` of ${data.totalRows.toLocaleString('en-US')}` : ''})</span></CardTitle>
-            <SearchInput value={search} onChange={setSearch} />
+            <CardTitle className="text-sm font-semibold">Purchase Requests <span className="font-normal text-muted-foreground">({pr.total.toLocaleString('en-US')}{pr.total !== data.totalRows ? ` of ${data.totalRows.toLocaleString('en-US')}` : ''})</span></CardTitle>
+            <SearchInput value={pr.search} onChange={pr.setSearch} />
           </CardHeader>
           <CardContent className="p-0">
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader><TableRow>
-                  <SortHead label="PR #" column="prId" sortKey={prSort.sortKey} sortDir={prSort.sortDir} onSort={prSort.toggle} />
-                  <SortHead label="Item" column="item" sortKey={prSort.sortKey} sortDir={prSort.sortDir} onSort={prSort.toggle} />
-                  <SortHead label="Project" column="project" sortKey={prSort.sortKey} sortDir={prSort.sortDir} onSort={prSort.toggle} />
-                  <SortHead label="Qty" column="qtyReq" sortKey={prSort.sortKey} sortDir={prSort.sortDir} onSort={prSort.toggle} className="text-right" />
-                  <SortHead label="Estimated" column="estimated" sortKey={prSort.sortKey} sortDir={prSort.sortDir} onSort={prSort.toggle} className="text-right" />
-                  <SortHead label="Purchased" column="purchased" sortKey={prSort.sortKey} sortDir={prSort.sortDir} onSort={prSort.toggle} className="text-right" />
-                  <SortHead label="Variance" column="variance" sortKey={prSort.sortKey} sortDir={prSort.sortDir} onSort={prSort.toggle} className="text-right" />
-                  <SortHead label="Status" column="status" sortKey={prSort.sortKey} sortDir={prSort.sortDir} onSort={prSort.toggle} />
-                  <SortHead label="Overdue" column="overdue" sortKey={prSort.sortKey} sortDir={prSort.sortDir} onSort={prSort.toggle} />
-                  <SortHead label="Handler" column="handler" sortKey={prSort.sortKey} sortDir={prSort.sortDir} onSort={prSort.toggle} />
-                  <SortHead label="Due" column="duedate" sortKey={prSort.sortKey} sortDir={prSort.sortDir} onSort={prSort.toggle} />
-                  <SortHead label="Lead Time" column="leadTimePO" sortKey={prSort.sortKey} sortDir={prSort.sortDir} onSort={prSort.toggle} className="text-right" />
-                  <SortHead label="Diterima" column="leadTimeReceived" sortKey={prSort.sortKey} sortDir={prSort.sortDir} onSort={prSort.toggle} className="text-right" />
+                  <SortHead label="PR #" column="prId" sortKey={pr.sortKey} sortDir={pr.sortDir} onSort={pr.toggle} />
+                  <SortHead label="Item" column="item" sortKey={pr.sortKey} sortDir={pr.sortDir} onSort={pr.toggle} />
+                  <SortHead label="Project" column="project" sortKey={pr.sortKey} sortDir={pr.sortDir} onSort={pr.toggle} />
+                  <SortHead label="Qty" column="qtyReq" sortKey={pr.sortKey} sortDir={pr.sortDir} onSort={pr.toggle} className="text-right" />
+                  <SortHead label="Estimated" column="estimated" sortKey={pr.sortKey} sortDir={pr.sortDir} onSort={pr.toggle} className="text-right" />
+                  <SortHead label="Purchased" column="purchased" sortKey={pr.sortKey} sortDir={pr.sortDir} onSort={pr.toggle} className="text-right" />
+                  <SortHead label="Variance" column="variance" sortKey={pr.sortKey} sortDir={pr.sortDir} onSort={pr.toggle} className="text-right" />
+                  <SortHead label="Status" column="status" sortKey={pr.sortKey} sortDir={pr.sortDir} onSort={pr.toggle} />
+                  <SortHead label="Overdue" column="overdue" sortKey={pr.sortKey} sortDir={pr.sortDir} onSort={pr.toggle} />
+                  <SortHead label="Handler" column="handler" sortKey={pr.sortKey} sortDir={pr.sortDir} onSort={pr.toggle} />
+                  <SortHead label="Due" column="duedate" sortKey={pr.sortKey} sortDir={pr.sortDir} onSort={pr.toggle} />
+                  <SortHead label="Lead Time" column="leadTimePO" sortKey={pr.sortKey} sortDir={pr.sortDir} onSort={pr.toggle} className="text-right" />
+                  <SortHead label="Diterima" column="leadTimeReceived" sortKey={pr.sortKey} sortDir={pr.sortDir} onSort={pr.toggle} className="text-right" />
                 </TableRow></TableHeader>
                 <TableBody>
-                  {tableRows.length === 0 ? <TableRow><TableCell colSpan={13} className="text-center text-muted-foreground py-8">No purchase requests found</TableCell></TableRow> : prPage.visible.map(r => (
+                  {pr.rows.length === 0 ? <TableRow><TableCell colSpan={13} className="text-center text-muted-foreground py-8">No purchase requests found</TableCell></TableRow> : pr.rows.map(r => (
                     <TableRow key={r.prId}>
                       <TableCell className="text-xs font-semibold text-primary whitespace-nowrap">{r.prId}</TableCell>
                       <TableCell className="max-w-[220px] truncate" title={r.item}>{r.item}</TableCell>
@@ -276,7 +284,7 @@ export default function PurchaseRequestsPage() {
                 </TableBody>
               </Table>
             </div>
-            <LoadMore hasMore={prPage.hasMore} shown={prPage.shown} total={prPage.total} onClick={prPage.loadMore} onLoadAll={prPage.loadAll} onCollapse={prPage.collapse} />
+            <LoadMore hasMore={pr.hasMore} shown={pr.shown} total={pr.total} onClick={pr.loadMore} onLoadAll={pr.loadAll} onCollapse={pr.collapse} />
           </CardContent>
         </Card>
       </div>
