@@ -53,12 +53,26 @@ const SHEET_TTL_MS = 5 * 60 * 1000
 const rowsCache = new Map<string, { at: number; promise: Promise<SheetRows> }>()
 const lastGood = new Map<string, SheetRows>()
 
+/**
+ * @param columns Optional 0-based sheet column indices to read. When given,
+ * the Neon path SELECTs only those columns (the big sheet tables are read in
+ * full on every compute miss, and unused columns are the bulk of that egress).
+ * Returned rows are SPARSE arrays with values at their ORIGINAL indices, so
+ * positional mappers keep working; every index a caller reads (including
+ * soft-delete filters) must be listed. Sheets-API fallback paths still return
+ * full rows — a superset, which is also fine for the mappers.
+ */
 export async function fetchAllRows(
   spreadsheetId: string,
-  sheetName: string
+  sheetName: string,
+  columns?: number[]
 ): Promise<SheetRows> {
+  // DB rows in sheet_metadata / sheets_cache are keyed WITHOUT the column list;
+  // only the in-process caches fragment per column subset.
   const key = `${spreadsheetId}::${sheetName}`
-  const hit = rowsCache.get(key)
+  const wanted = columns?.length ? [...new Set(columns)].sort((a, b) => a - b) : null
+  const cacheKey = wanted ? `${key}::cols=${wanted.join(',')}` : key
+  const hit = rowsCache.get(cacheKey)
   if (hit && Date.now() - hit.at < SHEET_TTL_MS) return hit.promise
 
   const promise = (async (): Promise<SheetRows> => {
@@ -80,14 +94,22 @@ export async function fetchAllRows(
           const headers = (typeof metaRows[0].headers === 'string' ? JSON.parse(metaRows[0].headers) : metaRows[0].headers) as string[]
           const colNames = (typeof metaRows[0].col_names === 'string' ? JSON.parse(metaRows[0].col_names) : metaRows[0].col_names) as string[]
 
-          // Query the structured table
-          const { rows: dataRows } = await query(`SELECT * FROM "${tableName}" ORDER BY id ASC`)
-          const rows = dataRows.map((r: any) => 
-            colNames.map(col => r[col] !== null && r[col] !== undefined ? String(r[col]) : '')
-          )
+          // Query the structured table — only the requested columns when the
+          // caller declared its subset (positions in the row are preserved).
+          const sel = wanted?.filter((i) => i >= 0 && i < colNames.length)
+          const selectList = sel?.length ? sel.map((i) => `"${colNames[i]}"`).join(', ') : '*'
+          const { rows: dataRows } = await query(`SELECT ${selectList} FROM "${tableName}" ORDER BY id ASC`)
+          const rows = dataRows.map((r: any) => {
+            if (sel?.length) {
+              const row: string[] = []
+              for (const i of sel) row[i] = r[colNames[i]] !== null && r[colNames[i]] !== undefined ? String(r[colNames[i]]) : ''
+              return row
+            }
+            return colNames.map(col => r[col] !== null && r[col] !== undefined ? String(r[col]) : '')
+          })
 
           const parsed = { headers, rows }
-          lastGood.set(key, parsed)
+          lastGood.set(cacheKey, parsed)
           return parsed
         }
         
@@ -102,7 +124,7 @@ export async function fetchAllRows(
             headers: (typeof dbRows[0].headers === 'string' ? JSON.parse(dbRows[0].headers) : dbRows[0].headers) as string[],
             rows: (typeof dbRows[0].rows === 'string' ? JSON.parse(dbRows[0].rows) : dbRows[0].rows) as string[][]
           }
-          lastGood.set(key, parsed)
+          lastGood.set(cacheKey, parsed)
           return parsed
         }
         console.warn(`[sheets] "${sheetName}" not found in database cache. Falling back to Google Sheets API fetch.`)
@@ -115,7 +137,7 @@ export async function fetchAllRows(
     try {
       const data = await fetchSheet(spreadsheetId, `${sheetName}!A:ZZZ`)
       const parsed: SheetRows = data.length < 1 ? { headers: [], rows: [] } : { headers: data[0], rows: data.slice(1) }
-      lastGood.set(key, parsed) // remember the latest good copy for fallback
+      lastGood.set(cacheKey, parsed) // remember the latest good copy for fallback
       // Write back to Neon so other server instances read the DB copy instead
       // of re-hitting the Sheets API (DB writes are free ingress; the Sheets
       // per-minute read quota is the scarce resource on this path).
@@ -136,8 +158,8 @@ export async function fetchAllRows(
       }
       return parsed
     } catch (err) {
-      rowsCache.delete(key) // don't keep a failed read cached
-      const fallback = lastGood.get(key)
+      rowsCache.delete(cacheKey) // don't keep a failed read cached
+      const fallback = lastGood.get(cacheKey)
       if (fallback) {
         console.warn(`[sheets] fetch failed for "${sheetName}" — serving last downloaded copy`, err)
         return fallback
@@ -146,7 +168,7 @@ export async function fetchAllRows(
     }
   })()
 
-  rowsCache.set(key, { at: Date.now(), promise })
+  rowsCache.set(cacheKey, { at: Date.now(), promise })
   promise.catch(() => {}) // avoid unhandled rejection on the no-fallback path
   return promise
 }
@@ -160,7 +182,11 @@ export function registerCacheClearCallback(cb: () => void) {
 /** Force the next reads to hit Google again (keeps lastGood for fallback). */
 export function clearSheetCache(spreadsheetId?: string, sheetName?: string): void {
   if (spreadsheetId && sheetName) {
-    rowsCache.delete(`${spreadsheetId}::${sheetName}`)
+    // Also drop the per-column-subset variants of this sheet's cache entries.
+    const prefix = `${spreadsheetId}::${sheetName}`
+    for (const k of [...rowsCache.keys()]) {
+      if (k === prefix || k.startsWith(`${prefix}::cols=`)) rowsCache.delete(k)
+    }
   } else {
     rowsCache.clear()
     for (const cb of cacheClearCallbacks) {

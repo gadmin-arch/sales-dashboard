@@ -31,7 +31,9 @@ export async function query(text: string, params?: any[]) {
     const kb = res.rows[0] ? Math.round(JSON.stringify(res.rows[0]).length / 1024) : 0
     console.log(`[db] sheet read (blob) key=${params?.[0]} ~${kb}KB ${Date.now() - t0}ms`)
   } else {
-    const m = text.match(/SELECT \* FROM "(sheet_[^"]+)"/)
+    // Match both `SELECT *` and the column-pruned `SELECT "a", "b", …` reads
+    // (sheet_metadata is unquoted in its query, so it never matches here).
+    const m = text.match(/SELECT [^;]+ FROM "(sheet_[^"]+)"/)
     if (m) {
       const sampleKb = res.rows[0] ? JSON.stringify(res.rows[0]).length / 1024 : 0
       console.log(`[db] sheet read ${m[1]} rows=${res.rows.length} ~${Math.round(sampleKb * res.rows.length)}KB ${Date.now() - t0}ms`)
