@@ -1,32 +1,36 @@
 import type { Payroll, PayrollPayment, PayrollListItem, Occupation } from '../types'
 import { parseNum } from './orders'
 
-// payroll columns (0-based):
-// 0:user 1:payroll_account_id 2:start_date 3:end_date 4:id_payroll 5:description
-// 6:reduction_amount 7:receipt_amount 8:total_receipts 9:takehomepay_reduction
-// 10:takehomepay_receipt 11:takehomepay 12:released_price 13:file 14:status
-// 15:log_at 16:print 17:created_by 18:updated_by 19:updated_at 20:created_at 21:deleted_at
+// payroll columns (0-based) — the sheet gained `occupation_id` at index 1,
+// shifting everything after `user` by +1 (this had zeroed the whole Payroll
+// tab: the old deleted_at index 21 landed on created_at, which is always
+// filled, so every payslip was dropped as "soft-deleted"):
+// 0:user 1:occupation_id 2:payroll_account_id 3:start_date 4:end_date
+// 5:id_payroll 6:description 7:reduction_amount 8:receipt_amount
+// 9:total_receipts 10:takehomepay_reduction 11:takehomepay_receipt
+// 12:takehomepay 13:released_price 14:file 15:status 16:log_at 17:print
+// 18:created_by 19:updated_by 20:updated_at 21:created_at 22:deleted_at
 export function mapPayroll(row: string[]): Payroll {
   return {
     userId: row[0] || '',
-    payrollAccountId: row[1] || '',
-    startDate: row[2] || '',
-    endDate: row[3] || '',
-    idPayroll: row[4] || '',
-    description: row[5] || '',
-    reductionAmount: parseNum(row[6]),
-    receiptAmount: parseNum(row[7]),
-    totalReceipts: parseNum(row[8]),
-    thpReduction: parseNum(row[9]),
-    thpReceipt: parseNum(row[10]),
-    takeHomePay: parseNum(row[11]),
-    releasedPrice: parseNum(row[12]),
-    file: row[13] || '',
-    status: row[14] || '',
-    createdBy: row[17] || '',
-    updatedAt: row[19] || '',
-    createdAt: row[20] || '',
-    deletedAt: row[21] || '',
+    payrollAccountId: row[2] || '',
+    startDate: row[3] || '',
+    endDate: row[4] || '',
+    idPayroll: row[5] || '',
+    description: row[6] || '',
+    reductionAmount: parseNum(row[7]),
+    receiptAmount: parseNum(row[8]),
+    totalReceipts: parseNum(row[9]),
+    thpReduction: parseNum(row[10]),
+    thpReceipt: parseNum(row[11]),
+    takeHomePay: parseNum(row[12]),
+    releasedPrice: parseNum(row[13]),
+    file: row[14] || '',
+    status: row[15] || '',
+    createdBy: row[18] || '',
+    updatedAt: row[20] || '',
+    createdAt: row[21] || '',
+    deletedAt: row[22] || '',
   }
 }
 

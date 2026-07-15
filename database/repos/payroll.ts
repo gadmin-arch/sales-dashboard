@@ -25,8 +25,9 @@ registerCacheClearCallback(() => {
 
 export async function getAllPayroll(): Promise<Payroll[]> {
   const { rows } = await fetchAllRows(ssId, sheets.payroll)
-  // drop header echo + soft-deleted rows (deleted_at at index 21)
-  return rows.filter((r) => r[0] && r[0] !== 'user' && !r[21]).map(mapPayroll)
+  // drop header echo + soft-deleted rows (deleted_at at index 22 — the sheet
+  // gained occupation_id at index 1, shifting deleted_at from 21)
+  return rows.filter((r) => r[0] && r[0] !== 'user' && !r[22]).map(mapPayroll)
 }
 
 export async function getPayrollPayments(): Promise<PayrollPayment[]> {
