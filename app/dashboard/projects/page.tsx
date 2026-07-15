@@ -29,12 +29,9 @@ interface ProjectDashboardData {
   spentMeal: number
   reimburseMaterialSpent: number
   reimburseServiceSpent: number
-  
-  purchasingItems: Array<{ date: string; description: string; type: string; poNumber: string; pctOfOrder: number }>
-  reimburseItems: Array<{ date: string; description: string; type: string; requestor: string; amount: number }>
-  mealItems: Array<{ date: string; description: string; requestor: string; amount: number }>
-  overtimeItems: Array<{ date: string; workerName: string; hours: number; reason: string }>
-  reportItems: Array<{ date: string; workerName: string; hours: number; remarks: string }>
+
+  reimburseCount: number
+  mealCount: number
 
   overtimeHours: number
   reportCount: number
@@ -42,6 +39,17 @@ interface ProjectDashboardData {
 
   pePicName: string
   peTeamName: string
+}
+
+// Per-project transaction lists — fetched lazily via ?detail=<prjId> when the
+// modal opens (they are no longer embedded in the list response).
+interface ProjectDetailItems {
+  prjId: string
+  purchasingItems: Array<{ date: string; description: string; type: string; poNumber: string; pctOfOrder: number }>
+  reimburseItems: Array<{ date: string; description: string; type: string; requestor: string; amount: number }>
+  mealItems: Array<{ date: string; description: string; requestor: string; amount: number }>
+  overtimeItems: Array<{ date: string; workerName: string; hours: number; reason: string }>
+  reportItems: Array<{ date: string; workerName: string; hours: number; remarks: string }>
 }
 
 interface Option { value: string; label: string }
@@ -63,6 +71,8 @@ export default function ProjectsDashboardPage() {
   const [search, setSearch] = useState('')
   const [selectedProject, setSelectedProject] = useState<ProjectDashboardData | null>(null)
   const [activeTab, setActiveTab] = useState<'purchasing' | 'reimburse' | 'meal' | 'overtime' | 'report'>('purchasing')
+  const [detailItems, setDetailItems] = useState<ProjectDetailItems | null>(null)
+  const [detailLoading, setDetailLoading] = useState(false)
 
   // Workforce Pricing Calculator States
   const [overtimeRate, setOvertimeRate] = useState<number>(0)
@@ -171,16 +181,42 @@ export default function ProjectsDashboardPage() {
     })
   }, [calculatedRows, search])
 
-  // Recalculate selected project reference when data changes
+  // Fetch the per-project transaction lists when the modal opens.
+  useEffect(() => {
+    if (!selectedProject) { setDetailItems(null); return }
+    let cancelled = false
+    setDetailLoading(true); setDetailItems(null)
+    fetch('/api/projects?' + buildQuery({
+      dateFrom, dateTo, salesUser: su, orderType: ot, projectStatus: ps, invoiceStatus: inv, projectFlag: prjFlag,
+      pePic, peTeam, detail: selectedProject.prjId,
+    }))
+      .then((r) => r.json())
+      .then((j) => { if (!cancelled) setDetailItems(j.detail || null) })
+      .catch(() => { if (!cancelled) setDetailItems(null) })
+      .finally(() => { if (!cancelled) setDetailLoading(false) })
+    return () => { cancelled = true }
+  }, [selectedProject, dateFrom, dateTo, su, ot, ps, inv, prjFlag, pePic, peTeam])
+
+  // Recalculate selected project reference when data changes + merge lazily
+  // fetched detail lists (empty while loading)
   const selectedCalculatedProject = useMemo(() => {
     if (!selectedProject) return null
-    return filtered.find((p) => p.prjId === selectedProject.prjId) || null
-  }, [selectedProject, filtered])
+    const base = filtered.find((p) => p.prjId === selectedProject.prjId)
+    if (!base) return null
+    return {
+      ...base,
+      purchasingItems: detailItems?.purchasingItems ?? [],
+      reimburseItems: detailItems?.reimburseItems ?? [],
+      mealItems: detailItems?.mealItems ?? [],
+      overtimeItems: detailItems?.overtimeItems ?? [],
+      reportItems: detailItems?.reportItems ?? [],
+    }
+  }, [selectedProject, filtered, detailItems])
 
   // Computed columns
   const tableRows = useMemo(() => filtered.map((d) => ({
     ...d,
-    totalItems: d.reimburseItems.length + d.mealItems.length,
+    totalItems: d.reimburseCount + d.mealCount,
   })), [filtered])
   const sort = useSort(tableRows, 'totalPct', 'desc')
 
@@ -588,12 +624,13 @@ export default function ProjectsDashboardPage() {
                 {/* Tabs Header */}
                 <div className="flex border-b border-border gap-2 text-xs overflow-x-auto pb-1">
                   {(['purchasing', 'reimburse', 'meal', 'overtime', 'report'] as const).map((tab) => {
-                    const label = 
-                      tab === 'purchasing' ? `Purchases (${selectedCalculatedProject.purchasingItems.length})` :
-                      tab === 'reimburse' ? `Reimbursements (${selectedCalculatedProject.reimburseItems.length})` :
-                      tab === 'meal' ? `Meal Benefits (${selectedCalculatedProject.mealItems.length})` :
-                      tab === 'overtime' ? `Overtimes (${selectedCalculatedProject.overtimeItems.length})` :
-                      `Daily Reports (${selectedCalculatedProject.reportItems.length})`
+                    const n = (arr: unknown[]) => detailLoading ? '…' : arr.length
+                    const label =
+                      tab === 'purchasing' ? `Purchases (${n(selectedCalculatedProject.purchasingItems)})` :
+                      tab === 'reimburse' ? `Reimbursements (${n(selectedCalculatedProject.reimburseItems)})` :
+                      tab === 'meal' ? `Meal Benefits (${n(selectedCalculatedProject.mealItems)})` :
+                      tab === 'overtime' ? `Overtimes (${n(selectedCalculatedProject.overtimeItems)})` :
+                      `Daily Reports (${n(selectedCalculatedProject.reportItems)})`
                     
                     return (
                       <button
@@ -609,7 +646,10 @@ export default function ProjectsDashboardPage() {
 
                 {/* Tab Contents */}
                 <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-1">
-                  {activeTab === 'purchasing' && (
+                  {detailLoading && (
+                    <div className="flex items-center justify-center h-40 text-xs text-muted-foreground">Loading transaction details…</div>
+                  )}
+                  {!detailLoading && activeTab === 'purchasing' && (
                     selectedCalculatedProject.purchasingItems.length > 0 ? (
                       selectedCalculatedProject.purchasingItems.map((item, idx) => (
                         <div key={idx} className="bg-card border rounded p-3 text-xs flex flex-col gap-1 shadow-sm">
@@ -631,7 +671,7 @@ export default function ProjectsDashboardPage() {
                     )
                   )}
 
-                  {activeTab === 'reimburse' && (
+                  {!detailLoading && activeTab === 'reimburse' && (
                     selectedCalculatedProject.reimburseItems.length > 0 ? (
                       selectedCalculatedProject.reimburseItems.map((item, idx) => (
                         <div key={idx} className="bg-card border rounded p-3 text-xs flex flex-col gap-1 shadow-sm">
@@ -651,7 +691,7 @@ export default function ProjectsDashboardPage() {
                     )
                   )}
 
-                  {activeTab === 'meal' && (
+                  {!detailLoading && activeTab === 'meal' && (
                     selectedCalculatedProject.mealItems.length > 0 ? (
                       selectedCalculatedProject.mealItems.map((item, idx) => (
                         <div key={idx} className="bg-card border rounded p-3 text-xs flex flex-col gap-1 shadow-sm">
@@ -671,7 +711,7 @@ export default function ProjectsDashboardPage() {
                     )
                   )}
 
-                  {activeTab === 'overtime' && (
+                  {!detailLoading && activeTab === 'overtime' && (
                     selectedCalculatedProject.overtimeItems && selectedCalculatedProject.overtimeItems.length > 0 ? (
                       selectedCalculatedProject.overtimeItems.map((item, idx) => (
                         <div key={idx} className="bg-card border rounded p-3 text-xs flex flex-col gap-1 shadow-sm">
@@ -688,7 +728,7 @@ export default function ProjectsDashboardPage() {
                     )
                   )}
 
-                  {activeTab === 'report' && (
+                  {!detailLoading && activeTab === 'report' && (
                     selectedCalculatedProject.reportItems && selectedCalculatedProject.reportItems.length > 0 ? (
                       selectedCalculatedProject.reportItems.map((item, idx) => (
                         <div key={idx} className="bg-card border rounded p-3 text-xs flex flex-col gap-1 shadow-sm">

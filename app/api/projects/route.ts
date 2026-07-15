@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { cachedRoute } from '@/lib/route-cache'
+import { cachedRouteView } from '@/lib/route-cache'
 import { getProjectDashboardData } from '@/database/repos/projects-dashboard'
 import { parseDashboardParams } from '@/lib/api-helpers'
 import { parseMulti, parseDate } from '@/lib/utils-date-currency'
@@ -124,14 +124,38 @@ async function compute(searchParams: URLSearchParams) {
     })
 }
 
-// v2: bump the cache name when a bugfix must bypass entries computed by older
-// code (the data cache outlives deploys; version only changes at sync time).
-const getData = cachedRoute('projects-v2', compute)
+// v3: the list response no longer embeds the five per-project item arrays —
+// the modal fetches them via ?detail=<prjId>. Counts the table still shows
+// (reimburse/meal) ride along as plain numbers. Name bumped because the data
+// cache outlives deploys and old-shape entries must not be served.
+const getView = cachedRouteView('projects-v3', compute, ['detail'], (full, view) => {
+  if (view.detail) {
+    const p = full.projects.find((x) => x.prjId === view.detail)
+    return {
+      detail: p ? {
+        prjId: p.prjId,
+        purchasingItems: p.purchasingItems,
+        reimburseItems: p.reimburseItems,
+        mealItems: p.mealItems,
+        overtimeItems: p.overtimeItems,
+        reportItems: p.reportItems,
+      } : null,
+    }
+  }
+  return {
+    ...full,
+    projects: full.projects.map(({ purchasingItems, reimburseItems, mealItems, overtimeItems, reportItems, ...rest }) => ({
+      ...rest,
+      reimburseCount: reimburseItems.length,
+      mealCount: mealItems.length,
+    })),
+  }
+})
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    return NextResponse.json(await getData(searchParams))
+    return NextResponse.json(await getView(searchParams))
   } catch (error: any) {
     console.error('Projects Dashboard API error:', error)
     return NextResponse.json({ error: error.message || 'Unknown error' }, { status: 500 })
