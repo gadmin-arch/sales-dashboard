@@ -1,8 +1,9 @@
 # Handover: Optimasi Egress Neon & Lazy Loading
 
 > Dokumen serah-terima pekerjaan optimasi transfer data (egress) Neon dan lazy loading.
-> Update terakhir: 2026-07-15. Untuk melanjutkan pekerjaan ini dengan AI agent, pakai
-> prompt di bagian paling bawah.
+> Update terakhir: 2026-07-15 (malam — semua route berat sudah row-sliced + column pruning
+> terpasang; sisa pekerjaan tinggal CRON_SECRET di Vercel & item opsional). Untuk
+> melanjutkan pekerjaan ini dengan AI agent, pakai prompt di bagian paling bawah.
 
 ## 1. Konteks & Masalah
 
@@ -21,13 +22,18 @@
 | `139ce7f` | **Inti optimasi**: `cachedRouteView` + finance-ap per-tab + cost-control `?detail=` + purchasing/orders row-slice + `useServerRows` + `lib/sort-utils.ts` |
 | `4328854` | Sync pakai `values.batchGet` per spreadsheet (74→~24 request); fallback Google menulis balik ke Neon; `vercel.json` pin region `sin1` |
 | `988abe8` | `/api/projects` + page: item arrays per proyek pindah ke `?detail=<prjId>` |
+| `e26a17a` | Row-slice `/api/purchasing/requests` via `view=rows` (1.88MB → 59KB); page pakai `useServerRows` |
+| `0f860dc` | Row-slice tab poPayments & reimburse finance-ap (1.78MB → 20KB / 18KB); agregasi poPayments pindah ke server, filter dropdown per-tab jadi param server, history petty-cash per user via `balanceUser=`; komponen `ServerDataTable`; bump cache `finance-ap-tab-v2` |
+| `8a2bed0` | Column pruning `fetchAllRows(…, columns)`: POs −76% · POLists −50% · Items −28% byte per compute-miss; fix blind spot regex log `[db]` untuk SELECT berkolom |
+| `755b923` | Fix bug data payroll: sheet dapat kolom `occupation_id` di indeks 1 → semua indeks bergeser; filter deleted_at membuang semua payslip (KPI 0). Sekarang 1.679 payslip / Rp3.75B tampil |
 
 Ukuran response YTD sesudah optimasi (semua ter-cache, sebelumnya finance-ap & cost-control TIDAK PERNAH ter-cache):
 
-- finance-ap: per tab — overview 1.6KB · poPayments 1.76MB · reimburse 1.74MB · meal 409KB · loans 42KB
+- finance-ap: per tab — overview 1.6KB · poPayments 1.76MB→**20KB** · reimburse 1.74MB→**18KB** · meal 409KB · loans 42KB
 - cost-control: 2.0MB → **398KB** (detail per proyek on-demand)
 - projects: → **304KB** (detail per proyek on-demand)
 - purchasing/orders: 1.3MB → **297KB** (25 baris pertama; sisanya via `view=rows`)
+- purchasing/requests: 1.88MB → **59KB** (25 baris pertama; sisanya via `view=rows`)
 
 ## 3. Arsitektur Pola (WAJIB dipahami sebelum lanjut)
 
@@ -47,23 +53,29 @@ const getView = cachedRouteView('nama-route-vN', compute,
 2. **List + modal detail** (cost-control, projects): list TANPA array item per baris (agregat/count tetap); modal fetch `?detail=<prjId>`. Merge di `selectedCalculatedProject` supaya JSX modal tak berubah.
 3. **Tabel besar server-backed** (purchasing/orders): response utama bawa 25 baris pertama + `totalRows`; sort/search/load-more panggil `view=rows&sortKey&sortDir&offset&limit&q`. Client pakai hook **`hooks/use-server-rows.ts`** (pengganti drop-in useSort+useLoadMore+search). Komparator server = `lib/sort-utils.ts` (identik dengan client lama).
 
+### Pola tambahan (commit `0f860dc` & `8a2bed0`)
+4. **Tab berat dengan filter dropdown yang mempengaruhi KPI** (finance-ap poPayments): agregasi client-side (useMemo atas full rows) dipindah ke fungsi proyeksi server (`projectPoPaymentsTab` di `lib/finance-ap-helpers.ts`); filter dropdown jadi view param (`fStatus/fTimeliness/fRequester/fTempo`, comma-joined oleh `buildQuery`). Tab component refetch view agregat saat filter berubah; `ServerDataTable` (di `shared.tsx`) = kembaran DataTable berbasis `useServerRows`. Search HANYA memfilter tabel (dulu ikut mempengaruhi KPI — perubahan perilaku yang disengaja; q per keystroke tidak boleh jadi kunci cache).
+5. **Payload didominasi detail bersarang** (reimburse `userBalances[].history`, 690KB): kirim list tanpa nested array, detail via param view (`balanceUser=<nama>`) saat drawer dibuka.
+6. **Column pruning**: `fetchAllRows(ssId, sheet, columns?)` — daftar indeks kolom 0-based; jalur Neon SELECT hanya kolom itu dan mengembalikan baris SPARSE dengan nilai di indeks ASLI, jadi mapper posisional tak berubah. Semua indeks yang dibaca caller (termasuk filter soft-delete!) wajib masuk daftar. Terpasang di repo procurement: `PO_COLS`/`POL_COLS`/`ITEM_COLS`. `reports` TIDAK dipruning — mapper-nya memakai semua 11 kolom (tidak ada yang bisa dihemat).
+
 ### Gotchas (pelajaran mahal — jangan diulang)
 - **Bump nama cache** (`'x' → 'x-v2'`) setiap kali BENTUK response berubah — entry cache hidup melewati deploy; tanpa bump, client baru menerima JSON bentuk lama.
 - **`initialRows` ke `useServerRows` harus referensi STABIL** — `data?.rows ?? []` inline bikin array baru tiap render → infinite loop "Maximum update depth exceeded". Pakai module const `EMPTY_ROWS`.
 - `offset/limit/q` HARUS di `drop`, bukan `view` — kalau tidak, satu entry cache per klik/ketikan.
-- Log egress: `database/db.ts` mencetak `[db] sheet read <tabel> rows=N ~KB` untuk SELECT ke `sheet_*` — cache hit = tidak ada baris log ini.
+- Log egress: `database/db.ts` mencetak `[db] sheet read <tabel> rows=N ~KB` untuk SELECT ke `sheet_*` — cache hit = tidak ada baris log ini. Regex-nya sudah mencakup SELECT berkolom (pruned); kalau menambah bentuk query sheet baru, cek log ini tidak buta lagi.
+- **Sheet bisa dapat kolom baru di tengah** → semua indeks mapper bergeser (kasus payroll: `occupation_id` disisipkan di indeks 1, filter deleted_at membaca created_at → SEMUA baris terbuang, KPI 0 tanpa error). Kalau sebuah dashboard tiba-tiba kosong/nol semua, bandingkan `headers` di `sheet_metadata` dengan komentar indeks di mapper.
 - Verifikasi page role-gated tanpa login: mount temp route di luar `/dashboard` (mis. `app/temp-verify/x/page.tsx` berisi `export { default } from '../../dashboard/xxx/page'`), hapus sebelum commit. Chart recharts tidak mount di browser pane — verifikasi angka via API/text, bukan pixel chart.
-- Dev server lama bocor worker `postcss.js` → RAM penuh; sweep: `pkill -f "postcss.js"`.
+- Paksa compute-miss saat verifikasi (route cache menempel di params+versi sync): tambah param dummy `&zz=1` → kunci cache beda, dataset sama. `fresh=1` hanya membersihkan rowsCache, TIDAK menembus route cache.
+- Dev server lama bocor worker `postcss.js` → RAM penuh; sweep: `pkill -f "postcss.js"`. Kalau port 3000 terpakai sesi lain, Next menolak dev server kedua dari direktori yang sama — pakai server yang ada (HMR ikut memuat perubahanmu) atau matikan dulu.
 
 ## 4. Pekerjaan Tersisa (urut prioritas)
 
-1. **`/api/purchasing/requests` = 1.88MB YTD — HAMPIR menembus limit 2MB.** Terapkan pola #3 (row-slice `view=rows`) seperti purchasing/orders; tabel PR di page-nya juga client-side sekarang.
-2. **Tab poPayments (1.76MB) & reimburse (1.74MB) di finance-ap** akan melewati 2MB seiring data tumbuh — terapkan row-slice untuk `rows` di dalam tab (kombinasi pola #1+#3). Perhatikan `useRowFilters`/`FilterBar` di `shared.tsx` yang butuh full rows → filter dropdown per-tab harus ikut jadi param server.
+> Status 2026-07-15 (malam): item 1, 2, 4, 6 versi lama SELESAI (commit `e26a17a`, `0f860dc`, `8a2bed0`, `755b923`). Sisa di bawah.
+
+1. **Cron sync**: config OK di `vercel.json`, tapi **belum pernah jalan**. Penyebab hampir pasti env **`CRON_SECRET` belum di-set di Vercel** (route balas 401; log diagnostik sudah dipasang — cek Vercel → Deployments → Functions log jam 06:00–07:00 WIB). Butuh akses dashboard Vercel — tidak bisa dari repo. Region sudah dipin `sin1` + batchGet supaya sync muat di maxDuration 60s. Kalau masih timeout, naikkan `maxDuration` (butuh Fluid Compute) atau pecah sync.
+2. **Column pruning lanjutan** (opsional): kandidat berikutnya `reimbursecashout` 4.2MB/20 kolom, `orders` 1.8MB/48 kolom, `quotations` 1.6MB/30 kolom — cek indeks yang dipakai mapper dulu; `reports` sudah dicek TIDAK bisa dihemat (11/11 kolom terpakai).
 3. **Route ringan sisanya** ("global bertahap", opsional): invoices, delivery (760KB), reports, sales, dll — konversi ke `useServerRows` hanya kalau mau konsistensi UX; egress mereka sudah aman karena ter-cache.
-4. **Column pruning**: repo-repo masih `SELECT *` full table (mis. `polists` 8.2MB, `pos` 7.5MB, `reports` 6.9+5.6MB). Ganti ke daftar kolom yang dipakai mapper → potong 50–80% byte per compute-miss.
-5. **Cron sync**: config OK di `vercel.json`, tapi **belum pernah jalan**. Penyebab hampir pasti env **`CRON_SECRET` belum di-set di Vercel** (route balas 401; log diagnostik sudah dipasang — cek Vercel → Deployments → Functions log jam 06:00–07:00 WIB). Region sudah dipin `sin1` + batchGet supaya sync muat di maxDuration 60s. Kalau masih timeout, naikkan `maxDuration` (butuh Fluid Compute) atau pecah sync.
-6. **Bug data payroll**: KPI tab Payroll semua 0 (rows kosong, totalAdditions terisi) — pre-existing, kemungkinan parsing `endDate` slip. Cek `computePayroll` di `lib/finance-ap-helpers.ts` + tabel `sheet_1ky_pc_z_payroll`.
-7. (Opsional) Cache warming pasca-sync — bukan penghemat egress (hanya UX first-load); tunda.
+4. (Opsional) Cache warming pasca-sync — bukan penghemat egress (hanya UX first-load); tunda.
 
 ## 5. Resep Verifikasi
 
