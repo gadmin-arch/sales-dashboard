@@ -1,18 +1,20 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { KPICard } from '@/components/kpi-card'
 import { DonutChart } from '@/components/donut-chart'
-import { X, Wallet, DollarSign, TrendingDown, Receipt, Banknote } from 'lucide-react'
+import { X, Wallet, DollarSign, TrendingDown, Receipt, Banknote, Loader2 } from 'lucide-react'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { buildQuery } from '@/lib/sales-helpers'
 import {
   type FA,
   type FilterSpec,
   BarCard,
   ChartCard,
   DataTable,
+  ServerDataTable,
   FilterBar,
-  useRowFilters,
+  EMPTY_ROWS,
   badge,
   rp,
   rpC,
@@ -25,14 +27,50 @@ const REIMBURSE_FILTERS: FilterSpec[] = [
   { field: 'employeeName', label: 'Employee' },
 ]
 
-export function ReimburseTab({ d, handleChartClick }: { d: FA['reimburse']; handleChartClick: (type: string, value: string, label: string) => void }) {
+export function ReimburseTab({ d, handleChartClick, baseParams }: {
+  d: FA['reimburse']
+  handleChartClick: (type: string, value: string, label: string) => void
+  baseParams: Record<string, string>
+}) {
   const k = d.kpis
-  const f = useRowFilters(d.rows, REIMBURSE_FILTERS)
+  // Dropdown filters are server params now (the claims table is row-sliced);
+  // KPIs/charts were never filter-dependent on this tab so they read from `d`.
+  const [sel, setSel] = useState<Record<string, string[]>>({})
+  const active = REIMBURSE_FILTERS.some((s) => (sel[s.field]?.length ?? 0) > 0)
+  const [agg, setAgg] = useState<FA['reimburse'] | null>(null)
   const [selectedEmpBalance, setSelectedEmpBalance] = useState<any | null>(null)
+
+  const filterParams = { fCategory: sel.category ?? [], fEmployee: sel.employeeName ?? [] }
+  const filterSig = JSON.stringify(filterParams)
+  const baseSig = buildQuery(baseParams)
+
+  // Refetch the tab slice when filters change so the table's first page (and
+  // its totalRows) reflects the server-side filter.
+  useEffect(() => {
+    if (!active) { setAgg(null); return }
+    let dead = false
+    fetch('/api/finance-ap?' + buildQuery({ ...Object.fromEntries(new URLSearchParams(baseSig)), tab: 'reimburse', ...JSON.parse(filterSig) }))
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error('failed'))))
+      .then((json) => { if (!dead) setAgg(json.reimburse) })
+      .catch(() => {})
+    return () => { dead = true }
+  }, [active, filterSig, baseSig, d])
+
+  const a = agg ?? d
+
+  // Per-user petty cash history is no longer bundled in the tab payload —
+  // fetch it on demand when the drawer opens.
+  const openBalance = (r: any) => {
+    setSelectedEmpBalance({ ...r, history: null })
+    fetch('/api/finance-ap?' + buildQuery({ ...baseParams, tab: 'reimburse', balanceUser: r.employeeName }))
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error('failed'))))
+      .then((json) => setSelectedEmpBalance((prev: any) => (prev && prev.employeeName === r.employeeName ? { ...prev, history: json.history ?? [] } : prev)))
+      .catch(() => setSelectedEmpBalance((prev: any) => (prev && prev.employeeName === r.employeeName ? { ...prev, history: [] } : prev)))
+  }
 
   return (
     <div className="space-y-6">
-      <FilterBar specs={REIMBURSE_FILTERS} sel={f.sel} setSel={f.setSel} options={f.options} active={f.active} onClear={f.clear} />
+      <FilterBar specs={REIMBURSE_FILTERS} sel={sel} setSel={setSel} options={d.filterOptions} active={active} onClear={() => setSel({})} />
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <KPICard title="Petty Cash Balance" value={rpC(k.balance)} icon={<Wallet className="h-4 w-4" />} trend={{ value: k.pending, label: 'pending', positive: k.balance >= 0 }} tooltip="Current petty cash balance: Total Refill (Cash In) minus Total Claims (Cash Out)." />
         <KPICard title="Cash In (Approved)" value={rpC(k.totalIn)} icon={<DollarSign className="h-4 w-4" />} tooltip="Total petty cash refill (Cash In) approved: SUM(amount WHERE status='A' & cash_in)." />
@@ -52,7 +90,10 @@ export function ReimburseTab({ d, handleChartClick }: { d: FA['reimburse']; hand
         <BarCard title="Top Employees by Cash-Out" data={d.topEmployees} bars={[{ key: 'value', color: 'var(--chart-2)' }]} vertical onBarClick={(name) => handleChartClick('employeeName', name, `Employee = ${name}`)} tooltip="Ranking of employees with the highest petty cash claim spend." align="right" />
       </div>
  
-      <DataTable title="Reimbursement Claims (Approved)" rows={d.rows} prefilter={f.predicate} searchKeys={['reimburseId', 'projectName', 'description', 'employeeName', 'category']} initialSort="date"
+      <ServerDataTable title="Reimbursement Claims (Approved)"
+        endpoint="/api/finance-ap"
+        baseParams={{ ...baseParams, tab: 'reimburse', ...filterParams }}
+        initialRows={a.rows ?? EMPTY_ROWS} totalRows={a.totalRows ?? 0} initialSortKey="date"
         cols={[
           { key: 'reimburseId', label: 'ID', render: (r) => <span className="text-xs font-semibold text-primary">{r.reimburseId}</span> },
           { key: 'date', label: 'Date', render: (r) => <span className="text-muted-foreground whitespace-nowrap">{fmtDate(r.date)}</span> },
@@ -69,9 +110,9 @@ export function ReimburseTab({ d, handleChartClick }: { d: FA['reimburse']; hand
         rows={d.userBalances}
         searchKeys={['employeeName']}
         initialSort="balance"
-        onRowClick={setSelectedEmpBalance}
+        onRowClick={openBalance}
         prefilter={(r: any) => {
-          const v = f.sel['employeeName']
+          const v = sel['employeeName']
           return !v?.length || v.includes(String(r.employeeName ?? ''))
         }}
         cols={[
@@ -133,7 +174,7 @@ export function ReimburseTab({ d, handleChartClick }: { d: FA['reimburse']; hand
               <div className="space-y-2">
                 <h4 className="text-xs font-semibold text-foreground flex items-center gap-1.5">
                   <Banknote className="h-4 w-4 text-primary" />
-                  Transaction Log ({selectedEmpBalance.history.length})
+                  Transaction Log ({selectedEmpBalance.history ? selectedEmpBalance.history.length : '…'})
                 </h4>
                 <div className="border border-border rounded-lg overflow-hidden">
                   <Table>
@@ -148,7 +189,9 @@ export function ReimburseTab({ d, handleChartClick }: { d: FA['reimburse']; hand
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {selectedEmpBalance.history.length === 0 ? (
+                      {selectedEmpBalance.history == null ? (
+                        <TableRow><TableCell colSpan={6} className="text-center text-xs text-muted-foreground py-4"><Loader2 className="animate-spin h-4 w-4 inline-block" /></TableCell></TableRow>
+                      ) : selectedEmpBalance.history.length === 0 ? (
                         <TableRow><TableCell colSpan={6} className="text-center text-xs text-muted-foreground py-4">No transactions found</TableCell></TableRow>
                       ) : selectedEmpBalance.history.map((t: any, idx: number) => (
                         <TableRow key={t.id || idx}>

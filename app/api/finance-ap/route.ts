@@ -16,7 +16,10 @@ import { makeProjectLabeler } from '@/lib/purchasing-helpers'
 import {
   computePoPayments, computePayroll, computeMeal, computeLoans, computeReimburse, computeOverview,
   byMonth, mergeMonthly, reimburseCategory, timelinessOf, adjustDueDate,
+  projectPoPaymentsTab, projectReimburseTab, filterPoPaymentRows, filterReimburseRows,
+  FA_TAB_ROWS_STEP, FA_TAB_SEARCH_KEYS,
 } from '@/lib/finance-ap-helpers'
+import { sortRows, searchRows } from '@/lib/sort-utils'
 
 async function compute(searchParams: URLSearchParams) {
     const { dateFrom: from, dateTo: to } = parseDashboardParams(searchParams)
@@ -367,17 +370,63 @@ const getData = cachedRoute('finance-ap', compute)
 // data-cache entry limit and silently never caches, so every page view used to
 // re-read every sheet table from Neon. Each tab slice is small enough to cache,
 // and all six share one compute via the in-process memo.
+//
+// v2: poPayments & reimburse are additionally row-sliced (their full row lists
+// were 1.7MB+ each YTD and about to cross the entry limit). Their tab views
+// return aggregates + the first page of rows; the per-tab dropdown filters
+// (fStatus/fTimeliness/fRequester/fTempo, fCategory/fEmployee) are server
+// params because the poPayments aggregates depend on them. Tables page through
+// `view=rows`; reimburse per-user history loads via `balanceUser=<name>`.
 const FA_TABS = new Set(['overview', 'poPayments', 'payroll', 'meal', 'loans', 'reimburse'])
-const getTab = cachedRouteView('finance-ap-tab', compute, ['tab'], (full, view) => ({
-  [view.tab]: (full as Record<string, unknown>)[view.tab],
-  dateRange: full.dateRange,
-}))
+const getTab = cachedRouteView(
+  'finance-ap-tab-v2',
+  compute,
+  {
+    view: ['tab', 'view', 'sortKey', 'sortDir', 'fStatus', 'fTimeliness', 'fRequester', 'fTempo', 'fCategory', 'fEmployee', 'balanceUser'],
+    drop: ['offset', 'limit', 'q'],
+  },
+  (full, view) => {
+    if (view.tab === 'poPayments') {
+      if (view.view === 'rows') {
+        const rs = filterPoPaymentRows(full.poPayments.rows, view)
+        return { rows: sortRows(rs, view.sortKey || 'createdAt', view.sortDir === 'asc' ? 'asc' : 'desc'), totalRows: rs.length }
+      }
+      return { poPayments: projectPoPaymentsTab(full.poPayments, view), dateRange: full.dateRange }
+    }
+    if (view.tab === 'reimburse') {
+      if (view.balanceUser) {
+        const u = full.reimburse.userBalances.find((b) => b.employeeName === view.balanceUser)
+        return { history: u?.history ?? [] }
+      }
+      if (view.view === 'rows') {
+        const rs = filterReimburseRows(full.reimburse.rows, view)
+        return { rows: sortRows(rs, view.sortKey || 'date', view.sortDir === 'asc' ? 'asc' : 'desc'), totalRows: rs.length }
+      }
+      return { reimburse: projectReimburseTab(full.reimburse, view), dateRange: full.dateRange }
+    }
+    return {
+      [view.tab]: (full as unknown as Record<string, unknown>)[view.tab],
+      dateRange: full.dateRange,
+    }
+  },
+)
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const tab = searchParams.get('tab')
-    if (tab && FA_TABS.has(tab)) return NextResponse.json(await getTab(searchParams))
+    if (tab && FA_TABS.has(tab)) {
+      const data = await getTab(searchParams)
+      if (searchParams.get('view') === 'rows' && 'rows' in data) {
+        const q = searchParams.get('q') || ''
+        const rows = q ? searchRows(data.rows as unknown[], q, FA_TAB_SEARCH_KEYS[tab] ?? []) : (data.rows as unknown[])
+        const offset = Math.max(0, parseInt(searchParams.get('offset') || '0', 10) || 0)
+        const limitParam = searchParams.get('limit') || String(FA_TAB_ROWS_STEP)
+        const limit = limitParam === 'all' ? rows.length : Math.max(1, parseInt(limitParam, 10) || FA_TAB_ROWS_STEP)
+        return NextResponse.json({ rows: rows.slice(offset, offset + limit), totalRows: rows.length })
+      }
+      return NextResponse.json(data)
+    }
     return NextResponse.json(await getData(searchParams))
   } catch (error) {
     console.error('Finance AP API error:', error)

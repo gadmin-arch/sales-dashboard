@@ -11,6 +11,7 @@ import { X, Search } from 'lucide-react'
 import { MultiSelect } from '@/components/multi-select'
 import { LoadMore, useLoadMore } from '@/components/load-more'
 import { useSort, SortHead } from '@/components/sortable'
+import { useServerRows } from '@/hooks/use-server-rows'
 import { fmtCurrency, fmtShortDate as fmtDate } from '@/lib/sales-helpers'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -34,13 +35,21 @@ export const CHART = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var
 export type KV = { name: string; value: number }
 export type Money = Record<string, number>
 
+export type FilterOptions = Record<string, { value: string; label: string }[]>
+
 export interface FA {
   overview: { kpis: Money; composition: { stream: string; outflow: number; pctOutflow: number; outstanding: number; records: number }[]; outstandingByStream: KV[]; monthly: any[] }
-  poPayments: { kpis: Money; aging: { name: string; value: number; count: number }[]; byStatus: KV[]; topByPo: KV[]; monthlyOutflow: KV[]; timelinessBreakdown: KV[]; rows: any[]; payments: any[] }
+  // poPayments & reimburse are row-sliced: `rows` is only the first page and
+  // the tab aggregates come pre-filtered from the server (?f… params).
+  poPayments: {
+    k: Money & { largestExposurePo?: string }; aging: { name: string; value: number; count: number }[]; byStatus: KV[]; monthlyOutflow: KV[]; timelinessBreakdown: KV[]
+    trendReqToApproval: KV[]; trendReqToPaid: KV[]; trendApprovalToPaid: KV[]; trendReqToDue: KV[]; trendOverdue: KV[]; trendDueToPaid: KV[]
+    filterOptions: FilterOptions; rows: any[]; totalRows: number
+  }
   payroll: { kpis: Money; statusBreakdown: KV[]; topAdditions: KV[]; topReductions: KV[]; monthly: any[]; distribution: KV[]; rows: any[] }
   meal: { kpis: Money; byType: KV[]; topProjects: any[]; approvedByMonth: KV[]; rows: any[]; userBalances: any[] }
   loans: { kpis: Money; topBorrowers: KV[]; monthly: any[]; forecast: KV[]; rows: any[] }
-  reimburse: { kpis: Money; categoryBreakdown: KV[]; topProjects: any[]; topEmployees: KV[]; userBalances: any[]; monthly: any[]; rows: any[] }
+  reimburse: { kpis: Money; categoryBreakdown: KV[]; topProjects: any[]; topEmployees: KV[]; userBalances: any[]; monthly: any[]; filterOptions: FilterOptions; rows: any[]; totalRows: number }
 }
 
 export interface ChartCardProps {
@@ -206,6 +215,64 @@ export function DataTable({ title, subtitle, rows, cols, searchKeys, initialSort
           </Table>
         </div>
         <LoadMore hasMore={page.hasMore} shown={page.shown} total={page.total} onClick={page.loadMore} onLoadAll={page.loadAll} onCollapse={page.collapse} />
+      </CardContent>
+    </Card>
+  )
+}
+
+// Stable fallback while a tab slice is loading — a fresh `?? []` per render
+// would retrigger useServerRows' reset effect in a loop.
+export const EMPTY_ROWS: any[] = []
+
+/**
+ * Server-backed twin of DataTable for row-sliced tabs: the tab payload carries
+ * only the first page of rows, and sorting / searching / load-more request
+ * slices from the route's cached row view (`view=rows`). Same UI as DataTable.
+ */
+export function ServerDataTable({ title, subtitle, cols, endpoint, baseParams, initialRows, totalRows, initialSortKey, onRowClick }: {
+  title: string; subtitle?: string; cols: Col[]
+  endpoint: string; baseParams: Record<string, string | string[]>
+  initialRows: any[]; totalRows: number; initialSortKey: string; onRowClick?: (r: any) => void
+}) {
+  const t = useServerRows<any>({ endpoint, baseParams, initialRows, totalRows, initialSortKey })
+  return (
+    <Card className="overflow-hidden">
+      <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <CardTitle className="text-sm font-semibold">{title} <span className="font-normal text-muted-foreground">({t.total.toLocaleString('en-US')})</span></CardTitle>
+          {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
+        </div>
+        <div className="relative w-48">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <input type="text" placeholder="Search..." value={t.search} onChange={(e) => t.setSearch(e.target.value)} className="w-full rounded-lg border border-input bg-background pl-8 pr-3 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary" />
+        </div>
+      </CardHeader>
+      <CardContent className="p-0">
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader><TableRow>
+              {cols.map((c) => (
+                <SortHead key={c.key} label={c.label} column={c.key} sortKey={t.sortKey} sortDir={t.sortDir} onSort={t.toggle} className={c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : ''} />
+              ))}
+            </TableRow></TableHeader>
+            <TableBody>
+              {t.rows.length === 0 ? (
+                <TableRow><TableCell colSpan={cols.length} className="text-center text-muted-foreground py-8">No records found</TableCell></TableRow>
+              ) : t.rows.map((r, i) => (
+                <TableRow
+                  key={r.id ?? r.payreqId ?? r.loanId ?? r.mbId ?? r.reimburseId ?? i}
+                  className={onRowClick ? 'cursor-pointer hover:bg-muted/50 transition-colors' : ''}
+                  onClick={() => onRowClick?.(r)}
+                >
+                  {cols.map((c) => (
+                    <TableCell key={c.key} className={c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : ''}>{c.render(r)}</TableCell>
+                  ))}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+        <LoadMore hasMore={t.hasMore} shown={t.shown} total={t.total} onClick={t.loadMore} onLoadAll={t.loadAll} onCollapse={t.collapse} />
       </CardContent>
     </Card>
   )

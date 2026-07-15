@@ -1610,3 +1610,196 @@ export function mergeMonthly(series: [string, { name: string; value: number }[]]
     return row
   })
 }
+
+// ════════════════════════ PER-TAB VIEW PROJECTIONS (row-slice) ════════════════════════
+// The poPayments / reimburse tab responses used to carry every table row
+// (1.7MB+ each YTD) and were about to cross Vercel's ~2MB data-cache entry
+// limit. These projections keep each cached response small: the tab view
+// returns aggregates + the first page of rows, and table interactions go
+// through `view=rows`. The per-tab dropdown filters became server params
+// (they feed the aggregates), so they are part of the projection view key.
+
+export const FA_TAB_ROWS_STEP = 25
+
+export const FA_TAB_SEARCH_KEYS: Record<string, string[]> = {
+  poPayments: ['payreqId', 'poId', 'invoiceNumber', 'statusLabel', 'timeliness', 'createdBy', 'tempoType'],
+  reimburse: ['reimburseId', 'projectName', 'description', 'employeeName', 'category'],
+}
+
+const splitMulti = (v: string | undefined): string[] =>
+  v ? v.split(',').map((s) => s.trim()).filter(Boolean) : []
+
+/** Distinct sorted values of a row field → MultiSelect options (same as the old client-side useRowFilters). */
+const fieldOptions = (rows: any[], field: string): { value: string; label: string }[] =>
+  [...new Set(rows.map((r) => String(r[field] ?? '')).filter(Boolean))].sort().map((v) => ({ value: v, label: v }))
+
+export function filterPoPaymentRows(rows: ReturnType<typeof computePoPayments>['rows'], view: Record<string, string>) {
+  const fStatus = splitMulti(view.fStatus)
+  const fTimeliness = splitMulti(view.fTimeliness)
+  const fRequester = splitMulti(view.fRequester)
+  const fTempo = splitMulti(view.fTempo)
+  let rs = rows
+  if (fStatus.length) rs = rs.filter((r) => fStatus.includes(r.statusLabel))
+  if (fTimeliness.length) rs = rs.filter((r) => fTimeliness.includes(r.timeliness))
+  if (fRequester.length) rs = rs.filter((r) => fRequester.includes(r.createdBy))
+  if (fTempo.length) rs = rs.filter((r) => fTempo.includes(r.tempoType))
+  return rs
+}
+
+/**
+ * PO Payments tab slice: aggregates over the (dropdown-)filtered rows plus the
+ * first page. Direct port of the aggregation the tab component used to run in
+ * a useMemo over full rows — labels and numbers must not change.
+ */
+export function projectPoPaymentsTab(po: ReturnType<typeof computePoPayments>, view: Record<string, string>) {
+  const rs = filterPoPaymentRows(po.rows, view)
+
+  const totalOutstanding = sum(rs.map((r) => r.outstanding || 0))
+  const overdue = sum(rs.map((r) => (r.daysOverdue >= 1 ? r.outstanding || 0 : 0)))
+  const pctOverdue = totalOutstanding > 0 ? Math.round((overdue / totalOutstanding) * 100) : 0
+  const openCount = rs.filter((r) => r.outstanding > 0).length
+  const pendingApproval = rs.filter((r) => r.statusLabel === 'Approval Needed').length
+  const totalPaid = sum(rs.map((r) => r.paid || 0))
+
+  const poOutstandingAgg: Record<string, number> = {}
+  for (const r of rs) {
+    if (r.poId && r.poId !== '-') poOutstandingAgg[r.poId] = (poOutstandingAgg[r.poId] || 0) + (r.outstanding || 0)
+  }
+  let largestExposure = 0
+  let largestExposurePo = '-'
+  for (const poId in poOutstandingAgg) {
+    if (poOutstandingAgg[poId] > largestExposure) { largestExposure = poOutstandingAgg[poId]; largestExposurePo = poId }
+  }
+
+  const leadAN = rs.map((r) => r.leadToAN).filter((v): v is number => v != null)
+  const leadPaid = rs.map((r) => r.leadToPaid).filter((v): v is number => v != null)
+  const approvalToPaidList = rs.map((r) => r.approvalToPaid).filter((v): v is number => v != null)
+  const durations = rs.map((r) => r.requestDuration).filter((v): v is number => v != null)
+  const overdueDaysList = rs.map((r) => r.daysOverdue).filter((v) => v > 0)
+  const avg1 = (a: number[]) => (a.length ? Math.round((a.reduce((x, y) => x + y, 0) / a.length) * 10) / 10 : 0)
+
+  const timelinessAgg: Record<string, number> = {}
+  for (const r of rs) timelinessAgg[r.timeliness] = (timelinessAgg[r.timeliness] || 0) + 1
+  const onTime = timelinessAgg['On Time'] || 0
+  const latePaid = timelinessAgg['Overdue (late)'] || 0
+  const dueToPaidList = rs.map((r) => r.dueToPaidHours).filter((v): v is number => v != null)
+
+  const k = {
+    totalOutstanding,
+    overdue,
+    pctOverdue,
+    openCount,
+    pendingApproval,
+    totalPaid,
+    totalRequests: rs.length,
+    largestExposure,
+    largestExposurePo,
+    avgReqToApproval: avg1(leadAN),
+    leadToApprovalCount: leadAN.length,
+    avgReqToPaid: avg1(leadPaid),
+    leadToPaidCount: leadPaid.length,
+    avgApprovalToPaid: avg1(approvalToPaidList),
+    avgReqToDue: avg1(durations),
+    avgOverdue: avg1(overdueDaysList),
+    avgDueToPaid: dueToPaidList.length ? Math.round((dueToPaidList.reduce((x, y) => x + y, 0) / dueToPaidList.length / 24) * 10) / 10 : 0,
+    onTimeRate: onTime + latePaid > 0 ? Math.round((onTime / (onTime + latePaid)) * 100) : 0,
+    tempoCount: rs.filter((r) => r.isTempo).length,
+  }
+
+  // Tab-local aging buckets (0 / 1-7 / 8-30 / 30+ days late), outstanding only.
+  const TAB_AGING = [
+    { name: '0 days', min: 0, max: 0 },
+    { name: '1-7 days', min: 1, max: 7 },
+    { name: '8-30 days', min: 8, max: 30 },
+    { name: '30+ days', min: 31, max: 999999 },
+  ]
+  const aging = TAB_AGING.map((b) => ({ name: b.name, value: 0, count: 0 }))
+  for (const r of rs) {
+    if (r.outstanding <= 0) continue
+    const days = r.daysOverdue || 0
+    const idx = TAB_AGING.findIndex((b) => days >= b.min && days <= b.max)
+    if (idx >= 0) { aging[idx].value = Math.round((aging[idx].value + r.outstanding) * 100) / 100; aging[idx].count++ }
+  }
+
+  const statusAgg: Record<string, number> = {}
+  for (const r of rs) {
+    if (r.outstanding > 0) statusAgg[r.statusLabel] = (statusAgg[r.statusLabel] || 0) + r.outstanding
+  }
+  const byStatus = Object.entries(statusAgg).map(([name, value]) => ({ name, value: Math.round(value * 100) / 100 }))
+
+  // Monthly cash outflow over payments belonging to the filtered requests.
+  const filteredPayreqIds = new Set(rs.map((r) => r.payreqId))
+  const outflowAgg: Record<string, number> = {}
+  for (const p of po.payments) {
+    if (!filteredPayreqIds.has(p.payreqId)) continue
+    const parts = p.date ? p.date.split(' ')[0].split('/') : []
+    if (parts.length >= 3) {
+      const monthYear = `${parts[2]}-${parts[0].padStart(2, '0')}` // YYYY-MM
+      outflowAgg[monthYear] = (outflowAgg[monthYear] || 0) + (p.amount || 0)
+    }
+  }
+  const monthlyOutflow = Object.entries(outflowAgg)
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([my, value]) => ({
+      name: new Date(`${my}-02`).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+      value: Math.round(value),
+    }))
+
+  const timelinessBreakdown = ['On Time', 'On Track', 'Overdue (ongoing)', 'Overdue (late)', 'Completed', 'No Due Date']
+    .filter((key) => timelinessAgg[key])
+    .map((key) => ({ name: key, value: timelinessAgg[key] }))
+
+  return {
+    k,
+    aging,
+    byStatus,
+    monthlyOutflow,
+    timelinessBreakdown,
+    trendReqToApproval: bucketDuration(rs.map((r) => r.hoursToApproval).filter((v): v is number => v != null)),
+    trendReqToPaid: bucketDuration(rs.map((r) => r.hoursToPaid).filter((v): v is number => v != null)),
+    trendApprovalToPaid: bucketDuration(rs.map((r) => r.hoursApprovalToPaid).filter((v): v is number => v != null)),
+    trendReqToDue: bucketDuration(rs.map((r) => r.hoursToDue).filter((v): v is number => v != null)),
+    trendOverdue: bucketDuration(rs.map((r) => r.hoursOverdue).filter((v): v is number => v != null)),
+    trendDueToPaid: bucketDueToPaid(rs.map((r) => r.dueToPaidHours).filter((v): v is number => v != null)),
+    filterOptions: {
+      statusLabel: fieldOptions(po.rows, 'statusLabel'),
+      timeliness: fieldOptions(po.rows, 'timeliness'),
+      createdBy: fieldOptions(po.rows, 'createdBy'),
+      tempoType: fieldOptions(po.rows, 'tempoType'),
+    },
+    rows: rs.slice(0, FA_TAB_ROWS_STEP),
+    totalRows: rs.length,
+  }
+}
+
+export function filterReimburseRows(rows: ReturnType<typeof computeReimburse>['rows'], view: Record<string, string>) {
+  const fCategory = splitMulti(view.fCategory)
+  const fEmployee = splitMulti(view.fEmployee)
+  let rs = rows
+  if (fCategory.length) rs = rs.filter((r) => fCategory.includes(r.category))
+  if (fEmployee.length) rs = rs.filter((r) => fEmployee.includes(r.employeeName))
+  return rs
+}
+
+/**
+ * Reimburse tab slice: KPIs/charts are filter-independent (unchanged), the
+ * claims table is row-sliced, and per-user history moves to an on-demand
+ * `balanceUser=<employeeName>` view (it dominated the old payload).
+ */
+export function projectReimburseTab(re: ReturnType<typeof computeReimburse>, view: Record<string, string>) {
+  const rs = filterReimburseRows(re.rows, view)
+  return {
+    kpis: re.kpis,
+    categoryBreakdown: re.categoryBreakdown,
+    topProjects: re.topProjects,
+    topEmployees: re.topEmployees,
+    monthly: re.monthly,
+    userBalances: re.userBalances.map(({ history: _history, ...u }) => u),
+    filterOptions: {
+      category: fieldOptions(re.rows, 'category'),
+      employeeName: fieldOptions(re.rows, 'employeeName'),
+    },
+    rows: rs.slice(0, FA_TAB_ROWS_STEP),
+    totalRows: rs.length,
+  }
+}

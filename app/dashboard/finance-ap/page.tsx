@@ -90,6 +90,13 @@ export default function FinanceAPPage() {
   const anyLoaded = Object.keys(slices).length > 0
   const active = slices[tab]
 
+  // Dataset params shared with the row-sliced tabs (their filter/rows/detail
+  // fetches must hit the same cached dataset as the tab fetch above).
+  const baseParams: Record<string, string> = {
+    dateFrom, dateTo,
+    ...(chartFilter ? { cType: chartFilter.type, cVal: chartFilter.value } : {}),
+  }
+
   if (loading && !anyLoaded) return <div className="flex items-center justify-center min-h-[80vh]"><Loader2 className="animate-spin h-8 w-8 text-primary" /></div>
   if (error && !anyLoaded) return <div className="flex flex-col items-center justify-center min-h-[80vh] space-y-4"><p className="text-destructive">{error}</p><Button onClick={onClear}>Retry</Button></div>
   if (!anyLoaded) return null
@@ -113,11 +120,11 @@ export default function FinanceAPPage() {
     }
     switch (tab) {
       case 'overview': return <OverviewTab d={slices.overview!} setTab={setTab} />
-      case 'poPayments': return <PoPaymentsTab d={slices.poPayments!} handleChartClick={handleChartClick} />
+      case 'poPayments': return <PoPaymentsTab d={slices.poPayments!} handleChartClick={handleChartClick} baseParams={baseParams} />
       case 'payroll': return <PayrollTab d={slices.payroll!} handleChartClick={handleChartClick} hideTable={true} />
       case 'meal': return <MealTab d={slices.meal!} handleChartClick={handleChartClick} />
       case 'loans': return <LoansTab d={slices.loans!} handleChartClick={handleChartClick} />
-      case 'reimburse': return <ReimburseTab d={slices.reimburse!} handleChartClick={handleChartClick} />
+      case 'reimburse': return <ReimburseTab d={slices.reimburse!} handleChartClick={handleChartClick} baseParams={baseParams} />
     }
   }
 
