@@ -88,7 +88,10 @@ export default function PayrollPage() {
         </CardContent></Card>
 
         <div className="bg-card border border-border shadow-sm rounded-xl overflow-hidden min-h-[500px] p-6">
-          <PayrollTab d={data.payroll} handleChartClick={handleChartClick} hideCharts={true} />
+          <PayrollTab d={data.payroll} handleChartClick={handleChartClick} hideCharts={true} baseParams={{
+            dateFrom, dateTo,
+            ...(chartFilter ? { cType: chartFilter.type, cVal: chartFilter.value } : {}),
+          }} />
         </div>
       </div>
     </SalesPageShell>

@@ -121,7 +121,7 @@ export default function FinanceAPPage() {
     switch (tab) {
       case 'overview': return <OverviewTab d={slices.overview!} setTab={setTab} />
       case 'poPayments': return <PoPaymentsTab d={slices.poPayments!} handleChartClick={handleChartClick} baseParams={baseParams} />
-      case 'payroll': return <PayrollTab d={slices.payroll!} handleChartClick={handleChartClick} hideTable={true} />
+      case 'payroll': return <PayrollTab d={slices.payroll!} handleChartClick={handleChartClick} hideTable={true} baseParams={baseParams} />
       case 'meal': return <MealTab d={slices.meal!} handleChartClick={handleChartClick} />
       case 'loans': return <LoansTab d={slices.loans!} handleChartClick={handleChartClick} />
       case 'reimburse': return <ReimburseTab d={slices.reimburse!} handleChartClick={handleChartClick} baseParams={baseParams} />

@@ -5,6 +5,7 @@ import { KPICard } from '@/components/kpi-card'
 import { DonutChart } from '@/components/donut-chart'
 import { X, Receipt, Banknote, DollarSign, AlertTriangle, Wallet, Landmark, Users, CalendarClock, Timer } from 'lucide-react'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { buildQuery } from '@/lib/sales-helpers'
 import {
   type FA,
   type FilterSpec,
@@ -27,7 +28,52 @@ const PAYROLL_FILTERS: FilterSpec[] = [
   { field: 'employee', label: 'Employee' },
 ]
 
-export function PayrollTab({ d, handleChartClick, hideCharts, hideTable }: { d: FA['payroll']; handleChartClick: (type: string, value: string, label: string) => void; hideCharts?: boolean; hideTable?: boolean }) {
+// Merge per-slip detail arrays into one payslip view (used for the yearly
+// grouping) — same key rules the yearly table grouping used before the detail
+// arrays moved out of the list payload.
+function mergeSlipDetails(slips: any[]) {
+  const earnings = new Map<string, any>()
+  const reductions = new Map<string, any>()
+  const reimburse = new Map<string, any>()
+  const loans = new Map<string, any>()
+  const travel = new Map<string, any>()
+  const meal = new Map<string, any>()
+  for (const s of slips) {
+    for (const e of s.earnings || []) {
+      const k = `${e.name}_${e.type}`
+      if (!earnings.has(k)) earnings.set(k, { ...e })
+      else { const m = earnings.get(k)!; m.receipt += e.receipt; m.thp += e.thp; m.nonThpReceipt += e.nonThpReceipt }
+    }
+    for (const r of s.reductionsList || []) {
+      const k = `${r.name}_${r.type}`
+      if (!reductions.has(k)) reductions.set(k, { ...r })
+      else { const m = reductions.get(k)!; m.receipt += r.receipt; m.thp += r.thp; m.nonThp += r.nonThp }
+    }
+    s.reimburseList?.forEach((r: any) => reimburse.set(r.date + r.amount, r))
+    s.loansList?.forEach((l: any) => loans.set(l.date + l.amount, l))
+    s.travelDetails?.forEach((td: any) => travel.set(`${td.date}-${td.amount}`, td))
+    s.mealDetailsList?.forEach((md: any) => meal.set(`${md.date}-${md.type}`, md))
+  }
+  return {
+    itemsList: [],
+    earnings: Array.from(earnings.values()),
+    reductionsList: Array.from(reductions.values()),
+    reimburseList: Array.from(reimburse.values()),
+    loansList: Array.from(loans.values()),
+    travelDetails: Array.from(travel.values()),
+    mealDetailsList: Array.from(meal.values()),
+  }
+}
+
+const SLIP_META = ['mealRate', 'employeeEmail', 'employeeNik', 'employeeOccupation', 'taxStatus', 'taxCategory'] as const
+
+export function PayrollTab({ d, handleChartClick, hideCharts, hideTable, baseParams }: {
+  d: FA['payroll']
+  handleChartClick: (type: string, value: string, label: string) => void
+  hideCharts?: boolean
+  hideTable?: boolean
+  baseParams?: Record<string, string>
+}) {
   const k = d.kpis
   const [viewMode, setViewMode] = useState<'monthly' | 'yearly'>('monthly')
 
@@ -45,56 +91,25 @@ export function PayrollTab({ d, handleChartClick, hideCharts, hideTable }: { d: 
     })
 
     const result: any[] = []
-    map.forEach((slips, key) => {
+    map.forEach((slips) => {
       slips.sort((a, b) => (new Date(a.startDate).getTime() || 0) - (new Date(b.startDate).getTime() || 0))
       const first = slips[0]
       const last = slips[slips.length - 1]
-      
+
       const dateStr = first.endDate || ''
       const dObj = new Date(dateStr)
       const year = !isNaN(dObj.getTime()) ? dObj.getFullYear().toString() : 'unknown'
 
-      const mergedEarningsMap = new Map<string, any>()
-      const mergedReductionsMap = new Map<string, any>()
-      const mergedReimburseMap = new Map<string, any>()
-      const mergedLoansMap = new Map<string, any>()
-      const mergedTravelDetails = new Map<string, any>()
-      const mergedMealDetails = new Map<string, any>()
-
       let weeklyCount = 0
       let monthlyCount = 0
-
       for (const s of slips) {
         if (s.periodType === 'Weekly') weeklyCount++
         else if (s.periodType === 'Monthly') monthlyCount++
-        for (const e of s.earnings || []) {
-          const k = `${e.name}_${e.type}`
-          if (!mergedEarningsMap.has(k)) mergedEarningsMap.set(k, { ...e })
-          else {
-            const m = mergedEarningsMap.get(k)!
-            m.receipt += e.receipt
-            m.thp += e.thp
-            m.nonThpReceipt += e.nonThpReceipt
-          }
-        }
-        for (const r of s.reductionsList || []) {
-          const k = `${r.name}_${r.type}`
-          if (!mergedReductionsMap.has(k)) mergedReductionsMap.set(k, { ...r })
-          else {
-            const m = mergedReductionsMap.get(k)!
-            m.receipt += r.receipt
-            m.thp += r.thp
-            m.nonThp += r.nonThp
-          }
-        }
-        s.reimburseList?.forEach((r: any) => mergedReimburseMap.set(r.date + r.amount, r))
-        s.loansList?.forEach((l: any) => mergedLoansMap.set(l.date + l.amount, l))
-        s.travelDetails?.forEach((td: any) => mergedTravelDetails.set(`${td.date}-${td.amount}`, td))
-        s.mealDetailsList?.forEach((md: any) => mergedMealDetails.set(`${md.date}-${md.type}`, md))
       }
-
       const dominantCycle = weeklyCount >= monthlyCount ? 'Weekly' : 'Monthly'
 
+      // Detail arrays + slip meta are no longer in the list payload; the
+      // drawer merges them from the on-demand slipUser fetch.
       result.push({
         idPayroll: `GY-${first.userId}-${year}`,
         employee: first.employee,
@@ -104,7 +119,7 @@ export function PayrollTab({ d, handleChartClick, hideCharts, hideTable }: { d: 
         isGroupedYearly: true,
         startDate: first.startDate,
         endDate: last.endDate,
-        statusLabel: 'Release', 
+        statusLabel: 'Release',
         payStatus: slips.some(s => s.payStatus === 'Unpaid') ? 'Unpaid' : 'Paid',
         receipts: slips.reduce((acc, s) => acc + s.receipts, 0),
         reductions: slips.reduce((acc, s) => acc + s.reductions, 0),
@@ -112,19 +127,7 @@ export function PayrollTab({ d, handleChartClick, hideCharts, hideTable }: { d: 
         disbursed: slips.reduce((acc, s) => acc + s.disbursed, 0),
         loanThp: slips.reduce((acc, s) => acc + s.loanThp, 0),
         repayThp: slips.reduce((acc, s) => acc + s.repayThp, 0),
-        earnings: Array.from(mergedEarningsMap.values()),
-        reductionsList: Array.from(mergedReductionsMap.values()),
-        reimburseList: Array.from(mergedReimburseMap.values()),
-        loansList: Array.from(mergedLoansMap.values()),
-        travelDetails: Array.from(mergedTravelDetails.values()),
-        mealDetailsList: Array.from(mergedMealDetails.values()),
         groupedSlips: slips,
-        mealRate: first.mealRate,
-        employeeEmail: first.employeeEmail,
-        employeeNik: first.employeeNik,
-        employeeOccupation: first.employeeOccupation,
-        taxStatus: first.taxStatus,
-        taxCategory: first.taxCategory,
       })
     })
 
@@ -133,6 +136,29 @@ export function PayrollTab({ d, handleChartClick, hideCharts, hideTable }: { d: 
 
   const f = useRowFilters(groupedRows, PAYROLL_FILTERS)
   const [selectedPayroll, setSelectedPayroll] = useState<any | null>(null)
+
+  // Payslip detail arrays load on demand when the drawer opens (the list
+  // payload was 2.77MB with them bundled — over the ~2MB cache-entry limit).
+  const openSlip = (r: any) => {
+    setSelectedPayroll(r)
+    fetch('/api/finance-ap?' + buildQuery({ ...(baseParams ?? {}), tab: 'payroll', slipUser: r.userId }))
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error('failed'))))
+      .then((json) => {
+        const details: any[] = json.details ?? []
+        setSelectedPayroll((prev: any) => {
+          if (!prev || prev.idPayroll !== r.idPayroll) return prev
+          if (prev.isGroupedYearly) {
+            const ids = new Set((prev.groupedSlips ?? []).map((s: any) => s.idPayroll))
+            const slips = details.filter((x) => ids.has(x.idPayroll))
+            const meta = Object.fromEntries(SLIP_META.map((m) => [m, slips[0]?.[m]]))
+            return { ...prev, ...mergeSlipDetails(slips), ...meta }
+          }
+          const detail = details.find((x) => x.idPayroll === prev.idPayroll)
+          return detail ? { ...prev, ...detail } : prev
+        })
+      })
+      .catch(() => {})
+  }
 
   const additions = selectedPayroll ? (selectedPayroll.itemsList || []).filter((item: any) => item.positive) : []
   const reductions = selectedPayroll ? (selectedPayroll.itemsList || []).filter((item: any) => !item.positive) : []
@@ -198,7 +224,7 @@ export function PayrollTab({ d, handleChartClick, hideCharts, hideTable }: { d: 
           <button onClick={() => setViewMode('yearly')} className={`px-4 py-1.5 text-xs font-semibold rounded-lg transition-all ${viewMode === 'yearly' ? 'bg-background text-foreground shadow-sm ring-1 ring-border' : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'}`}>Tahunan</button>
         </div>
       </div>
-      <DataTable title="Payslips" rows={groupedRows} prefilter={f.predicate} searchKeys={['idPayroll', 'employee', 'period', 'statusLabel', 'payStatus', 'periodType']} initialSort="startDate" onRowClick={setSelectedPayroll}
+      <DataTable title="Payslips" rows={groupedRows} prefilter={f.predicate} searchKeys={['idPayroll', 'employee', 'period', 'statusLabel', 'payStatus', 'periodType']} initialSort="startDate" onRowClick={openSlip}
         cols={[
           { key: 'idPayroll', label: 'ID', render: (r) => <span className="text-xs font-semibold text-primary">{r.idPayroll}</span> },
           { key: 'employee', label: 'Employee', render: (r) => <span className="text-xs font-semibold text-primary">{r.employee}</span> },

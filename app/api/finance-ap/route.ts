@@ -378,11 +378,20 @@ const getData = cachedRoute('finance-ap', compute)
 // params because the poPayments aggregates depend on them. Tables page through
 // `view=rows`; reimburse per-user history loads via `balanceUser=<name>`.
 const FA_TABS = new Set(['overview', 'poPayments', 'payroll', 'meal', 'loans', 'reimburse'])
+
+// Payslip rows carry big nested detail arrays that only the payslip drawer
+// reads; the list view strips them (2.77MB -> ~0.3MB, back under the ~2MB
+// cache-entry limit) and the drawer fetches `slipUser=<userId>` on open.
+const PAYROLL_DETAIL_FIELDS = [
+  'itemsList', 'earnings', 'reductionsList', 'reimburseList', 'loansList', 'travelDetails', 'mealDetailsList',
+  'weeklySlips', 'mealRate', 'employeeEmail', 'employeeNik', 'employeeOccupation', 'taxStatus', 'taxCategory',
+] as const
+
 const getTab = cachedRouteView(
-  'finance-ap-tab-v2',
+  'finance-ap-tab-v3',
   compute,
   {
-    view: ['tab', 'view', 'sortKey', 'sortDir', 'fStatus', 'fTimeliness', 'fRequester', 'fTempo', 'fCategory', 'fEmployee', 'balanceUser'],
+    view: ['tab', 'view', 'sortKey', 'sortDir', 'fStatus', 'fTimeliness', 'fRequester', 'fTempo', 'fCategory', 'fEmployee', 'balanceUser', 'slipUser'],
     drop: ['offset', 'limit', 'q'],
   },
   (full, view) => {
@@ -403,6 +412,25 @@ const getTab = cachedRouteView(
         return { rows: sortRows(rs, view.sortKey || 'date', view.sortDir === 'asc' ? 'asc' : 'desc'), totalRows: rs.length }
       }
       return { reimburse: projectReimburseTab(full.reimburse, view), dateRange: full.dateRange }
+    }
+    if (view.tab === 'payroll') {
+      type SlipRow = (typeof full.payroll.rows)[number] & Record<string, unknown>
+      if (view.slipUser) {
+        const details = (full.payroll.rows as SlipRow[])
+          .filter((r) => r.userId === view.slipUser)
+          .map((r) => {
+            const d: Record<string, unknown> = { idPayroll: r.idPayroll }
+            for (const f of PAYROLL_DETAIL_FIELDS) d[f] = r[f]
+            return d
+          })
+        return { details }
+      }
+      const rows = (full.payroll.rows as SlipRow[]).map((r) => {
+        const light: Record<string, unknown> = { ...r }
+        for (const f of PAYROLL_DETAIL_FIELDS) delete light[f]
+        return light
+      })
+      return { payroll: { ...full.payroll, rows }, dateRange: full.dateRange }
     }
     return {
       [view.tab]: (full as unknown as Record<string, unknown>)[view.tab],
