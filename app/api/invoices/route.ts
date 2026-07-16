@@ -170,8 +170,8 @@ async function compute(searchParams: URLSearchParams) {
       // Outstanding from the payment percentage: (1 - pct) * invoice amount.
       // Paid uses the actual collected amount field (inv_payment_amount).
       const pct = Math.min(100, Math.max(0, inv.invPaymentPercentage))
-      const amount = inv.invAmount
-      const outstanding = Math.max(0, (1 - pct / 100) * amount)
+      const amount = inv.invTotal
+      const outstanding = Math.max(0, (1 - pct / 100) * inv.invAmount)
       const paid = paidByInv.get(inv.invId) || 0
       const due = parseDate(inv.invEstPaymentDate)
       
@@ -212,6 +212,7 @@ async function compute(searchParams: URLSearchParams) {
         paymentDate: payDate || '-',
         amount,
         paid,
+        paymentPercentage: pct,
         outstanding,
         status: st,
         statusLabel: STATUS_LABELS[st],
@@ -326,7 +327,7 @@ async function compute(searchParams: URLSearchParams) {
     for (const r of finalRows) {
       const k = formatMonth(r.invoiceDate)
       if (!k) continue
-      ;(trendAgg[k] ??= { Invoice: 0, Payment: 0 }).Invoice += r.amount
+      ;(trendAgg[k] ??= { Invoice: 0, Payment: 0 }).Invoice += r.amount  // uses invTotal via row
     }
     for (const pd of payForTrend) {
       const k = formatMonth(pd.date)
@@ -340,18 +341,21 @@ async function compute(searchParams: URLSearchParams) {
     }))
 
     // ── Invoice vs Payment trend (By Invoice Date) ──
-    const cohortTrendAgg: Record<string, { Invoice: number; Payment: number }> = {}
+    const cohortTrendAgg: Record<string, { Invoice: number; Payment: number; PctSum: number; Count: number }> = {}
     for (const r of finalRows) {
       const k = formatMonth(r.invoiceDate)
       if (!k) continue
-      if (!cohortTrendAgg[k]) cohortTrendAgg[k] = { Invoice: 0, Payment: 0 }
+      if (!cohortTrendAgg[k]) cohortTrendAgg[k] = { Invoice: 0, Payment: 0, PctSum: 0, Count: 0 }
       cohortTrendAgg[k].Invoice += r.amount
       cohortTrendAgg[k].Payment += r.paid
+      cohortTrendAgg[k].PctSum += r.paymentPercentage
+      cohortTrendAgg[k].Count++
     }
     const trendByInvoiceDate = sortByPeriod(cohortTrendAgg, 'monthly').map(([name, v]) => ({
       name,
       Invoice: Math.round(v.Invoice),
       Payment: Math.round(v.Payment),
+      PaymentPct: v.Count > 0 ? Math.round((v.PctSum / v.Count) * 10) / 10 : 0,
     }))
 
     // ── Invoice vs Payment trend (Filtered by Invoice Date, Plotted by Actual Date) ──
@@ -360,7 +364,7 @@ async function compute(searchParams: URLSearchParams) {
       const k = formatMonth(r.invoiceDate)
       if (!k) continue
       if (!relatedPaymentsAgg[k]) relatedPaymentsAgg[k] = { Invoice: 0, Payment: 0 }
-      relatedPaymentsAgg[k].Invoice += r.amount
+      relatedPaymentsAgg[k].Invoice += r.amount  // uses invTotal via row
     }
     for (const pd of paymentDetails) {
       if (!finalIds.has(pd.invId)) continue

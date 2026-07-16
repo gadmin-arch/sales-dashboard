@@ -36,7 +36,7 @@ interface InvoiceData {
   }
   statusBreakdown: { name: string; value: number }[]
   trend: { name: string; Invoice: number; Payment: number }[]
-  trendByInvoiceDate: { name: string; Invoice: number; Payment: number }[]
+  trendByInvoiceDate: { name: string; Invoice: number; Payment: number; PaymentPct: number }[]
   trendByRelatedPaymentDate: { name: string; Invoice: number; Payment: number }[]
   aging: { name: string; value: number }[]
   leadTimeDistribution: { name: string; value: number }[]
@@ -191,9 +191,9 @@ export default function InvoicesPage() {
 
         {/* KPIs */}
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <KPICard title="Total Invoiced" value={fmtCurrency(data.kpis.totalInvoiced, 'IDR')} icon={<FileText className="h-4 w-4" />} tooltip="Total gross amount from all invoices issued: SUM(inv_amount) within selected filters." />
+          <KPICard title="Total Invoiced" value={fmtCurrency(data.kpis.totalInvoiced, 'IDR')} icon={<FileText className="h-4 w-4" />} tooltip="Total gross amount from all invoices issued: SUM(inv_total) within selected filters." />
           <KPICard title="Total Paid" value={fmtCurrency(data.kpis.totalPaid, 'IDR')} icon={<Wallet className="h-4 w-4" />} tooltip="Total cash funds successfully collected: SUM(payment_details.pd_total_amount) within selected filters." />
-          <KPICard title="Total Outstanding" value={fmtCurrency(data.kpis.totalOutstanding, 'IDR')} icon={<DollarSign className="h-4 w-4" />} trend={{ value: `${data.kpis.collectionRate}%`, label: 'collected', positive: data.kpis.collectionRate >= 50 }} tooltip="Total unpaid invoices outstanding: SUM((1 - payment_percentage / 100) * inv_amount). Trend shows collection rate: Total Paid / Total Invoiced." />
+          <KPICard title="Total Outstanding" value={fmtCurrency(data.kpis.totalOutstanding, 'IDR')} icon={<DollarSign className="h-4 w-4" />} trend={{ value: `${data.kpis.collectionRate}%`, label: 'collected', positive: data.kpis.collectionRate >= 50 }} tooltip="Total unpaid invoices outstanding: SUM((1 - payment_percentage / 100) * inv_total). Trend shows collection rate: Total Paid / Total Invoiced." />
           <KPICard title="Overdue" value={fmtCurrency(data.kpis.overdueAmount, 'IDR')} icon={<Clock className="h-4 w-4" />} trend={{ value: data.kpis.overdueCount, label: 'invoices', positive: false }} tooltip="Total unpaid invoices past their estimated due date: SUM(outstanding WHERE status='Overdue'). Trend shows the number of overdue invoices." />
         </div>
 
@@ -239,7 +239,7 @@ export default function InvoicesPage() {
             <CardHeader>
               <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
                 Invoice vs Payment Trend (By Invoice Date)
-                <InfoTooltip tooltip="Comparison of total invoices issued vs total payments received, plotted by the invoice creation date." />
+                <InfoTooltip tooltip="Comparison of total invoices issued vs payments calculated from invoice payment percentages." />
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -248,7 +248,16 @@ export default function InvoicesPage() {
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                   <XAxis dataKey="name" stroke="var(--muted-foreground)" tickLine={false} axisLine={{ stroke: 'var(--border)' }} className="text-xs" />
                   <YAxis stroke="var(--muted-foreground)" tickFormatter={(v) => fmtCurrency(v, 'IDR')} tickLine={false} axisLine={false} className="text-xs" />
-                  <Tooltip formatter={(v: any) => fmtCurrency(Number(v), 'IDR')} contentStyle={{ background: 'var(--background)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }} />
+                  <Tooltip 
+                    formatter={(v: any, name: string, props: any) => {
+                      if (name === 'Payment') {
+                        const pct = props.payload.PaymentPct || 0;
+                        return [`${fmtCurrency(Number(v), 'IDR')} (${pct}%)`, name];
+                      }
+                      return [fmtCurrency(Number(v), 'IDR'), name];
+                    }}
+                    contentStyle={{ background: 'var(--background)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }} 
+                  />
                   <ChartLegend content={<ChartLegendContent />} />
                   <Bar dataKey="Invoice" fill="var(--color-Invoice)" radius={[4, 4, 0, 0]} onClick={(data) => handleChartClick('invoiceMonth', String(data.name ?? ''), `Invoice Month = ${data.name}`)} style={{ cursor: 'pointer' }} />
                   <Bar dataKey="Payment" fill="var(--color-Payment)" radius={[4, 4, 0, 0]} onClick={(data) => handleChartClick('invoiceMonth', String(data.name ?? ''), `Invoice Month = ${data.name}`)} style={{ cursor: 'pointer' }} />
