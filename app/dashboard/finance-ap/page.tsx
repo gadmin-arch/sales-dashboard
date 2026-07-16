@@ -9,6 +9,7 @@ import {
 import { ThemeToggle, SalesPageShell } from '@/components/theme-toggle'
 import { useChartFilter } from '@/hooks/use-chart-filter'
 import { DateRangeRow } from '@/components/date-range-row'
+import { ExportButton } from '@/components/export-button'
 import { buildQuery, getYTD } from '@/lib/sales-helpers'
 import { useAuth } from '@/lib/auth-context'
 
@@ -144,7 +145,10 @@ export default function FinanceAPPage() {
               </div>
             )}
           </div>
-          <ThemeToggle />
+          <div className="flex items-center gap-2">
+            <ExportButton data={(slices[tab] as any)?.rows || []} filename={`finance-ap-${tab}.csv`} />
+            <ThemeToggle />
+          </div>
         </div>
 
         <Card><CardContent className="pt-5">

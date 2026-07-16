@@ -19,6 +19,7 @@ import { ChartContainer } from '@/components/ui/chart'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts'
 import { buildQuery, sameSet, getYTD, fmtShortDate } from '@/lib/sales-helpers'
 import { useChartFilter } from '@/hooks/use-chart-filter'
+import { ExportButton } from '@/components/export-button'
 
 interface Option { value: string; label: string }
 interface ProjectRow {

@@ -19,6 +19,7 @@ import { ChartContainer, ChartLegend, ChartLegendContent } from '@/components/ui
 import { ComposedChart, Bar, Line, BarChart, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts'
 import { buildQuery, sameSet, getYTD } from '@/lib/sales-helpers'
 import { useChartFilter } from '@/hooks/use-chart-filter'
+import { ExportButton } from '@/components/export-button'
 
 interface Option { value: string; label: string }
 interface WorkerRow {

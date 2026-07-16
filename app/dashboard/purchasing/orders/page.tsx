@@ -20,6 +20,7 @@ import { SortHead } from '@/components/sortable'
 import { useServerRows } from '@/hooks/use-server-rows'
 import { fmtCurrency, buildQuery, sameSet, getYTD, fmtShortDate as fmtDate, truncLabel as truncTick } from '@/lib/sales-helpers'
 import { useChartFilter } from '@/hooks/use-chart-filter'
+import { ExportButton } from '@/components/export-button'
 
 interface PORow {
   poNumber: string; poDate: string; vendorId: string; vendor: string; userId: string; user: string; projects: string

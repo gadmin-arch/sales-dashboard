@@ -16,6 +16,7 @@ import { SearchInput } from '@/components/search-input'
 import { LoadMore, useLoadMore } from '@/components/load-more'
 import { useSort, SortHead } from '@/components/sortable'
 import { fmtCurrency, buildQuery, sameSet, getYTD } from '@/lib/sales-helpers'
+import { ExportButton } from '@/components/export-button'
 
 interface Option { value: string; label: string }
 interface CustomerSummaryRow {
@@ -124,7 +125,7 @@ export default function CustomerScorecardPage() {
   return (
     <SalesPageShell>
       <div className="space-y-6">
-        <PageHeader title="Customer Scorecard" subtitle="PT. Multi Daya Mitra" />
+        <PageHeader title="Customer Scorecard" subtitle="PT. Multi Daya Mitra"  actions={<ExportButton data={tableRows} filename="customers.csv" />} />
 
         {/* Filters */}
         <FilterCard from={lFrom} to={lTo} onDateChange={(f, t) => { setLFrom(f); setLTo(t) }} onApply={onApply} onClear={onClear} hasUnapplied={hasUnapplied} loading={loading && !!data}>

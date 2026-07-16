@@ -1,3 +1,4 @@
+import { ExportButton } from '@/components/export-button'
 'use client'
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
@@ -273,7 +274,10 @@ export default function LeadsOppsPage() {
               </div>
             )}
           </div>
-          <ThemeToggle />
+          <div className="flex items-center gap-2">
+            <ExportButton data={tab === 'leads' ? sortedLeads : sortedOpps} filename="leads-opps.csv" />
+            <ThemeToggle />
+          </div>
         </div>
 
         {/* Filters */}

@@ -17,6 +17,7 @@ import { SearchInput } from '@/components/search-input'
 import { LoadMore, useLoadMore } from '@/components/load-more'
 import { useSort, SortHead } from '@/components/sortable'
 import { fmtCurrency, buildQuery, sameSet, getYTD, fmtShortDate as fmtDate, truncLabel as truncTick } from '@/lib/sales-helpers'
+import { ExportButton } from '@/components/export-button'
 
 interface VendorRow {
   vendorId: string; vendor: string; poCount: number; totalSpend: number; avgPO: number
@@ -92,7 +93,7 @@ export default function VendorScorecardPage() {
   return (
     <SalesPageShell>
       <div className="bg-background text-foreground min-h-screen space-y-6">
-        <PageHeader title="Vendor Scorecard" subtitle="PT. Multi Daya Mitra — Supplier Spend" />
+        <PageHeader title="Vendor Scorecard" subtitle="PT. Multi Daya Mitra — Supplier Spend"  actions={<ExportButton data={tableRows} filename="purchasing-vendors.csv" />} />
 
         <FilterCard from={lFrom} to={lTo} onDateChange={(f, t) => { setLFrom(f); setLTo(t) }} onApply={onApply} onClear={onClear} hasUnapplied={hasUnapplied} loading={loading && !!data}>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 items-start">

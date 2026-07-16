@@ -13,6 +13,7 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLe
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts'
 import { DonutChart } from '@/components/donut-chart'
 import { FileText, Briefcase, DollarSign, TrendingUp, ListTodo, ExternalLink } from 'lucide-react'
+import { ExportButton } from '@/components/export-button'
 import { ThemeToggle, SalesPageShell } from '@/components/theme-toggle'
 import { PageSpinner, PageError } from '@/components/page-states'
 import { SearchInput } from '@/components/search-input'
@@ -199,6 +200,7 @@ export default function SalesPage() {
             )}
           </div>
           <div className="flex items-center gap-2">
+            <ExportButton data={filtered} filename="sales-overview.csv" />
             <ThemeToggle />
             <a href="/dashboard/sales/activities" className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"><ListTodo className="h-4 w-4" /> Sales Activities <ExternalLink className="h-3 w-3" /></a>
           </div>

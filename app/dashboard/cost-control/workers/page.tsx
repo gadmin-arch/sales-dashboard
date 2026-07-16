@@ -20,6 +20,7 @@ import { ComposedChart, Bar, Line, BarChart, XAxis, YAxis, CartesianGrid, Toolti
 import { buildQuery, sameSet, getYTD, fmtCurrency } from '@/lib/sales-helpers'
 import { useChartFilter } from '@/hooks/use-chart-filter'
 import Link from 'next/link'
+import { ExportButton } from '@/components/export-button'
 
 interface Option { value: string; label: string }
 interface WorkerRow {

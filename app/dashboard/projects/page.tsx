@@ -9,6 +9,9 @@ import { DateRangeRow } from '@/components/date-range-row'
 import { MultiSelect } from '@/components/multi-select'
 import { buildQuery, getYTD, sameSet, fmtCurrency } from '@/lib/sales-helpers'
 import { PageSpinner, PageError } from '@/components/page-states'
+import { SearchInput } from '@/components/search-input'
+import { ExportButton } from '@/components/export-button'
+import { ThemeToggle } from '@/components/theme-toggle'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 
@@ -250,11 +253,17 @@ export default function ProjectsDashboardPage() {
 
   return (
     <div className="space-y-6 relative">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Project Dashboard</h1>
-        <p className="text-muted-foreground mt-2">
-          Track project operations, resource utilization, and expense items without exposing financial amounts.
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Project Dashboard</h1>
+          <p className="text-muted-foreground mt-2">
+            Track project operations, resource utilization, and expense items without exposing financial amounts.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <ExportButton data={tableRows} filename="projects.csv" />
+          <ThemeToggle />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

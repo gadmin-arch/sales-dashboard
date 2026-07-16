@@ -14,6 +14,7 @@ import { LoadMore, useLoadMore } from '@/components/load-more'
 import type { AccessUser } from '@/database'
 import type { Roles } from '@/lib/nav'
 import { cn } from '@/lib/utils'
+import { ExportButton } from '@/components/export-button'
 
 export default function UserManagementPage() {
   const { user } = useAuth()
@@ -180,7 +181,7 @@ export default function UserManagementPage() {
           <PageHeader 
             title="User Permissions & Access Management" 
             subtitle="IT Admin — Konfigurasi hak akses modul dashboard karyawan multidayamitra.co.id" 
-          />
+           actions={<ExportButton data={filteredUsers} filename="admin-users.csv" />} />
           <button
             onClick={handleOpenAddModal}
             className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary hover:bg-primary/95 text-primary-foreground font-semibold px-4 py-2 text-sm shadow cursor-pointer transition-colors w-full sm:w-auto"

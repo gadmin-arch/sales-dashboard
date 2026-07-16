@@ -15,6 +15,7 @@ import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'rec
 import { Activity, CheckCircle2, Clock, AlertTriangle, ListTodo, CalendarDays, ChevronLeft, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react'
 import { ThemeToggle, SalesPageShell } from '@/components/theme-toggle'
 import { MultiSelect } from '@/components/multi-select'
+import { ExportButton } from '@/components/export-button'
 import { DateRangeRow } from '@/components/date-range-row'
 import { PageSpinner, PageError } from '@/components/page-states'
 import { SearchInput } from '@/components/search-input'
@@ -189,7 +190,10 @@ export default function SalesActivitiesPage() {
               </div>
             )}
           </div>
-          <ThemeToggle />
+          <div className="flex items-center gap-2">
+            <ExportButton data={filtered} filename="sales-activities.csv" />
+            <ThemeToggle />
+          </div>
         </div>
 
         {/* Filters */}

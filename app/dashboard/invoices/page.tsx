@@ -249,7 +249,7 @@ export default function InvoicesPage() {
                   <XAxis dataKey="name" stroke="var(--muted-foreground)" tickLine={false} axisLine={{ stroke: 'var(--border)' }} className="text-xs" />
                   <YAxis stroke="var(--muted-foreground)" tickFormatter={(v) => fmtCurrency(v, 'IDR')} tickLine={false} axisLine={false} className="text-xs" />
                   <Tooltip 
-                    formatter={(v: any, name: string, props: any) => {
+                    formatter={(v: any, name: any, props: any) => {
                       if (name === 'Payment') {
                         const pct = props.payload.PaymentPct || 0;
                         return [`${fmtCurrency(Number(v), 'IDR')} (${pct}%)`, name];

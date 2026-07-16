@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Loader2, Banknote } from 'lucide-react'
+import { ExportButton } from '@/components/export-button'
 import { ThemeToggle, SalesPageShell } from '@/components/theme-toggle'
 import { useChartFilter } from '@/hooks/use-chart-filter'
 import { DateRangeRow } from '@/components/date-range-row'
@@ -76,7 +77,10 @@ export default function PayrollPage() {
               </div>
             )}
           </div>
-          <ThemeToggle />
+          <div className="flex items-center gap-2">
+            <ExportButton data={data?.payroll?.rows || []} filename="payroll.csv" />
+            <ThemeToggle />
+          </div>
         </div>
 
         <Card><CardContent className="pt-5">
