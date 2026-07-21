@@ -165,7 +165,7 @@ export async function fetchAllRows(
         }
         console.warn(`[sheets] "${sheetName}" not found in database cache. Falling back to Google Sheets API fetch.`)
       } catch (dbErr) {
-        console.error('[sheets] Error querying database cache, falling back to Google Sheets API:', dbErr)
+        console.warn('[sheets] Error querying database cache, falling back to Google Sheets API:', dbErr instanceof Error ? dbErr.message : dbErr)
       }
     }
 

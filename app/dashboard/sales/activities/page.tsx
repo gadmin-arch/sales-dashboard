@@ -13,11 +13,12 @@ import {
 import { DonutChart } from '@/components/donut-chart'
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts'
 import { Activity, CheckCircle2, Clock, AlertTriangle, ListTodo, CalendarDays, ChevronLeft, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react'
+import { PageHeader } from '@/components/page-header'
 import { ThemeToggle, SalesPageShell } from '@/components/theme-toggle'
 import { MultiSelect } from '@/components/multi-select'
 import { ExportButton } from '@/components/export-button'
 import { DateRangeRow } from '@/components/date-range-row'
-import { PageSpinner, PageError } from '@/components/page-states'
+import { DashboardSkeleton, PageError } from '@/components/page-states'
 import { SearchInput } from '@/components/search-input'
 import { LoadMore, useLoadMore } from '@/components/load-more'
 import { useSort, SortHead } from '@/components/sortable'
@@ -164,7 +165,7 @@ export default function SalesActivitiesPage() {
   }, [weekStart])
   const isTodayWeekDay = (d: Date) => d.toDateString() === today.toDateString()
 
-  if (loading && !data) return <PageSpinner />
+  if (loading && !data) return <DashboardSkeleton />
   if (error && !data) return <PageError error={error} onRetry={onClear} />
   if (!data) return null
 
@@ -180,21 +181,14 @@ export default function SalesActivitiesPage() {
       <div className="bg-background text-foreground min-h-screen space-y-6">
 
         {/* Header */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-wrap items-center gap-4">
-            <div><h1 className="text-2xl font-bold tracking-tight">Sales Activities</h1><p className="text-sm text-muted-foreground">PT. Multi Daya Mitra</p></div>
-            {chartFilter && (
-              <div className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary border border-primary/20">
-                <span className="text-muted-foreground">Filtered by:</span> {chartFilter.label}
-                <button onClick={() => setChartFilter(null)} className="ml-1 hover:bg-primary/20 rounded-full p-0.5"><div className="h-4 w-4 flex items-center justify-center">✕</div></button>
-              </div>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <ExportButton data={filtered} filename="sales-activities.csv" />
-            <ThemeToggle />
-          </div>
-        </div>
+        <PageHeader
+          title="Sales Activities"
+          subtitle="PT. Multi Daya Mitra"
+          breadcrumbs={[{ label: 'Sales' }, { label: 'Sales Activities' }]}
+          chartFilter={chartFilter}
+          onClearFilter={() => setChartFilter(null)}
+          actions={<ExportButton data={filtered} filename="sales-activities.csv" />}
+        />
 
         {/* Filters */}
         <Card><CardContent className="pt-5">

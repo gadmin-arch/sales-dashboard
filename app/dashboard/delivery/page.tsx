@@ -3,17 +3,17 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { KPICard } from '@/components/kpi-card'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table'
 import { FolderKanban, CheckCircle2, AlarmClock, AlertTriangle, Hourglass } from 'lucide-react'
 import { SalesPageShell } from '@/components/theme-toggle'
 import { MultiSelect } from '@/components/multi-select'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { PageHeader } from '@/components/page-header'
 import { FilterCard } from '@/components/filter-card'
-import { PageSpinner, PageError } from '@/components/page-states'
+import { DashboardSkeleton, PageError } from '@/components/page-states'
 import { SearchInput } from '@/components/search-input'
-import { LoadMore, useLoadMore } from '@/components/load-more'
-import { useSort, SortHead } from '@/components/sortable'
+import { DataTable } from '@/components/ui/data-table'
+import { DataTableColumnHeader } from '@/components/ui/data-table-column-header'
+import { ColumnDef } from '@tanstack/react-table'
 import { DonutChart } from '@/components/donut-chart'
 import { ChartContainer } from '@/components/ui/chart'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts'
@@ -136,24 +136,42 @@ export default function ProjectDeliveryPage() {
   }
   const hasUnapplied = lFrom !== dateFrom || lTo !== dateTo || lDateType !== dateType || !sameSet(lStatus, status) || !sameSet(lOwner, owner) || !sameSet(lType, type) || !sameSet(lDelivery, delivery) || !sameSet(lPePic, pePic)
 
-  const rows = useMemo(() => {
-    const raw = data?.projects ?? []
-    if (!search) return raw
+  const filteredRows = useMemo(() => {
+    if (!search || !data) return data?.projects || []
     const q = search.toLowerCase()
-    return raw.filter((r) => r.project.toLowerCase().includes(q) || r.prjId.toLowerCase().includes(q) || r.owner.toLowerCase().includes(q))
+    return data.projects.filter(r => 
+      r.project.toLowerCase().includes(q) || 
+      r.prjId.toLowerCase().includes(q) ||
+      r.owner.toLowerCase().includes(q)
+    )
   }, [data, search])
 
-  const sort = useSort(rows, 'endVariance', 'desc')
-  const page = useLoadMore(sort.sorted)
-
-  const atRiskRows = useMemo(() => data?.atRisk ?? [], [data])
-  const atRiskSort = useSort(atRiskRows, 'daysOverdue', 'desc')
-  const atRiskPage = useLoadMore(atRiskSort.sorted)
-
-  if (loading && !data) return <PageSpinner />
+  if (loading && !data) return <DashboardSkeleton />
   if (error && !data) return <PageError error={error} onRetry={onClear} />
   if (!data) return null
   const k = data.kpis
+
+  const atRiskCols: ColumnDef<any>[] = [
+    { accessorKey: 'project', header: ({ column }) => <DataTableColumnHeader column={column} title="Project" />, cell: ({ row }) => <div className="text-xs font-medium whitespace-normal break-words max-w-[280px]">{row.original.project}<span className="text-muted-foreground ml-1">({row.original.prjId})</span></div> },
+    { accessorKey: 'statusLabel', header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />, cell: ({ row }) => <span className="text-xs">{row.original.statusLabel}</span> },
+    { accessorKey: 'benchmarkEnd', header: ({ column }) => <DataTableColumnHeader column={column} title="Due Date" className="justify-end" />, cell: ({ row }) => <div className="text-xs text-right">{fmtShortDate(row.original.benchmarkEnd)}</div> },
+    { accessorKey: 'daysOverdue', header: ({ column }) => <DataTableColumnHeader column={column} title="Days Overdue" className="justify-end" />, cell: ({ row }) => <div className="text-xs text-right font-semibold text-rose-600 dark:text-rose-400">{row.original.daysOverdue != null ? `${row.original.daysOverdue}d` : '—'}</div> },
+  ]
+
+  const detailCols: ColumnDef<any>[] = [
+    { accessorKey: 'project', header: ({ column }) => <DataTableColumnHeader column={column} title="Project" />, cell: ({ row }) => <div className="font-medium text-xs whitespace-normal break-words max-w-[220px]">{row.original.project}<span className="text-muted-foreground ml-1">({row.original.prjId})</span></div> },
+    { accessorKey: 'statusLabel', header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />, cell: ({ row }) => <span className="text-xs">{row.original.statusLabel}</span> },
+    { accessorKey: 'pePicName', header: ({ column }) => <DataTableColumnHeader column={column} title="PE PIC" />, cell: ({ row }) => <span className="text-xs">{row.original.pePicName || '-'}</span> },
+    { accessorKey: 'benchmarkStart', header: ({ column }) => <DataTableColumnHeader column={column} title="Bench. Start" className="justify-end" />, cell: ({ row }) => <div className="text-right text-xs text-muted-foreground">{fmtShortDate(row.original.benchmarkStart)}</div> },
+    { accessorKey: 'actualStart', header: ({ column }) => <DataTableColumnHeader column={column} title="Actual Start" className="justify-end" />, cell: ({ row }) => <div className="text-right text-xs">{fmtShortDate(row.original.actualStart)}</div> },
+    { accessorKey: 'startVariance', header: ({ column }) => <DataTableColumnHeader column={column} title="Δ Start" className="justify-end" />, cell: ({ row }) => <div className="text-right text-xs"><Variance v={row.original.startVariance} /></div> },
+    { accessorKey: 'benchmarkEnd', header: ({ column }) => <DataTableColumnHeader column={column} title="Bench. Due" className="justify-end" />, cell: ({ row }) => <div className="text-right text-xs text-muted-foreground">{fmtShortDate(row.original.benchmarkEnd)}</div> },
+    { accessorKey: 'actualEnd', header: ({ column }) => <DataTableColumnHeader column={column} title="Actual End" className="justify-end" />, cell: ({ row }) => <div className="text-right text-xs">{fmtShortDate(row.original.actualEnd)}</div> },
+    { accessorKey: 'done', header: ({ column }) => <DataTableColumnHeader column={column} title="Done" className="justify-end" />, cell: ({ row }) => <div className="text-right text-xs">{fmtShortDate(row.original.done)}</div> },
+    { accessorKey: 'bastSubmit', header: ({ column }) => <DataTableColumnHeader column={column} title="BAST Submit" className="justify-end" />, cell: ({ row }) => <div className="text-right text-xs">{fmtShortDate(row.original.bastSubmit)}</div> },
+    { accessorKey: 'endVariance', header: ({ column }) => <DataTableColumnHeader column={column} title="Δ End" className="justify-end" />, cell: ({ row }) => <div className="text-right text-xs"><Variance v={row.original.endVariance} /></div> },
+    { accessorKey: 'delivery', header: ({ column }) => <DataTableColumnHeader column={column} title="Delivery" />, cell: ({ row }) => <DeliveryBadge delivery={row.original.delivery} label={row.original.deliveryLabel} /> },
+  ]
 
   return (
     <SalesPageShell>
@@ -258,27 +276,7 @@ export default function ProjectDeliveryPage() {
           <Card className="overflow-hidden border-amber-500/30">
             <CardHeader><CardTitle className="text-sm font-semibold flex items-center gap-1.5"><AlertTriangle className="h-4 w-4 text-amber-500" /> At Risk — Overdue &amp; No BAST <span className="font-normal text-muted-foreground">({data.atRisk.length.toLocaleString('en-US')})</span></CardTitle></CardHeader>
             <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader><TableRow>
-                    <SortHead label="Project" column="project" sortKey={atRiskSort.sortKey} sortDir={atRiskSort.sortDir} onSort={atRiskSort.toggle} />
-                    <SortHead label="Status" column="statusLabel" sortKey={atRiskSort.sortKey} sortDir={atRiskSort.sortDir} onSort={atRiskSort.toggle} />
-                    <SortHead label="Due Date" column="benchmarkEnd" sortKey={atRiskSort.sortKey} sortDir={atRiskSort.sortDir} onSort={atRiskSort.toggle} className="text-right" />
-                    <SortHead label="Days Overdue" column="daysOverdue" sortKey={atRiskSort.sortKey} sortDir={atRiskSort.sortDir} onSort={atRiskSort.toggle} className="text-right" />
-                  </TableRow></TableHeader>
-                  <TableBody>
-                    {atRiskPage.visible.map((r) => (
-                      <TableRow key={r.prjId}>
-                        <TableCell className="text-xs font-medium whitespace-normal break-words max-w-[280px]">{r.project}<span className="text-muted-foreground ml-1">({r.prjId})</span></TableCell>
-                        <TableCell className="text-xs">{r.statusLabel}</TableCell>
-                        <TableCell className="text-xs text-right">{fmtShortDate(r.benchmarkEnd)}</TableCell>
-                        <TableCell className="text-xs text-right font-semibold text-rose-600 dark:text-rose-400">{r.daysOverdue != null ? `${r.daysOverdue}d` : '—'}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-              <LoadMore hasMore={atRiskPage.hasMore} shown={atRiskPage.shown} total={atRiskPage.total} onClick={atRiskPage.loadMore} onLoadAll={atRiskPage.loadAll} onCollapse={atRiskPage.collapse} />
+              <DataTable columns={atRiskCols} data={data.atRisk} />
             </CardContent>
           </Card>
         )}
@@ -286,47 +284,11 @@ export default function ProjectDeliveryPage() {
         {/* Delivery detail */}
         <Card className="overflow-hidden" id="delivery-table-section">
           <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <CardTitle className="text-sm font-semibold">Project Delivery Detail <span className="font-normal text-muted-foreground">({rows.length.toLocaleString('en-US')})</span></CardTitle>
+            <CardTitle className="text-sm font-semibold">Project Delivery Detail <span className="font-normal text-muted-foreground">({filteredRows.length.toLocaleString('en-US')})</span></CardTitle>
             <SearchInput value={search} onChange={setSearch} />
           </CardHeader>
           <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader><TableRow>
-                  <SortHead label="Project" column="project" sortKey={sort.sortKey} sortDir={sort.sortDir} onSort={sort.toggle} />
-                  <SortHead label="Status" column="statusLabel" sortKey={sort.sortKey} sortDir={sort.sortDir} onSort={sort.toggle} />
-                  <SortHead label="PE PIC" column="pePicName" sortKey={sort.sortKey} sortDir={sort.sortDir} onSort={sort.toggle} />
-                  <SortHead label="Bench. Start" column="benchmarkStart" sortKey={sort.sortKey} sortDir={sort.sortDir} onSort={sort.toggle} className="text-right" />
-                  <SortHead label="Actual Start" column="actualStart" sortKey={sort.sortKey} sortDir={sort.sortDir} onSort={sort.toggle} className="text-right" />
-                  <SortHead label="Δ Start" column="startVariance" sortKey={sort.sortKey} sortDir={sort.sortDir} onSort={sort.toggle} className="text-right" />
-                  <SortHead label="Bench. Due" column="benchmarkEnd" sortKey={sort.sortKey} sortDir={sort.sortDir} onSort={sort.toggle} className="text-right" />
-                  <SortHead label="Actual End" column="actualEnd" sortKey={sort.sortKey} sortDir={sort.sortDir} onSort={sort.toggle} className="text-right" />
-                  <SortHead label="Done" column="done" sortKey={sort.sortKey} sortDir={sort.sortDir} onSort={sort.toggle} className="text-right" />
-                  <SortHead label="BAST Submit" column="bastSubmit" sortKey={sort.sortKey} sortDir={sort.sortDir} onSort={sort.toggle} className="text-right" />
-                  <SortHead label="Δ End" column="endVariance" sortKey={sort.sortKey} sortDir={sort.sortDir} onSort={sort.toggle} className="text-right" />
-                  <SortHead label="Delivery" column="delivery" sortKey={sort.sortKey} sortDir={sort.sortDir} onSort={sort.toggle} />
-                </TableRow></TableHeader>
-                <TableBody>
-                  {sort.sorted.length === 0 ? <TableRow><TableCell colSpan={12} className="text-center text-muted-foreground py-8">No data found</TableCell></TableRow> : page.visible.map((r) => (
-                    <TableRow key={r.prjId}>
-                      <TableCell className="font-medium text-xs whitespace-normal break-words max-w-[220px]">{r.project}<span className="text-muted-foreground ml-1">({r.prjId})</span></TableCell>
-                      <TableCell className="text-xs">{r.statusLabel}</TableCell>
-                      <TableCell className="text-xs">{r.pePicName || '-'}</TableCell>
-                      <TableCell className="text-right text-xs text-muted-foreground">{fmtShortDate(r.benchmarkStart)}</TableCell>
-                      <TableCell className="text-right text-xs">{fmtShortDate(r.actualStart)}</TableCell>
-                      <TableCell className="text-right text-xs"><Variance v={r.startVariance} /></TableCell>
-                      <TableCell className="text-right text-xs text-muted-foreground">{fmtShortDate(r.benchmarkEnd)}</TableCell>
-                      <TableCell className="text-right text-xs">{fmtShortDate(r.actualEnd)}</TableCell>
-                      <TableCell className="text-right text-xs">{fmtShortDate(r.done)}</TableCell>
-                      <TableCell className="text-right text-xs">{fmtShortDate(r.bastSubmit)}</TableCell>
-                      <TableCell className="text-right text-xs"><Variance v={r.endVariance} /></TableCell>
-                      <TableCell className="text-xs"><DeliveryBadge delivery={r.delivery} label={r.deliveryLabel} /></TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-            <LoadMore hasMore={page.hasMore} shown={page.shown} total={page.total} onClick={page.loadMore} onLoadAll={page.loadAll} onCollapse={page.collapse} />
+            <DataTable columns={detailCols} data={filteredRows} />
           </CardContent>
         </Card>
       </div>

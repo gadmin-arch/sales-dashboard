@@ -5,7 +5,6 @@ import { KPICard } from '@/components/kpi-card'
 import { InfoTooltip } from '@/components/info-tooltip'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { ChartContainer, ChartLegend, ChartLegendContent } from '@/components/ui/chart'
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell } from 'recharts'
 import { DonutChart } from '@/components/donut-chart'
@@ -15,19 +14,14 @@ import { MultiSelect } from '@/components/multi-select'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { PageHeader } from '@/components/page-header'
 import { FilterCard } from '@/components/filter-card'
-import { PageSpinner, PageError } from '@/components/page-states'
+import { DashboardSkeleton, PageError } from '@/components/page-states'
 import { SearchInput } from '@/components/search-input'
-import { LoadMore, useLoadMore } from '@/components/load-more'
-import { useSort, SortHead } from '@/components/sortable'
 import { fmtCurrency, buildQuery, sameSet, getYTD, fmtShortDate as fmtDate } from '@/lib/sales-helpers'
 import { useChartFilter } from '@/hooks/use-chart-filter'
+import { DataTable } from '@/components/ui/data-table'
+import { columns, InvoiceRow } from './columns'
 
-interface InvoiceRow {
-  invId: string; invNumber: string; prj: string; leadTime: number | null; customerId: string; customer: string; invoiceDate: string; dueDate: string
-  amount: number; paid: number; outstanding: number; status: string; statusLabel: string
-  daysOverdue: number; refName: string; remarks: string; completedDate: string; paymentDate: string
-  estPaymentDays: number | null; actualPaymentDays: number | null; dueDateToPaymentDays: number | null
-}
+// Interface InvoiceRow moved to columns.tsx
 interface Option { value: string; label: string }
 interface InvoiceData {
   kpis: {
@@ -65,12 +59,8 @@ interface InvoiceData {
 const trendConfig = { Invoice: { label: 'Invoice', color: 'var(--chart-1)' }, Payment: { label: 'Payment', color: 'var(--chart-2)' } }
 const AGING_COLORS = ['var(--chart-2)', 'var(--chart-1)', 'var(--chart-3)', 'var(--chart-4)', 'var(--chart-5)']
 
-const statusClass: Record<string, string> = {
-  overdue_ongoing: 'bg-rose-500/10 text-rose-600 dark:text-rose-400',
-  overdue: 'bg-red-500/10 text-red-600 dark:text-red-400',
-  on_time: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
-  unpaid: 'bg-muted text-muted-foreground',
-}
+// Trend config and AGING_COLORS moved inline or unused here in table styling
+// statusClass moved to columns.tsx
 
 
 export default function InvoicesPage() {
@@ -125,26 +115,18 @@ export default function InvoicesPage() {
     setDateFrom(d.from); setDateTo(d.to); setCust([]); setSt([]); setPrjSt([]); setPrjFlag([]); setMinAmount(''); setMinPayment(''); setChartFilter(null); setDateType('invoice')
   }
 
-  const tableRows = useMemo(() => {
-    if (!data) return []
-    let rows = data.invoices
-    if (!search) return rows
-    const q = search.toLowerCase()
-    return rows.filter(r => [r.invNumber, r.prj, r.customer, r.refName, r.statusLabel].some(s => s?.toLowerCase().includes(q)))
-  }, [data, search])
-  const invSort = useSort(tableRows, 'invoiceDate', 'desc')
-  const invPage = useLoadMore(invSort.sorted)
+  const tableRows = data?.invoices ?? []
 
   const hasUnapplied = lFrom !== dateFrom || lTo !== dateTo || !sameSet(lCust, cust) || !sameSet(lSt, st) || !sameSet(lPrjSt, prjSt) || !sameSet(lPrjFlag, prjFlag) || lDateType !== dateType || lMinAmount !== minAmount || lMinPayment !== minPayment
 
-  if (loading && !data) return <PageSpinner />
+  if (loading && !data) return <DashboardSkeleton />
   if (error && !data) return <PageError error={error} onRetry={onClear} />
   if (!data) return null
 
   return (
     <SalesPageShell>
       <div className="bg-background text-foreground min-h-screen space-y-6">
-        <PageHeader title="Invoice Dashboard" subtitle="PT. Multi Daya Mitra" chartFilter={chartFilter} onClearFilter={() => setChartFilter(null)} />
+        <PageHeader title="Invoice Dashboard" subtitle="PT. Multi Daya Mitra" breadcrumbs={[{ label: 'Finance' }, { label: 'Invoices & Receivables' }]} chartFilter={chartFilter} onClearFilter={() => setChartFilter(null)} />
 
         <FilterCard from={lFrom} to={lTo} onDateChange={(f, t) => { setLFrom(f); setLTo(t) }} onApply={onApply} onClear={onClear} hasUnapplied={hasUnapplied} loading={loading && !!data}>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-7 items-start">
@@ -430,47 +412,7 @@ export default function InvoicesPage() {
             <SearchInput value={search} onChange={setSearch} />
           </CardHeader>
           <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader><TableRow>
-                  <SortHead label="Invoice #" column="invNumber" sortKey={invSort.sortKey} sortDir={invSort.sortDir} onSort={invSort.toggle} />
-                  <SortHead label="Order #" column="prj" sortKey={invSort.sortKey} sortDir={invSort.sortDir} onSort={invSort.toggle} />
-                  <SortHead label="Customer" column="customer" sortKey={invSort.sortKey} sortDir={invSort.sortDir} onSort={invSort.toggle} />
-                  <SortHead label="Date" column="invoiceDate" sortKey={invSort.sortKey} sortDir={invSort.sortDir} onSort={invSort.toggle} />
-                  <SortHead label="Complete Date" column="completedDate" sortKey={invSort.sortKey} sortDir={invSort.sortDir} onSort={invSort.toggle} />
-                  <SortHead label="Due Date" column="dueDate" sortKey={invSort.sortKey} sortDir={invSort.sortDir} onSort={invSort.toggle} />
-                  <SortHead label="Payment Date" column="paymentDate" sortKey={invSort.sortKey} sortDir={invSort.sortDir} onSort={invSort.toggle} />
-                  <SortHead label="Lead Time" column="leadTime" sortKey={invSort.sortKey} sortDir={invSort.sortDir} onSort={invSort.toggle} className="text-right" />
-                  <SortHead label="Amount" column="amount" sortKey={invSort.sortKey} sortDir={invSort.sortDir} onSort={invSort.toggle} className="text-right" />
-                  <SortHead label="Paid" column="paid" sortKey={invSort.sortKey} sortDir={invSort.sortDir} onSort={invSort.toggle} className="text-right" />
-                  <SortHead label="Outstanding" column="outstanding" sortKey={invSort.sortKey} sortDir={invSort.sortDir} onSort={invSort.toggle} className="text-right" />
-                  <SortHead label="Status" column="status" sortKey={invSort.sortKey} sortDir={invSort.sortDir} onSort={invSort.toggle} />
-                  <SortHead label="Overdue (days)" column="daysOverdue" sortKey={invSort.sortKey} sortDir={invSort.sortDir} onSort={invSort.toggle} className="text-right" />
-                </TableRow></TableHeader>
-                <TableBody>
-                  {tableRows.length === 0 ? <TableRow><TableCell colSpan={12} className="text-center text-muted-foreground py-8">No invoices found</TableCell></TableRow> : invPage.visible.map(r => (
-                    <TableRow key={r.invId}>
-                      <TableCell className="text-xs font-semibold text-primary">{r.invNumber}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{r.prj}</TableCell>
-                      <TableCell className="text-xs whitespace-normal break-words max-w-[280px]">{r.customer}</TableCell>
-                      <TableCell className="text-muted-foreground">{fmtDate(r.invoiceDate)}</TableCell>
-                      <TableCell className="text-muted-foreground">{r.completedDate && r.completedDate !== '-' ? fmtDate(r.completedDate) : '-'}</TableCell>
-                      <TableCell className="text-muted-foreground">{fmtDate(r.dueDate)}</TableCell>
-                      <TableCell className="text-muted-foreground">{r.paymentDate && r.paymentDate !== '-' ? fmtDate(r.paymentDate) : '-'}</TableCell>
-                      <TableCell className="text-right text-muted-foreground">{r.leadTime === null ? '-' : `${r.leadTime}d`}</TableCell>
-                      <TableCell className="text-right font-medium">{fmtRp(r.amount)}</TableCell>
-                      <TableCell className="text-right font-medium text-emerald-600 dark:text-emerald-400">{fmtRp(r.paid)}</TableCell>
-                      <TableCell className="text-right font-medium">{fmtRp(r.outstanding)}</TableCell>
-                      <TableCell>
-                        <span className={`inline-flex rounded-md px-2 py-0.5 text-[10px] font-medium ${statusClass[r.status] || 'bg-muted text-muted-foreground'}`}>{r.statusLabel}</span>
-                      </TableCell>
-                      <TableCell className={`text-right font-medium ${r.daysOverdue > 0 ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}>{r.daysOverdue > 0 ? `${r.daysOverdue}d` : '-'}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-            <LoadMore hasMore={invPage.hasMore} shown={invPage.shown} total={invPage.total} onClick={invPage.loadMore} onLoadAll={invPage.loadAll} onCollapse={invPage.collapse} />
+            <DataTable columns={columns} data={tableRows} search={search} />
           </CardContent>
         </Card>
       </div>

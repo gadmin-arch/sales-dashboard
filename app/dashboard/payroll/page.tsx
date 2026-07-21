@@ -7,6 +7,8 @@ import { Loader2, Banknote } from 'lucide-react'
 import { ExportButton } from '@/components/export-button'
 import { ThemeToggle, SalesPageShell } from '@/components/theme-toggle'
 import { useChartFilter } from '@/hooks/use-chart-filter'
+import { DashboardSkeleton, PageError } from '@/components/page-states'
+import { PageHeader } from '@/components/page-header'
 import { DateRangeRow } from '@/components/date-range-row'
 import { buildQuery, getYTD } from '@/lib/sales-helpers'
 import { useAuth } from '@/lib/auth-context'
@@ -52,8 +54,8 @@ export default function PayrollPage() {
   const onClear = () => { const d = getYTD(); setLFrom(d.from); setLTo(d.to); setDateFrom(d.from); setDateTo(d.to); setChartFilter(null) }
   const hasUnapplied = lFrom !== dateFrom || lTo !== dateTo
 
-  if (loading && !data) return <div className="flex items-center justify-center min-h-[80vh]"><Loader2 className="animate-spin h-8 w-8 text-primary" /></div>
-  if (error && !data) return <div className="flex flex-col items-center justify-center min-h-[80vh] space-y-4"><p className="text-destructive">{error}</p><Button onClick={onClear}>Retry</Button></div>
+  if (loading && !data) return <DashboardSkeleton />
+  if (error && !data) return <PageError error={error} onRetry={onClear} />
   if (!data) return null
 
   // Ensure user has access
@@ -64,24 +66,19 @@ export default function PayrollPage() {
   return (
     <SalesPageShell>
       <div className="bg-background text-foreground min-h-screen space-y-6">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-wrap items-center gap-4">
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight">Payroll & Salaries</h1>
-              <p className="text-sm text-muted-foreground">PT. Multi Daya Mitra — Employee Compensations</p>
-            </div>
-            {chartFilter && (
-              <div className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary border border-primary/20">
-                <span className="text-muted-foreground">Filtered by:</span> {chartFilter.label}
-                <button onClick={() => setChartFilter(null)} className="ml-1 hover:bg-primary/20 rounded-full p-0.5"><div className="h-4 w-4 flex items-center justify-center">✕</div></button>
-              </div>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <ExportButton data={data?.payroll?.rows || []} filename="payroll.csv" />
-            <ThemeToggle />
-          </div>
-        </div>
+        <PageHeader
+          title="Payroll & Salaries"
+          subtitle="PT. Multi Daya Mitra — Employee Compensations"
+          breadcrumbs={[{ label: 'Payroll' }, { label: 'Payroll & Salaries' }]}
+          chartFilter={chartFilter}
+          onClearFilter={() => setChartFilter(null)}
+          actions={
+            <>
+              <ExportButton data={data?.payroll?.rows || []} filename="payroll.csv" />
+              <ThemeToggle />
+            </>
+          }
+        />
 
         <Card><CardContent className="pt-5">
           <DateRangeRow from={lFrom} to={lTo} onChange={(f, t) => { setLFrom(f); setLTo(t) }} />

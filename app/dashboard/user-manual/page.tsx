@@ -7,7 +7,7 @@ import {
   Lightbulb, ChevronRight, LogIn, RefreshCw, SlidersHorizontal, MousePointerClick,
   Info, Table2, HelpCircle
 } from 'lucide-react'
-import { PageSpinner } from '@/components/page-states'
+import { DashboardSkeleton } from '@/components/page-states'
 import { SalesPageShell } from '@/components/theme-toggle'
 
 /* ---------- small building blocks ---------- */
@@ -84,7 +84,7 @@ export default function UserManualPage() {
   const roles = user?.roles as Record<string, boolean> | undefined
 
   if (isLoading) {
-    return <PageSpinner />
+    return <DashboardSkeleton />
   }
 
   const activeRoles = roles ? Object.keys(roles).filter((roleKey) => roles[roleKey]) : []

@@ -7,6 +7,8 @@ import { getFinanceAPData } from './finance-ap'
 import { getAllReports } from './reports'
 import { isMaterial, CostControlFilter } from './cost-control'
 import { getAllSalesUsers, getTeamNameSync } from './sales-users'
+import { findAccessUserByEmail } from './users'
+import { parseDate } from '@/lib/utils-date-currency'
 
 export interface ProjectDashboardData {
   prjId: string
@@ -44,7 +46,8 @@ export async function getProjectDashboardData(f: CostControlFilter = {}): Promis
     overtimeRes,
     mbdRes,
     mbRes,
-    salesUsers
+    salesUsers,
+    accessUser
   ] = await Promise.all([
     getAllOrders(),
     getAllPurchaseOrders(),
@@ -56,10 +59,29 @@ export async function getProjectDashboardData(f: CostControlFilter = {}): Promis
     fetchAllRows(GOOGLE_CONFIG.payroll.spreadsheetId, 'meal_benefit_details'),
     fetchAllRows(GOOGLE_CONFIG.payroll.spreadsheetId, 'meal_benefits'),
     getAllSalesUsers(),
+    f.userEmail ? findAccessUserByEmail(f.userEmail) : Promise.resolve(null),
   ])
 
   // Apply filters to projects first
   let projects = allProjects
+  if (f.userEmail) {
+    const currentUser = salesUsers.find(u => u.email.toLowerCase() === f.userEmail!.toLowerCase())
+    const userSite = currentUser?.siteId?.trim().toUpperCase() || ''
+    const isAdmin = accessUser?.admin || false
+
+    projects = projects.filter(p => {
+      if (isAdmin) return true // Admins bypass site visibility restrictions
+
+      const peTeamUpper = p.prjPeSiteId?.toUpperCase() || ''
+
+      if (userSite === 'HO' || userSite === '') {
+        return true
+      } else {
+        return peTeamUpper.includes(userSite)
+      }
+    })
+  }
+
   if (f.salesUser && f.salesUser.length > 0) {
     projects = projects.filter(p => f.salesUser!.includes(p.prjOwner))
   }
@@ -82,13 +104,18 @@ export async function getProjectDashboardData(f: CostControlFilter = {}): Promis
     projects = projects.filter(p => f.peTeam!.some(team => (p.prjPeSiteId || '').split(',').map(s => s.trim()).includes(team)))
   }
   if (f.dateFrom && f.dateTo) {
-    const fromTime = new Date(f.dateFrom).getTime()
-    const toTime = new Date(f.dateTo).getTime()
+    const fromTime = parseDate(f.dateFrom)?.getTime() || 0
+    let toTime = parseDate(f.dateTo)?.getTime() || Infinity
+    if (toTime !== Infinity) {
+      toTime += 24 * 60 * 60 * 1000 - 1 // end of day
+    }
     projects = projects.filter(p => {
       let dStr = p.prjPoDate
+      if (!dStr) dStr = p.prjStartDate // Fallback for Internal projects without PO date
       if (!dStr) dStr = p.createdAt
       if (!dStr) return false
-      const pTime = new Date(dStr).getTime()
+      const pTime = parseDate(dStr)?.getTime()
+      if (!pTime) return false
       return pTime >= fromTime && pTime <= toTime
     })
   }
@@ -317,5 +344,5 @@ export async function getProjectDashboardData(f: CostControlFilter = {}): Promis
     }
   })
 
-  return result.filter(r => (r.budgetMaterial + r.budgetService) > 0 || (r.spentMaterial + r.spentService) > 0)
+  return result
 }

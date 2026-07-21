@@ -2,9 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { KPICard } from '@/components/kpi-card'
-import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table'
 import { ChartContainer } from '@/components/ui/chart'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts'
 import { DonutChart } from '@/components/donut-chart'
@@ -13,11 +11,12 @@ import { SalesPageShell } from '@/components/theme-toggle'
 import { MultiSelect } from '@/components/multi-select'
 import { PageHeader } from '@/components/page-header'
 import { FilterCard } from '@/components/filter-card'
-import { PageSpinner, PageError } from '@/components/page-states'
+import { DashboardSkeleton, PageError } from '@/components/page-states'
 import { SearchInput } from '@/components/search-input'
-import { LoadMore } from '@/components/load-more'
-import { SortHead } from '@/components/sortable'
 import { useServerRows } from '@/hooks/use-server-rows'
+import { DataTable } from '@/components/ui/data-table'
+import { DataTableColumnHeader } from '@/components/ui/data-table-column-header'
+import { ColumnDef } from '@tanstack/react-table'
 import { fmtCurrency, buildQuery, sameSet, getYTD, fmtShortDate as fmtDate, truncLabel as truncTick } from '@/lib/sales-helpers'
 import { useChartFilter } from '@/hooks/use-chart-filter'
 import { ExportButton } from '@/components/export-button'
@@ -56,6 +55,16 @@ const statusClass: Record<string, string> = {
 // Stable fallback while data is loading — a fresh `?? []` per render would
 // retrigger useServerRows' reset effect in a loop.
 const EMPTY_ROWS: PORow[] = []
+
+const columns: ColumnDef<PORow>[] = [
+  { accessorKey: 'poNumber', header: ({ column }) => <DataTableColumnHeader column={column} title="PO Number" />, cell: ({ row }) => <span className="font-medium text-foreground">{row.original.poNumber}</span> },
+  { accessorKey: 'poDate', header: ({ column }) => <DataTableColumnHeader column={column} title="Date" />, cell: ({ row }) => <span className="text-muted-foreground">{fmtDate(row.original.poDate)}</span> },
+  { accessorKey: 'vendor', header: ({ column }) => <DataTableColumnHeader column={column} title="Vendor" />, cell: ({ row }) => <span className="truncate max-w-[150px] inline-block">{row.original.vendor}</span> },
+  { accessorKey: 'projects', header: ({ column }) => <DataTableColumnHeader column={column} title="Project(s)" />, cell: ({ row }) => <span className="truncate max-w-[150px] inline-block text-muted-foreground">{row.original.projects || '-'}</span> },
+  { accessorKey: 'user', header: ({ column }) => <DataTableColumnHeader column={column} title="Requester" />, cell: ({ row }) => <span className="truncate max-w-[120px] inline-block text-muted-foreground">{row.original.user || '-'}</span> },
+  { accessorKey: 'amount', header: ({ column }) => <DataTableColumnHeader column={column} title="Amount" />, cell: ({ row }) => <span className="font-semibold text-foreground">{fmtCurrency(row.original.amount, 'IDR')}</span> },
+  { accessorKey: 'statusLabel', header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />, cell: ({ row }) => <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${statusClass[row.original.status] || 'bg-muted text-muted-foreground'}`}>{row.original.statusLabel}</span> },
+]
 
 export default function PurchaseOrdersPage() {
   const [data, setData] = useState<POData | null>(null)
@@ -113,7 +122,7 @@ export default function PurchaseOrdersPage() {
 
   const hasUnapplied = lFrom !== dateFrom || lTo !== dateTo || !sameSet(lVen, ven) || !sameSet(lPrj, prj) || !sameSet(lPt, pt) || !sameSet(lSt, st) || !sameSet(lIt, it) || !sameSet(lUsr, usr)
 
-  if (loading && !data) return <PageSpinner />
+  if (loading && !data) return <DashboardSkeleton />
   if (error && !data) return <PageError error={error} onRetry={onClear} />
   if (!data) return null
 
@@ -123,7 +132,7 @@ export default function PurchaseOrdersPage() {
   return (
     <SalesPageShell>
       <div className="bg-background text-foreground min-h-screen space-y-6">
-        <PageHeader title="Purchase Orders & Spend" subtitle="PT. Multi Daya Mitra — Procurement Spend" chartFilter={chartFilter} onClearFilter={() => setChartFilter(null)} />
+        <PageHeader title="Purchase Orders & Spend" subtitle="PT. Multi Daya Mitra — Procurement Spend" breadcrumbs={[{ label: 'Purchasing' }, { label: 'Purchase Orders' }]} chartFilter={chartFilter} onClearFilter={() => setChartFilter(null)} />
 
         <FilterCard from={lFrom} to={lTo} onDateChange={(f, t) => { setLFrom(f); setLTo(t) }} onApply={onApply} onClear={onClear} hasUnapplied={hasUnapplied} loading={loading && !!data}>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 items-start">
@@ -246,43 +255,17 @@ export default function PurchaseOrdersPage() {
             <SearchInput value={po.search} onChange={po.setSearch} />
           </CardHeader>
           <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader><TableRow>
-                  <SortHead label="PO #" column="poNumber" sortKey={po.sortKey} sortDir={po.sortDir} onSort={po.toggle} />
-                  <SortHead label="Date" column="poDate" sortKey={po.sortKey} sortDir={po.sortDir} onSort={po.toggle} />
-                  <SortHead label="Vendor" column="vendor" sortKey={po.sortKey} sortDir={po.sortDir} onSort={po.toggle} />
-                  <SortHead label="User" column="user" sortKey={po.sortKey} sortDir={po.sortDir} onSort={po.toggle} />
-                  <SortHead label="Project" column="projects" sortKey={po.sortKey} sortDir={po.sortDir} onSort={po.toggle} />
-                  <SortHead label="Net" column="net" sortKey={po.sortKey} sortDir={po.sortDir} onSort={po.toggle} className="text-right" />
-                  <SortHead label="PPN" column="ppn" sortKey={po.sortKey} sortDir={po.sortDir} onSort={po.toggle} className="text-right" />
-                  <SortHead label="Amount" column="amount" sortKey={po.sortKey} sortDir={po.sortDir} onSort={po.toggle} className="text-right" />
-                  <SortHead label="Payment" column="paymentTypeLabel" sortKey={po.sortKey} sortDir={po.sortDir} onSort={po.toggle} />
-                  <SortHead label="PPH" column="pph" sortKey={po.sortKey} sortDir={po.sortDir} onSort={po.toggle} className="text-right" />
-                  <SortHead label="Delivery" column="deliveryDate" sortKey={po.sortKey} sortDir={po.sortDir} onSort={po.toggle} />
-                  <SortHead label="Status" column="status" sortKey={po.sortKey} sortDir={po.sortDir} onSort={po.toggle} />
-                </TableRow></TableHeader>
-                <TableBody>
-                  {po.rows.length === 0 ? <TableRow><TableCell colSpan={12} className="text-center text-muted-foreground py-8">No purchase orders found</TableCell></TableRow> : po.rows.map(r => (
-                    <TableRow key={r.poNumber}>
-                      <TableCell className="text-xs font-semibold text-primary whitespace-nowrap">{r.poNumber}</TableCell>
-                      <TableCell className="text-muted-foreground whitespace-nowrap">{fmtDate(r.poDate)}</TableCell>
-                      <TableCell className="max-w-[200px] truncate" title={r.vendor}>{r.vendor}</TableCell>
-                      <TableCell className="max-w-[140px] truncate text-xs" title={r.user}>{r.user}</TableCell>
-                      <TableCell className="max-w-[160px] truncate text-xs text-muted-foreground" title={r.projects}>{r.projects}</TableCell>
-                      <TableCell className="text-right">{fmtRp(r.net)}</TableCell>
-                      <TableCell className="text-right text-muted-foreground">{fmtRp(r.ppn)}</TableCell>
-                      <TableCell className="text-right font-medium">{fmtRp(r.amount)}</TableCell>
-                      <TableCell className="text-xs">{r.paymentTypeLabel}</TableCell>
-                      <TableCell className="text-right text-muted-foreground">{fmtRp(r.pph)}</TableCell>
-                      <TableCell className="text-muted-foreground whitespace-nowrap">{fmtDate(r.deliveryDate)}</TableCell>
-                      <TableCell><span className={`inline-flex rounded-md px-2 py-0.5 text-[10px] font-medium ${statusClass[r.status] || 'bg-muted text-muted-foreground'}`}>{r.statusLabel}</span></TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-            <LoadMore hasMore={po.hasMore} shown={po.shown} total={po.total} onClick={po.loadMore} onLoadAll={po.loadAll} onCollapse={po.collapse} />
+            <DataTable 
+              columns={columns} 
+              data={po.rows} 
+              manualPagination={true}
+              pageCount={po.pageCount}
+              pagination={po.pagination}
+              onPaginationChange={po.onPaginationChange}
+              manualSorting={true}
+              sorting={po.sorting}
+              onSortingChange={po.onSortingChange}
+            />
           </CardContent>
         </Card>
       </div>

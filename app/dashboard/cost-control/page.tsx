@@ -10,7 +10,7 @@ import Link from 'next/link'
 import { MultiSelect } from '@/components/multi-select'
 import { PageHeader } from '@/components/page-header'
 import { FilterCard } from '@/components/filter-card'
-import { PageSpinner, PageError } from '@/components/page-states'
+import { DashboardSkeleton, PageError } from '@/components/page-states'
 import { SearchInput } from '@/components/search-input'
 import { LoadMore, useLoadMore } from '@/components/load-more'
 import { useSort, SortHead } from '@/components/sortable'
@@ -274,7 +274,7 @@ export default function CostControlPage() {
 
   const hasUnapplied = lFrom !== dateFrom || lTo !== dateTo || !sameSet(lSu, su) || !sameSet(lOt, ot) || !sameSet(lPs, ps) || !sameSet(lInv, inv) || !sameSet(lPrjFlag, prjFlag) || !sameSet(lPePic, pePic) || !sameSet(lPeTeam, peTeam)
 
-  if (loading && !data) return <PageSpinner />
+  if (loading && !data) return <DashboardSkeleton />
   if (error && !data) return <PageError error={error} onRetry={onClear} />
   if (!data) return null
 
@@ -283,7 +283,7 @@ export default function CostControlPage() {
       <div className="bg-background text-foreground min-h-screen space-y-6">
         <PageHeader 
           title="Cost Control" 
-          subtitle="PT. Multi Daya Mitra — Project Budget vs Actual Spend" 
+          subtitle="PT. Multi Daya Mitra — Project Budget vs Actual Spend" breadcrumbs={[{ label: 'Cost Control' }, { label: 'Cost Control Overview' }]} 
           actions={
             <Link
               href="/dashboard/cost-control/workers"

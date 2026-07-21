@@ -11,6 +11,11 @@ export function parseDate(str: string | null | undefined): Date | null {
     const [, d, m, y] = dashMatch
     return new Date(parseInt(y), parseInt(m) - 1, parseInt(d))
   }
+  const isoDashMatch = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/)
+  if (isoDashMatch) {
+    const [, y, m, d] = isoDashMatch
+    return new Date(parseInt(y), parseInt(m) - 1, parseInt(d))
+  }
   const iso = new Date(str)
   return isNaN(iso.getTime()) ? null : iso
 }
@@ -38,12 +43,20 @@ export function filterDataByDateRange<T>(
   to: string
 ): T[] {
   if (!from && !to) return items
+  
+  const fromDate = from ? parseDate(from) : null
+  const toDate = to ? parseDate(to) : null
+  
+  if (toDate) {
+    toDate.setHours(23, 59, 59, 999)
+  }
+
   return items.filter((item) => {
     const dStr = dateExtractor(item)
     const d = parseDate(dStr)
     if (!d) return true
-    if (from && d < new Date(from)) return false
-    if (to && d > new Date(to + 'T23:59:59')) return false
+    if (fromDate && d < fromDate) return false
+    if (toDate && d > toDate) return false
     return true
   })
 }

@@ -5,19 +5,19 @@ import { KPICard } from '@/components/kpi-card'
 import { InfoTooltip } from '@/components/info-tooltip'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { ChartContainer } from '@/components/ui/chart'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts'
 import { DollarSign, Wallet, Hash, Calendar } from 'lucide-react'
 import { SalesPageShell } from '@/components/theme-toggle'
 import { MultiSelect } from '@/components/multi-select'
-import { LoadMore, useLoadMore } from '@/components/load-more'
-import { useSort, SortHead } from '@/components/sortable'
+import { DataTable } from '@/components/ui/data-table'
+import { DataTableColumnHeader } from '@/components/ui/data-table-column-header'
+import { ColumnDef } from '@tanstack/react-table'
 import { fmtCurrency, buildQuery, sameSet, getYTD, Progress, fmtShortDate as fmtDate } from '@/lib/sales-helpers'
 import { useChartFilter } from '@/hooks/use-chart-filter'
 import { PageHeader } from '@/components/page-header'
 import { FilterCard } from '@/components/filter-card'
-import { PageSpinner, PageError } from '@/components/page-states'
+import { DashboardSkeleton, PageError } from '@/components/page-states'
 import { SearchInput } from '@/components/search-input'
 import { ExportButton } from '@/components/export-button'
 
@@ -72,21 +72,29 @@ export default function PaymentsPage() {
     const q = search.toLowerCase()
     return rows.filter(r => [r.invNumber, r.prj, r.customer, r.remarks].some(s => s?.toLowerCase().includes(q)))
   }, [data, search])
-  const paySort = useSort(tableRows, 'date', 'desc')
-  const payPage = useLoadMore(paySort.sorted)
 
   const hasUnapplied = lFrom !== dateFrom || lTo !== dateTo || !sameSet(lCust, cust)
 
-  if (loading && !data) return <PageSpinner />
+  if (loading && !data) return <DashboardSkeleton />
   if (error && !data) return <PageError error={error} onRetry={onClear} />
   if (!data) return null
 
   const maxCust = data.byCustomer[0]?.value || 1
 
+  const columns: ColumnDef<any>[] = [
+    { accessorKey: 'invNumber', header: ({ column }) => <DataTableColumnHeader column={column} title="Invoice #" />, cell: ({ row }) => <div className="max-w-[170px] whitespace-normal break-words align-top text-xs font-semibold text-primary">{row.original.invNumber}</div> },
+    { accessorKey: 'prj', header: ({ column }) => <DataTableColumnHeader column={column} title="Order #" />, cell: ({ row }) => <div className="max-w-[130px] whitespace-normal break-words align-top text-xs text-muted-foreground">{row.original.prj}</div> },
+    { accessorKey: 'customer', header: ({ column }) => <DataTableColumnHeader column={column} title="Customer" />, cell: ({ row }) => <div className="max-w-[160px] whitespace-normal break-words align-top font-medium">{row.original.customer}</div> },
+    { accessorKey: 'date', header: ({ column }) => <DataTableColumnHeader column={column} title="Date" />, cell: ({ row }) => <span className="text-muted-foreground">{fmtDate(row.original.date)}</span> },
+    { accessorKey: 'currency', header: ({ column }) => <DataTableColumnHeader column={column} title="Currency" />, cell: ({ row }) => <span className="text-muted-foreground">{row.original.currency}</span> },
+    { accessorKey: 'amount', header: ({ column }) => <DataTableColumnHeader column={column} title="Amount" className="justify-end" />, cell: ({ row }) => <div className="text-right font-medium text-[var(--chart-2)]">{fmtRp(row.original.amount)}</div> },
+    { accessorKey: 'remarks', header: ({ column }) => <DataTableColumnHeader column={column} title="Remarks" />, cell: ({ row }) => <div className="max-w-[280px] truncate text-xs text-muted-foreground" title={row.original.remarks}>{row.original.remarks || '-'}</div> },
+  ]
+
   return (
     <SalesPageShell>
       <div className="bg-background text-foreground min-h-screen space-y-6">
-        <PageHeader title="Payment Dashboard" subtitle="PT. Multi Daya Mitra" chartFilter={chartFilter} onClearFilter={() => setChartFilter(null)} />
+        <PageHeader title="Payment Dashboard" subtitle="PT. Multi Daya Mitra" breadcrumbs={[{ label: 'Finance' }, { label: 'Payments Collection' }]} chartFilter={chartFilter} onClearFilter={() => setChartFilter(null)} />
 
         <FilterCard from={lFrom} to={lTo} onDateChange={(f, t) => { setLFrom(f); setLTo(t) }} onApply={onApply} onClear={onClear} hasUnapplied={hasUnapplied} loading={loading && !!data}>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 items-start">
@@ -156,33 +164,7 @@ export default function PaymentsPage() {
             <SearchInput value={search} onChange={setSearch} />
           </CardHeader>
           <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader><TableRow>
-                  <SortHead label="Invoice #" column="invNumber" sortKey={paySort.sortKey} sortDir={paySort.sortDir} onSort={paySort.toggle} />
-                  <SortHead label="Order #" column="prj" sortKey={paySort.sortKey} sortDir={paySort.sortDir} onSort={paySort.toggle} />
-                  <SortHead label="Customer" column="customer" sortKey={paySort.sortKey} sortDir={paySort.sortDir} onSort={paySort.toggle} />
-                  <SortHead label="Date" column="date" sortKey={paySort.sortKey} sortDir={paySort.sortDir} onSort={paySort.toggle} />
-                  <SortHead label="Currency" column="currency" sortKey={paySort.sortKey} sortDir={paySort.sortDir} onSort={paySort.toggle} />
-                  <SortHead label="Amount" column="amount" sortKey={paySort.sortKey} sortDir={paySort.sortDir} onSort={paySort.toggle} className="text-right" />
-                  <TableHead className="text-xs font-medium text-muted-foreground">Remarks</TableHead>
-                </TableRow></TableHeader>
-                <TableBody>
-                  {tableRows.length === 0 ? <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">No payments found</TableCell></TableRow> : payPage.visible.map(r => (
-                    <TableRow key={r.payId}>
-                      <TableCell className="max-w-[170px] whitespace-normal break-words align-top text-xs font-semibold text-primary">{r.invNumber}</TableCell>
-                      <TableCell className="max-w-[130px] whitespace-normal break-words align-top text-xs text-muted-foreground">{r.prj}</TableCell>
-                      <TableCell className="max-w-[160px] whitespace-normal break-words align-top font-medium">{r.customer}</TableCell>
-                      <TableCell className="text-muted-foreground">{fmtDate(r.date)}</TableCell>
-                      <TableCell className="text-muted-foreground">{r.currency}</TableCell>
-                      <TableCell className="text-right font-medium chart-2">{fmtRp(r.amount)}</TableCell>
-                      <TableCell className="max-w-[280px] truncate text-xs text-muted-foreground" title={r.remarks}>{r.remarks || '-'}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-            <LoadMore hasMore={payPage.hasMore} shown={payPage.shown} total={payPage.total} onClick={payPage.loadMore} onLoadAll={payPage.loadAll} onCollapse={payPage.collapse} />
+            <DataTable columns={columns} data={tableRows} />
           </CardContent>
         </Card>
       </div>

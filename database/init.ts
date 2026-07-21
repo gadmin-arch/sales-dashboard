@@ -98,7 +98,7 @@ export async function initDatabase() {
       }
     }
   } catch (err) {
-    console.error('[db] Error initializing database tables:', err)
+    console.warn('[db] Error initializing database tables:', err instanceof Error ? err.message : err)
     throw err;
   }
 }

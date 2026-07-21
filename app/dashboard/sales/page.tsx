@@ -15,7 +15,8 @@ import { DonutChart } from '@/components/donut-chart'
 import { FileText, Briefcase, DollarSign, TrendingUp, ListTodo, ExternalLink } from 'lucide-react'
 import { ExportButton } from '@/components/export-button'
 import { ThemeToggle, SalesPageShell } from '@/components/theme-toggle'
-import { PageSpinner, PageError } from '@/components/page-states'
+import { PageHeader } from '@/components/page-header'
+import { DashboardSkeleton, PageError } from '@/components/page-states'
 import { SearchInput } from '@/components/search-input'
 import {
   fmtCurrency,
@@ -178,7 +179,7 @@ export default function SalesPage() {
   const revTooltipFormatter = (v: any, n: any) => { const pct = revTotal > 0 ? ((Number(v) / revTotal) * 100).toFixed(1) : '0.0'; return [`${fmtRp(Number(v))} (${pct}%)`, n] as [string, string] }
   const priceTotal = useMemo(() => data?.priceComposition?.reduce((s, x) => s + x.material + x.service, 0) || 0, [data])
 
-  if (loading && !data) return <PageSpinner />
+  if (loading && !data) return <DashboardSkeleton />
   if (error && !data) return <PageError error={error} onRetry={onClear} />
   if (!data) return null
 
@@ -189,24 +190,21 @@ export default function SalesPage() {
       <div className="bg-background text-foreground min-h-screen space-y-6">
 
         {/* Header */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-wrap items-center gap-4">
-            <div><h1 className="text-2xl font-bold tracking-tight">Sales Performance Dashboard</h1><p className="text-sm text-muted-foreground">PT. Multi Daya Mitra</p></div>
-            {chartFilter && (
-              <div className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary border border-primary/20">
-                <span className="text-muted-foreground">Filtered by:</span> {chartFilter.label}
-                <button onClick={() => setChartFilter(null)} className="ml-1 hover:bg-primary/20 rounded-full p-0.5"><div className="h-4 w-4 flex items-center justify-center">✕</div></button>
-              </div>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <ExportButton data={filtered} filename="sales-overview.csv" />
-            <ThemeToggle />
-            <a href="/dashboard/sales/activities" className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"><ListTodo className="h-4 w-4" /> Sales Activities <ExternalLink className="h-3 w-3" /></a>
-          </div>
-        </div>
-
-
+        <PageHeader
+          title="Sales Performance Dashboard"
+          subtitle="PT. Multi Daya Mitra"
+          breadcrumbs={[{ label: 'Sales' }, { label: 'Sales Overview' }]}
+          chartFilter={chartFilter}
+          onClearFilter={() => setChartFilter(null)}
+          actions={
+            <div className="flex items-center gap-2">
+              <ExportButton data={filtered} filename="sales-overview.csv" />
+              <a href="/dashboard/sales/activities" className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90">
+                <ListTodo className="h-4 w-4" /> Sales Activities <ExternalLink className="h-3 w-3" />
+              </a>
+            </div>
+          }
+        />
         {/* Filters */}
         <Card><CardContent className="pt-5">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-6 items-start">
@@ -261,7 +259,7 @@ export default function SalesPage() {
 
         {/* Charts Row 1 */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
-          <Card className="lg:col-span-2 overflow-visible">
+          <Card className="lg:col-span-2 overflow-visible transition-all hover:shadow-md hover:border-primary/20">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
                 Sales Revenue Trends

@@ -4,9 +4,10 @@ import { useAuth } from '@/lib/auth-context'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState, type ReactNode } from 'react'
 import Link from 'next/link'
-import { BarChart3, FileText, CreditCard, FolderOpen, LogOut, Menu, X, ListTodo, Users, Lock, ClipboardList, ShoppingCart, Store, Loader2, CalendarClock, ClipboardCheck, Banknote, Gauge, ChevronDown, ChevronRight, Shield, BookOpen } from 'lucide-react'
+import { BarChart3, FileText, CreditCard, FolderOpen, LogOut, Menu, X, ListTodo, Users, Lock, ClipboardList, ShoppingCart, Store, Loader2, CalendarClock, ClipboardCheck, Banknote, Gauge, ChevronDown, ChevronRight, Shield, BookOpen, Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { NAV, NAV_GROUPS, navItemForPath, firstAllowedHref, type Roles } from '@/lib/nav'
+import { CommandPalette } from '@/components/ui/command-palette'
 
 // Group icons mapped by department/role key
 const GROUP_ICONS: Record<string, ReactNode> = {
@@ -225,6 +226,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <BookOpen className="h-4 w-4 shrink-0 text-violet-500" />
         User Manual
       </Link>
+
+      <div className="pt-4">
+        <button 
+          onClick={() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }))}
+          className="flex w-full items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted"
+        >
+          <div className="flex items-center gap-2">
+            <Search className="h-4 w-4 shrink-0" />
+            <span>Search...</span>
+          </div>
+          <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100">
+            <span className="text-xs">⌘</span>K
+          </kbd>
+        </button>
+      </div>
     </nav>
   )
 
@@ -290,6 +306,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex h-screen bg-background overflow-hidden relative">
+      <CommandPalette />
+      
       {/* Syncing Backdrop Overlay */}
       {syncing && (
         <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm transition-all duration-300">

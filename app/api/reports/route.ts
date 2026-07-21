@@ -129,15 +129,15 @@ async function compute(searchParams: URLSearchParams) {
     const scoreBreakdown = SCORE_META.map((m) => ({ name: m.label, value: scoreCount[m.score] }))
 
     // ── Monthly trend (reports + hours) ──
-    const trendAgg: Record<string, { count: number; hours: number }> = {}
+    const trendAgg: Record<string, { count: number; hours: number; overtime: number }> = {}
     for (const r of filtered) {
       const k = formatMonth(r.reportDate)
       if (!k) continue
-      const a = (trendAgg[k] ??= { count: 0, hours: 0 })
-      a.count++; a.hours += r.reportTime
+      const a = (trendAgg[k] ??= { count: 0, hours: 0, overtime: 0 })
+      a.count++; a.hours += r.reportTime; a.overtime += (r.reportOvertime || 0)
     }
     const monthlyTrend = sortByPeriod(trendAgg, 'monthly').map(([name, v]) => ({
-      name, reports: v.count, hours: Math.round(v.hours),
+      name, reports: v.count, hours: Math.round(v.hours), overtime: Math.round(v.overtime)
     }))
 
     // ── Hours per project (combined reports × orders) ──
@@ -492,7 +492,7 @@ async function compute(searchParams: URLSearchParams) {
 }
 
 // v2: payload gained the status/time-status donut series (cache outlives deploys).
-const getData = cachedRoute('reports-v2', compute)
+const getData = cachedRoute('reports-v3', compute)
 
 export async function GET(request: NextRequest) {
   try {

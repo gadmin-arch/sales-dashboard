@@ -1,24 +1,25 @@
-import { ExportButton } from '@/components/export-button'
 'use client'
 
+import { ExportButton } from '@/components/export-button'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { KPICard } from '@/components/kpi-card'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { DonutChart } from '@/components/donut-chart'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts'
 import { ChartContainer, ChartLegend, ChartLegendContent } from '@/components/ui/chart'
-import { fmtCurrency, SortIcon, buildQuery, sameSet, getYTD } from '@/lib/sales-helpers'
+import { fmtCurrency, buildQuery, sameSet, getYTD } from '@/lib/sales-helpers'
 import { MultiSelect } from '@/components/multi-select'
 import { DateRangeRow } from '@/components/date-range-row'
-import { LoadMore, useLoadMore } from '@/components/load-more'
 import { ThemeToggle, SalesPageShell } from '@/components/theme-toggle'
 import { useChartFilter } from '@/hooks/use-chart-filter'
 import { DollarSign, TrendingUp, Users, Target } from 'lucide-react'
-import { PageSpinner, PageError } from '@/components/page-states'
+import { DashboardSkeleton, PageError } from '@/components/page-states'
+import { PageHeader } from '@/components/page-header'
 import { SearchInput } from '@/components/search-input'
+import { DataTable } from '@/components/ui/data-table'
+import { leadColumns, oppColumns, LeadRow, OppRow } from './columns'
 
 interface LeadData {
   kpis: { totalLeads: number; totalOpportunities: number; totalOppValue: number; conversionRate: number }
@@ -28,8 +29,8 @@ interface LeadData {
   leadTrend: { name: string; [key: string]: any }[]
   oppValueTrend: { name: string; value: number }[]
   topOpps: { oId: string; name: string; company: string; value: number; stage: string; status: string; assignedName: string }[]
-  leads: { leadId: string; name: string; company: string; contactPerson: string; phone: string; email: string; status: string; source: string; assignedName: string; createdAt: string; leadDate: string; notes: string }[]
-  opportunities: { oId: string; leadId: string; name: string; description: string; company: string; value: number; stage: string; probability: number; closeDate: string; status: string; assignedName: string; createdAt: string; contactPerson: string; phone: string; email: string }[]
+  leads: LeadRow[]
+  opportunities: OppRow[]
   salesUserList: { id: string; name: string }[]
   filterOptions: { leadStatuses: string[]; oppStages: string[]; oppStatuses: string[]; sources: string[] }
 }
@@ -132,12 +133,6 @@ export default function LeadsOppsPage() {
   const [lFrom, setLFrom] = useState(dateFrom), [lTo, setLTo] = useState(dateTo)
   const [lStatus, setLStatus] = useState<string[]>([]), [lAssignedTo, setLAssignedTo] = useState<string[]>([]), [lSource, setLSource] = useState<string[]>([]), [lStage, setLStage] = useState<string[]>([])
 
-  const [leadSortKey, setLeadSortKey] = useState<string>('leadId')
-  const [leadSortDir, setLeadSortDir] = useState<'asc' | 'desc'>('asc')
-
-  const [oppSortKey, setOppSortKey] = useState<string>('oId')
-  const [oppSortDir, setOppSortDir] = useState<'asc' | 'desc'>('asc')
-
   const hasUnappliedFilters = useMemo(() => {
     return lFrom !== dateFrom ||
            lTo !== dateTo ||
@@ -175,24 +170,6 @@ export default function LeadsOppsPage() {
     setDateFrom(d.from); setDateTo(d.to); setStatus([]); setAssignedTo([]); setSource([]); setStage([]); setChartFilter(null)
   }
 
-  const handleLeadSort = (key: string) => {
-    if (leadSortKey === key) {
-      setLeadSortDir(d => d === 'asc' ? 'desc' : 'asc')
-    } else {
-      setLeadSortKey(key)
-      setLeadSortDir('asc')
-    }
-  }
-
-  const handleOppSort = (key: string) => {
-    if (oppSortKey === key) {
-      setOppSortDir(d => d === 'asc' ? 'desc' : 'asc')
-    } else {
-      setOppSortKey(key)
-      setOppSortDir('asc')
-    }
-  }
-
   const filteredLeads = useMemo(() => {
     if (!data) return []
     let rows = data.leads
@@ -203,52 +180,11 @@ export default function LeadsOppsPage() {
   const filteredOpps = useMemo(() => {
     if (!data) return []
     let rows = data.opportunities
-    if (tabSearch) { const q = tabSearch.toLowerCase(); rows = rows.filter(r => [r.name, r.company, r.assignedName].some(s => s?.toLowerCase().includes(q))) }
+    // We let DataTable handle search internally via `search={tabSearch}`
     return rows
-  }, [data, tabSearch])
+  }, [data])
 
-  const sortedLeads = useMemo(() => {
-    const items = [...filteredLeads]
-    items.sort((a: any, b: any) => {
-      let aVal = a[leadSortKey], bVal = b[leadSortKey]
-      if (leadSortKey === 'leadDate') {
-        const da = a.leadDate ? new Date(a.leadDate) : new Date(0)
-        const db = b.leadDate ? new Date(b.leadDate) : new Date(0)
-        return leadSortDir === 'asc' ? da.getTime() - db.getTime() : db.getTime() - da.getTime()
-      }
-      if (typeof aVal === 'string' && typeof bVal === 'string') {
-        return leadSortDir === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal)
-      }
-      return leadSortDir === 'asc'
-        ? (aVal > bVal ? 1 : -1)
-        : (bVal > aVal ? 1 : -1)
-    })
-    return items
-  }, [filteredLeads, leadSortKey, leadSortDir])
-
-  const sortedOpps = useMemo(() => {
-    const items = [...filteredOpps]
-    items.sort((a: any, b: any) => {
-      let aVal = a[oppSortKey], bVal = b[oppSortKey]
-      if (oppSortKey === 'closeDate') {
-        const da = a.closeDate ? new Date(a.closeDate) : new Date(0)
-        const db = b.closeDate ? new Date(b.closeDate) : new Date(0)
-        return oppSortDir === 'asc' ? da.getTime() - db.getTime() : db.getTime() - da.getTime()
-      }
-      if (typeof aVal === 'string' && typeof bVal === 'string') {
-        return oppSortDir === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal)
-      }
-      return oppSortDir === 'asc'
-        ? (aVal > bVal ? 1 : -1)
-        : (bVal > aVal ? 1 : -1)
-    })
-    return items
-  }, [filteredOpps, oppSortKey, oppSortDir])
-
-  const leadPage = useLoadMore(sortedLeads)
-  const oppPage = useLoadMore(sortedOpps)
-
-  if (loading && !data) return <PageSpinner />
+  if (loading && !data) return <DashboardSkeleton />
   if (error && !data) return <PageError error={error} onRetry={onClear} />
   if (!data) return null
 
@@ -264,21 +200,18 @@ export default function LeadsOppsPage() {
   return (
     <SalesPageShell>
       <div className="bg-background text-foreground min-h-screen space-y-6">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-wrap items-center gap-4">
-            <div><h1 className="text-2xl font-bold tracking-tight">Leads & Opportunities</h1><p className="text-sm text-muted-foreground">PT. Multi Daya Mitra</p></div>
-            {chartFilter && (
-              <div className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary border border-primary/20">
-                <span className="text-muted-foreground">Filtered by:</span> {chartFilter.label}
-                <button onClick={() => setChartFilter(null)} className="ml-1 hover:bg-primary/20 rounded-full p-0.5"><div className="h-4 w-4 flex items-center justify-center">✕</div></button>
-              </div>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <ExportButton data={tab === 'leads' ? sortedLeads : sortedOpps} filename="leads-opps.csv" />
-            <ThemeToggle />
-          </div>
-        </div>
+        <PageHeader
+          title="Leads & Opportunities"
+          subtitle="PT. Multi Daya Mitra"
+          breadcrumbs={[{ label: 'Sales' }, { label: 'Leads & Opportunities' }]}
+          chartFilter={chartFilter}
+          onClearFilter={() => setChartFilter(null)}
+          actions={
+            <div className="flex items-center gap-2">
+              <ExportButton data={tab === 'leads' ? filteredLeads : filteredOpps} filename="leads-opps.csv" />
+            </div>
+          }
+        />
 
         {/* Filters */}
         <Card><CardContent className="pt-5">
@@ -372,124 +305,11 @@ export default function LeadsOppsPage() {
             <SearchInput value={tabSearch} onChange={setTabSearch} placeholder="Search name/company..." className="w-64" />
           </CardHeader>
           <CardContent className="p-0">
-            <Table>
-              {tab === 'leads' ? (
-                <>
-                  <TableHeader><TableRow>
-                    <TableHead className={thClass} onClick={() => handleLeadSort('leadId')}>
-                      <div className="flex items-center gap-1">Lead ID <SortIcon column="leadId" sortKey={leadSortKey} sortDir={leadSortDir} /></div>
-                    </TableHead>
-                    <TableHead className={thClass} onClick={() => handleLeadSort('leadDate')}>
-                      <div className="flex items-center gap-1">Date <SortIcon column="leadDate" sortKey={leadSortKey} sortDir={leadSortDir} /></div>
-                    </TableHead>
-                    <TableHead className={thClass} onClick={() => handleLeadSort('company')}>
-                      <div className="flex items-center gap-1">Company <SortIcon column="company" sortKey={leadSortKey} sortDir={leadSortDir} /></div>
-                    </TableHead>
-                    <TableHead className={thClass} onClick={() => handleLeadSort('contactPerson')}>
-                      <div className="flex items-center gap-1">Contact Person <SortIcon column="contactPerson" sortKey={leadSortKey} sortDir={leadSortDir} /></div>
-                    </TableHead>
-                    <TableHead className={thClass} onClick={() => handleLeadSort('status')}>
-                      <div className="flex items-center gap-1">Rating <SortIcon column="status" sortKey={leadSortKey} sortDir={leadSortDir} /></div>
-                    </TableHead>
-                    <TableHead className={thClass} onClick={() => handleLeadSort('source')}>
-                      <div className="flex items-center gap-1">Source <SortIcon column="source" sortKey={leadSortKey} sortDir={leadSortDir} /></div>
-                    </TableHead>
-                    <TableHead className={thClass} onClick={() => handleLeadSort('notes')}>
-                      <div className="flex items-center gap-1">Remarks <SortIcon column="notes" sortKey={leadSortKey} sortDir={leadSortDir} /></div>
-                    </TableHead>
-                    <TableHead className={thClass} onClick={() => handleLeadSort('assignedName')}>
-                      <div className="flex items-center gap-1">Assigned To <SortIcon column="assignedName" sortKey={leadSortKey} sortDir={leadSortDir} /></div>
-                    </TableHead>
-                  </TableRow></TableHeader>
-                  <TableBody>
-                    {sortedLeads.length === 0 ? <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">No leads found</TableCell></TableRow> : leadPage.visible.map(l => (
-                      <TableRow key={l.leadId}>
-                        <TableCell className="text-xs font-semibold text-primary">{l.leadId}</TableCell>
-                        <TableCell className="text-xs whitespace-nowrap">{l.leadDate}</TableCell>
-                        <TableCell className="text-xs max-w-[140px] truncate">{l.company}</TableCell>
-                        <TableCell className="text-xs">
-                          <span className="font-medium">{l.contactPerson || '-'}</span>
-                          {(l.phone || l.email) && (
-                            <div className="text-[10px] text-muted-foreground">
-                              {l.phone} {l.phone && l.email && '|'} {l.email}
-                            </div>
-                          )}
-                        </TableCell>
-                        <TableCell><span className="inline-flex rounded-md px-2 py-0.5 text-[10px] font-medium bg-muted text-muted-foreground border border-border">{l.status || '-'}</span></TableCell>
-                        <TableCell className="text-xs">{l.source}</TableCell>
-                        <TableCell className="text-xs max-w-[200px] truncate" title={l.notes}>{l.notes || '-'}</TableCell>
-                        <TableCell className="text-xs">{l.assignedName}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </>
-              ) : (
-                <>
-                  <TableHeader><TableRow>
-                    <TableHead className={thClass} onClick={() => handleOppSort('oId')}>
-                      <div className="flex items-center gap-1">Opp ID <SortIcon column="oId" sortKey={oppSortKey} sortDir={oppSortDir} /></div>
-                    </TableHead>
-                    <TableHead className={thClass} onClick={() => handleOppSort('leadId')}>
-                      <div className="flex items-center gap-1">Lead ID <SortIcon column="leadId" sortKey={oppSortKey} sortDir={oppSortDir} /></div>
-                    </TableHead>
-                    <TableHead className={thClass} onClick={() => handleOppSort('name')}>
-                      <div className="flex items-center gap-1">Name <SortIcon column="name" sortKey={oppSortKey} sortDir={oppSortDir} /></div>
-                    </TableHead>
-                    <TableHead className={thClass} onClick={() => handleOppSort('company')}>
-                      <div className="flex items-center gap-1">Company <SortIcon column="company" sortKey={oppSortKey} sortDir={oppSortDir} /></div>
-                    </TableHead>
-                    <TableHead className={thClass} onClick={() => handleOppSort('contactPerson')}>
-                      <div className="flex items-center gap-1">Contact Person <SortIcon column="contactPerson" sortKey={oppSortKey} sortDir={oppSortDir} /></div>
-                    </TableHead>
-                    <TableHead className={thClass + " text-right"} onClick={() => handleOppSort('value')}>
-                      <div className="flex items-center justify-end gap-1">Value <SortIcon column="value" sortKey={oppSortKey} sortDir={oppSortDir} /></div>
-                    </TableHead>
-                    <TableHead className={thClass} onClick={() => handleOppSort('closeDate')}>
-                      <div className="flex items-center gap-1">Close Date <SortIcon column="closeDate" sortKey={oppSortKey} sortDir={oppSortDir} /></div>
-                    </TableHead>
-                    <TableHead className={thClass} onClick={() => handleOppSort('stage')}>
-                      <div className="flex items-center gap-1">Type <SortIcon column="stage" sortKey={oppSortKey} sortDir={oppSortDir} /></div>
-                    </TableHead>
-                    <TableHead className={thClass} onClick={() => handleOppSort('probability')}>
-                      <div className="flex items-center gap-1">Probability <SortIcon column="probability" sortKey={oppSortKey} sortDir={oppSortDir} /></div>
-                    </TableHead>
-                    <TableHead className={thClass} onClick={() => handleOppSort('status')}>
-                      <div className="flex items-center gap-1">Status <SortIcon column="status" sortKey={oppSortKey} sortDir={oppSortDir} /></div>
-                    </TableHead>
-                    <TableHead className={thClass} onClick={() => handleOppSort('assignedName')}>
-                      <div className="flex items-center gap-1">Assigned To <SortIcon column="assignedName" sortKey={oppSortKey} sortDir={oppSortDir} /></div>
-                    </TableHead>
-                  </TableRow></TableHeader>
-                  <TableBody>
-                    {sortedOpps.length === 0 ? <TableRow><TableCell colSpan={11} className="text-center text-muted-foreground py-8">No opportunities found</TableCell></TableRow> : oppPage.visible.map(o => (
-                      <TableRow key={o.oId}>
-                        <TableCell className="text-xs font-semibold text-primary">{o.oId}</TableCell>
-                        <TableCell className="text-xs font-medium text-muted-foreground">{o.leadId || '-'}</TableCell>
-                        <TableCell className="max-w-[150px] truncate" title={o.name}>{o.name}</TableCell>
-                        <TableCell className="text-xs max-w-[120px] truncate">{o.company}</TableCell>
-                        <TableCell className="text-xs">
-                          <span className="font-medium">{o.contactPerson || '-'}</span>
-                          {(o.phone || o.email) && (
-                            <div className="text-[10px] text-muted-foreground">
-                              {o.phone} {o.phone && o.email && '|'} {o.email}
-                            </div>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right text-xs font-medium">{fmtCurrency(o.value)}</TableCell>
-                        <TableCell className="text-xs whitespace-nowrap">{o.closeDate}</TableCell>
-                        <TableCell><span className="inline-flex rounded-md px-2 py-0.5 text-[10px] font-medium bg-muted text-muted-foreground border border-border">{o.stage || '-'}</span></TableCell>
-                        <TableCell className="text-xs font-medium">{o.probability}%</TableCell>
-                        <TableCell><span className="inline-flex rounded-md px-2 py-0.5 text-[10px] font-medium bg-muted text-muted-foreground border border-border">{o.status || '-'}</span></TableCell>
-                        <TableCell className="text-xs">{o.assignedName}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </>
-              )}
-            </Table>
-            {tab === 'leads'
-              ? <LoadMore hasMore={leadPage.hasMore} shown={leadPage.shown} total={leadPage.total} onClick={leadPage.loadMore} onLoadAll={leadPage.loadAll} onCollapse={leadPage.collapse} />
-              : <LoadMore hasMore={oppPage.hasMore} shown={oppPage.shown} total={oppPage.total} onClick={oppPage.loadMore} onLoadAll={oppPage.loadAll} onCollapse={oppPage.collapse} />}
+            {tab === 'leads' ? (
+              <DataTable columns={leadColumns} data={filteredLeads} search={tabSearch} />
+            ) : (
+              <DataTable columns={oppColumns} data={filteredOpps} search={tabSearch} />
+            )}
           </CardContent>
         </Card>
       </div>

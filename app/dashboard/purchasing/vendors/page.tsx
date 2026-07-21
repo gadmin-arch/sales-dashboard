@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { KPICard } from '@/components/kpi-card'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table'
 import { ChartContainer, ChartLegend, ChartLegendContent } from '@/components/ui/chart'
 import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts'
 import { Store, Wallet, Crown, Users } from 'lucide-react'
@@ -12,10 +11,11 @@ import { SalesPageShell } from '@/components/theme-toggle'
 import { MultiSelect } from '@/components/multi-select'
 import { PageHeader } from '@/components/page-header'
 import { FilterCard } from '@/components/filter-card'
-import { PageSpinner, PageError } from '@/components/page-states'
+import { DashboardSkeleton, PageError } from '@/components/page-states'
 import { SearchInput } from '@/components/search-input'
-import { LoadMore, useLoadMore } from '@/components/load-more'
-import { useSort, SortHead } from '@/components/sortable'
+import { DataTable } from '@/components/ui/data-table'
+import { DataTableColumnHeader } from '@/components/ui/data-table-column-header'
+import { ColumnDef } from '@tanstack/react-table'
 import { fmtCurrency, buildQuery, sameSet, getYTD, fmtShortDate as fmtDate, truncLabel as truncTick } from '@/lib/sales-helpers'
 import { ExportButton } from '@/components/export-button'
 
@@ -74,8 +74,6 @@ export default function VendorScorecardPage() {
     const q = search.toLowerCase()
     return data.vendors.filter(r => [r.vendor, r.vendorId, r.paymentTypes].some(s => s?.toLowerCase().includes(q)))
   }, [data, search])
-  const vSort = useSort(tableRows, 'totalSpend', 'desc')
-  const vPage = useLoadMore(vSort.sorted)
 
   const onBarClick = (name: string) => {
     setSearch(name)
@@ -83,17 +81,28 @@ export default function VendorScorecardPage() {
 
   const hasUnapplied = lFrom !== dateFrom || lTo !== dateTo || !sameSet(lPt, pt) || lMin !== minSpend
 
-  if (loading && !data) return <PageSpinner />
+  if (loading && !data) return <DashboardSkeleton />
   if (error && !data) return <PageError error={error} onRetry={onClear} />
   if (!data) return null
 
   const axis = { stroke: 'var(--muted-foreground)', tickLine: false, className: 'text-xs' } as const
   const tip = { contentStyle: { background: 'var(--background)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 } }
 
+  const columns: ColumnDef<any>[] = [
+    { accessorKey: 'vendor', header: ({ column }) => <DataTableColumnHeader column={column} title="Vendor" />, cell: ({ row }) => <div className="max-w-[240px] truncate font-medium" title={row.original.vendor}>{row.original.vendor}</div> },
+    { accessorKey: 'poCount', header: ({ column }) => <DataTableColumnHeader column={column} title="POs" className="justify-end" />, cell: ({ row }) => <div className="text-right text-muted-foreground">{row.original.poCount.toLocaleString('en-US')}</div> },
+    { accessorKey: 'totalSpend', header: ({ column }) => <DataTableColumnHeader column={column} title="Total Spend" className="justify-end" />, cell: ({ row }) => <div className="text-right font-medium">{fmtRp(row.original.totalSpend)}</div> },
+    { accessorKey: 'avgPO', header: ({ column }) => <DataTableColumnHeader column={column} title="Avg PO" className="justify-end" />, cell: ({ row }) => <div className="text-right">{fmtRp(row.original.avgPO)}</div> },
+    { accessorKey: 'sharePct', header: ({ column }) => <DataTableColumnHeader column={column} title="Share" className="justify-end" />, cell: ({ row }) => <div className="text-right text-muted-foreground">{row.original.sharePct}%</div> },
+    { accessorKey: 'quotesCount', header: ({ column }) => <DataTableColumnHeader column={column} title="Quotes" className="justify-end" />, cell: ({ row }) => <div className="text-right text-muted-foreground">{row.original.quotesCount.toLocaleString('en-US')}</div> },
+    { accessorKey: 'paymentTypes', header: ({ column }) => <DataTableColumnHeader column={column} title="Payment" />, cell: ({ row }) => <span className="text-xs text-muted-foreground">{row.original.paymentTypes || '-'}</span> },
+    { accessorKey: 'lastPoDate', header: ({ column }) => <DataTableColumnHeader column={column} title="Last PO" />, cell: ({ row }) => <span className="text-muted-foreground whitespace-nowrap">{fmtDate(row.original.lastPoDate)}</span> },
+  ]
+
   return (
     <SalesPageShell>
       <div className="bg-background text-foreground min-h-screen space-y-6">
-        <PageHeader title="Vendor Scorecard" subtitle="PT. Multi Daya Mitra — Supplier Spend"  actions={<ExportButton data={tableRows} filename="purchasing-vendors.csv" />} />
+        <PageHeader title="Vendor Scorecard" subtitle="PT. Multi Daya Mitra — Supplier Spend" breadcrumbs={[{ label: 'Purchasing' }, { label: 'Vendor Scorecard' }]}  actions={<ExportButton data={tableRows} filename="purchasing-vendors.csv" />} />
 
         <FilterCard from={lFrom} to={lTo} onDateChange={(f, t) => { setLFrom(f); setLTo(t) }} onApply={onApply} onClear={onClear} hasUnapplied={hasUnapplied} loading={loading && !!data}>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 items-start">
@@ -148,35 +157,7 @@ export default function VendorScorecardPage() {
             <SearchInput value={search} onChange={setSearch} />
           </CardHeader>
           <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader><TableRow>
-                  <SortHead label="Vendor" column="vendor" sortKey={vSort.sortKey} sortDir={vSort.sortDir} onSort={vSort.toggle} />
-                  <SortHead label="POs" column="poCount" sortKey={vSort.sortKey} sortDir={vSort.sortDir} onSort={vSort.toggle} className="text-right" />
-                  <SortHead label="Total Spend" column="totalSpend" sortKey={vSort.sortKey} sortDir={vSort.sortDir} onSort={vSort.toggle} className="text-right" />
-                  <SortHead label="Avg PO" column="avgPO" sortKey={vSort.sortKey} sortDir={vSort.sortDir} onSort={vSort.toggle} className="text-right" />
-                  <SortHead label="Share" column="sharePct" sortKey={vSort.sortKey} sortDir={vSort.sortDir} onSort={vSort.toggle} className="text-right" />
-                  <SortHead label="Quotes" column="quotesCount" sortKey={vSort.sortKey} sortDir={vSort.sortDir} onSort={vSort.toggle} className="text-right" />
-                  <SortHead label="Payment" column="paymentTypes" sortKey={vSort.sortKey} sortDir={vSort.sortDir} onSort={vSort.toggle} />
-                  <SortHead label="Last PO" column="lastPoDate" sortKey={vSort.sortKey} sortDir={vSort.sortDir} onSort={vSort.toggle} />
-                </TableRow></TableHeader>
-                <TableBody>
-                  {tableRows.length === 0 ? <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">No vendors found</TableCell></TableRow> : vPage.visible.map(r => (
-                    <TableRow key={r.vendorId}>
-                      <TableCell className="max-w-[240px] truncate font-medium" title={r.vendor}>{r.vendor}</TableCell>
-                      <TableCell className="text-right text-muted-foreground">{r.poCount.toLocaleString('en-US')}</TableCell>
-                      <TableCell className="text-right font-medium">{fmtRp(r.totalSpend)}</TableCell>
-                      <TableCell className="text-right">{fmtRp(r.avgPO)}</TableCell>
-                      <TableCell className="text-right text-muted-foreground">{r.sharePct}%</TableCell>
-                      <TableCell className="text-right text-muted-foreground">{r.quotesCount.toLocaleString('en-US')}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{r.paymentTypes || '-'}</TableCell>
-                      <TableCell className="text-muted-foreground whitespace-nowrap">{fmtDate(r.lastPoDate)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-            <LoadMore hasMore={vPage.hasMore} shown={vPage.shown} total={vPage.total} onClick={vPage.loadMore} onLoadAll={vPage.loadAll} onCollapse={vPage.collapse} />
+            <DataTable columns={columns} data={tableRows} />
           </CardContent>
         </Card>
       </div>

@@ -59,6 +59,7 @@ export interface CostControlFilter {
   projectFlag?: string[]
   pePic?: string[]
   peTeam?: string[]
+  userEmail?: string
 }
 
 export async function getCostControlData(f: CostControlFilter = {}): Promise<ProjectCostControl[]> {

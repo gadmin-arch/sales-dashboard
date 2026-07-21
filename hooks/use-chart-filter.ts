@@ -1,3 +1,5 @@
+'use client'
+
 import { useState, useCallback } from 'react'
 
 export type ChartFilter = { type: string; value: string; label: string } | null

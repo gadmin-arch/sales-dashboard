@@ -10,7 +10,7 @@ import { MultiSelect } from '@/components/multi-select'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { PageHeader } from '@/components/page-header'
 import { FilterCard } from '@/components/filter-card'
-import { PageSpinner, PageError } from '@/components/page-states'
+import { DashboardSkeleton, PageError } from '@/components/page-states'
 import { SearchInput } from '@/components/search-input'
 import { LoadMore, useLoadMore } from '@/components/load-more'
 import { useSort, SortHead } from '@/components/sortable'
@@ -48,7 +48,7 @@ interface ReportsData {
     overdueProjectsPct: number; overdueProjectsCount: number;
   }
   scoreBreakdown: { name: string; value: number }[]
-  monthlyTrend: { name: string; reports: number; hours: number }[]
+  monthlyTrend: { name: string; reports: number; hours: number; overtime: number }[]
   topWorkers: { name: string; value: number }[]
   projectStatusMix: { name: string; value: number }[]
   timeStatusSchedule: { name: string; value: number }[]
@@ -149,7 +149,7 @@ export default function WorkerReportsPage() {
   const pSort = useSort(projectRows, 'hours', 'desc')
   const pPage = useLoadMore(pSort.sorted)
 
-  if (loading && !data) return <PageSpinner />
+  if (loading && !data) return <DashboardSkeleton />
   if (error && !data) return <PageError error={error} onRetry={onClear} />
   if (!data) return null
   const k = data.kpis
@@ -157,7 +157,7 @@ export default function WorkerReportsPage() {
   return (
     <SalesPageShell>
       <div className="space-y-6">
-        <PageHeader title="Worker Reports" subtitle="PT. Multi Daya Mitra — field & site daily reports" chartFilter={chartFilter} onClearFilter={() => setChartFilter(null)} />
+        <PageHeader title="Worker Reports" subtitle="PT. Multi Daya Mitra — field & site daily reports" breadcrumbs={[{ label: 'Project Management' }, { label: 'Worker Reports' }]} chartFilter={chartFilter} onClearFilter={() => setChartFilter(null)} />
 
         <FilterCard from={lFrom} to={lTo} onDateChange={(f, t) => { setLFrom(f); setLTo(t) }} onApply={onApply} onClear={onClear} hasUnapplied={hasUnapplied} loading={loading && !!data}>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 lg:grid-cols-6 items-start">
@@ -198,7 +198,7 @@ export default function WorkerReportsPage() {
           <Card className="lg:col-span-2">
             <CardHeader><CardTitle className="text-sm font-semibold">Reports &amp; Hours per Month</CardTitle></CardHeader>
             <CardContent>
-              <ChartContainer config={{ hours: { label: 'Hours', color: 'var(--chart-1)' }, reports: { label: 'Reports', color: 'var(--chart-2)' } }} className="h-[280px] w-full">
+              <ChartContainer config={{ hours: { label: 'Normal Hours', color: 'var(--chart-1)' }, overtime: { label: 'Overtime', color: 'var(--chart-5)' }, reports: { label: 'Reports', color: 'var(--chart-2)' } }} className="h-[280px] w-full">
                 <ComposedChart data={data.monthlyTrend} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                   <XAxis dataKey="name" {...axis} axisLine={{ stroke: 'var(--border)' }} />
@@ -206,7 +206,8 @@ export default function WorkerReportsPage() {
                   <YAxis yAxisId="right" orientation="right" {...axis} axisLine={false} />
                   <Tooltip contentStyle={{ background: 'var(--background)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }} />
                   <ChartLegend content={<ChartLegendContent />} />
-                  <Bar yAxisId="left" dataKey="hours" fill="var(--color-hours)" radius={[4, 4, 0, 0]} onClick={(d: any) => handleChartClick('month', String(d.name ?? ''), `Month = ${d.name}`)} style={{ cursor: 'pointer' }} />
+                  <Bar yAxisId="left" dataKey="hours" stackId="a" fill="var(--color-hours)" radius={[0, 0, 0, 0]} onClick={(d: any) => handleChartClick('month', String(d.name ?? ''), `Month = ${d.name}`)} style={{ cursor: 'pointer' }} />
+                  <Bar yAxisId="left" dataKey="overtime" stackId="a" fill="var(--color-overtime)" radius={[4, 4, 0, 0]} onClick={(d: any) => handleChartClick('month', String(d.name ?? ''), `Month = ${d.name}`)} style={{ cursor: 'pointer' }} />
                   <Line yAxisId="right" dataKey="reports" stroke="var(--color-reports)" strokeWidth={2} dot={false} />
                 </ComposedChart>
               </ChartContainer>

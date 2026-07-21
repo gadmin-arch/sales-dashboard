@@ -40,6 +40,7 @@ export const NAV_GROUPS: NavGroup[] = [
     role: 'project',
     items: [
       { href: '/dashboard/projects', label: 'Projects', role: 'project' },
+      { href: '/dashboard/projects/attendances', label: 'Work Hours by Attendances', role: 'project' },
       { href: '/dashboard/delivery', label: 'Project Delivery', role: 'project' },
       { href: '/dashboard/reports', label: 'Worker Reports', role: 'project' },
     ]

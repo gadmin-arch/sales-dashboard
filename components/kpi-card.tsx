@@ -22,8 +22,13 @@ interface KPICardProps {
 
 export function KPICard({ title, value, icon, trend, tooltip }: KPICardProps) {
   return (
-    <Card className="overflow-visible">
-      <CardContent className="pt-5">
+    <Card 
+      className="overflow-visible transition-all hover:shadow-md hover:border-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+      aria-label={`${title}, ${value}${trend ? `. Trend: ${trend.value} ${trend.label} (${trend.positive ? 'positive' : 'negative'})` : ''}`}
+      tabIndex={0}
+      role="region"
+    >
+      <CardContent className="pt-5" aria-hidden="true">
         <div className="flex items-start justify-between">
           <div className="flex-1">
             <div className="flex items-center gap-1.5">

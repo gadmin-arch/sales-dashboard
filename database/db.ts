@@ -18,6 +18,10 @@ export function getDbPool(): Pool {
     connectionTimeoutMillis: 5000,
   })
   
+  pool.on('error', (err) => {
+    console.warn('[db] Unexpected error on idle neon client:', err.message)
+  })
+  
   return pool
 }
 

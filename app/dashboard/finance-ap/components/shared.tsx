@@ -7,11 +7,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { ChartContainer, ChartLegend, ChartLegendContent } from '@/components/ui/chart'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts'
-import { X, Search } from 'lucide-react'
+import { Download, Search, X } from 'lucide-react'
 import { MultiSelect } from '@/components/multi-select'
 import { LoadMore, useLoadMore } from '@/components/load-more'
 import { useSort, SortHead } from '@/components/sortable'
 import { useServerRows } from '@/hooks/use-server-rows'
+import { DataTable as NewDataTable } from '@/components/ui/data-table'
+import { DataTableColumnHeader } from '@/components/ui/data-table-column-header'
+import { ColumnDef } from '@tanstack/react-table'
 import { fmtCurrency, fmtShortDate as fmtDate } from '@/lib/sales-helpers'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -158,63 +161,48 @@ export function DataTable({ title, subtitle, rows, cols, searchKeys, initialSort
   const [internalSearch, setInternalSearch] = useState('')
   const search = externalSearch !== undefined ? externalSearch : internalSearch
   const setSearch = onSearchChange || setInternalSearch
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const searchKeysStr = useMemo(() => searchKeys.join(','), [searchKeys.join(',')])
   
   const filtered = useMemo(() => {
     let rs = prefilter ? rows.filter(prefilter) : rows
     if (cf) rs = rs.filter(cf.test)
-    if (search) { const q = search.toLowerCase(); rs = rs.filter((r) => searchKeys.some((k) => String(r[k] ?? '').toLowerCase().includes(q))) }
+    if (search) {
+      const q = search.toLowerCase()
+      rs = rs.filter((r) => searchKeys.some((k) => {
+        const v = r[k]
+        return v !== null && v !== undefined && String(v).toLowerCase().includes(q)
+      }))
+    }
     return rs
-  }, [rows, search, searchKeysStr, cf, prefilter])
-  
-  const sort = useSort(filtered, initialSort)
-  const page = useLoadMore(sort.sorted)
+  }, [rows, prefilter, search, searchKeys, cf])
+
+  const mappedCols: ColumnDef<any>[] = useMemo(() => cols.map(c => ({
+    accessorKey: c.key,
+    header: ({ column }) => <DataTableColumnHeader column={column} title={c.label} className={c.align === 'right' ? 'justify-end' : c.align === 'center' ? 'justify-center' : ''} />,
+    cell: ({ row }) => <div className={c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : ''}>{c.render(row.original)}</div>
+  })), [cols])
+
   return (
     <Card className="overflow-hidden">
       <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap items-center gap-3">
-          <div>
-            <CardTitle className="text-sm font-semibold">{title} <span className="font-normal text-muted-foreground">({filtered.length.toLocaleString('en-US')}{filtered.length !== rows.length ? ` of ${filtered.length.toLocaleString('en-US')}` : ''})</span></CardTitle>
-            {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
-          </div>
-          {cf && (
-            <button onClick={onClearCf} className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary border border-primary/20">
-              {cf.label}<X className="h-3 w-3" />
-            </button>
-          )}
+        <div>
+          <CardTitle className="text-sm font-semibold">{title} <span className="font-normal text-muted-foreground">({filtered.length.toLocaleString('en-US')})</span></CardTitle>
+          {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
         </div>
-        <div className="relative w-48">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-          <input type="text" placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full rounded-lg border border-input bg-background pl-8 pr-3 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary" />
+        <div className="flex flex-wrap items-center gap-3">
+          {cf && (
+            <div className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary border border-primary/20">
+              <span className="text-muted-foreground">Filtered by:</span> {cf.label}
+              <button onClick={onClearCf} className="ml-1 hover:bg-primary/20 rounded-full p-0.5"><X className="h-3 w-3" /></button>
+            </div>
+          )}
+          <div className="relative w-48">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <input type="text" placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full rounded-lg border border-input bg-background pl-8 pr-3 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary" />
+          </div>
         </div>
       </CardHeader>
       <CardContent className="p-0">
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader><TableRow>
-              {cols.map((c) => (
-                <SortHead key={c.key} label={c.label} column={c.key} sortKey={sort.sortKey} sortDir={sort.sortDir} onSort={sort.toggle} className={c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : ''} />
-              ))}
-            </TableRow></TableHeader>
-            <TableBody>
-              {filtered.length === 0 ? (
-                <TableRow><TableCell colSpan={cols.length} className="text-center text-muted-foreground py-8">No records found</TableCell></TableRow>
-              ) : page.visible.map((r, i) => (
-                <TableRow 
-                  key={r.id ?? r.payreqId ?? r.loanId ?? r.mbId ?? r.reimburseId ?? i}
-                  className={onRowClick ? "cursor-pointer hover:bg-muted/50 transition-colors" : ""}
-                  onClick={() => onRowClick?.(r)}
-                >
-                  {cols.map((c) => (
-                    <TableCell key={c.key} className={c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : ''}>{c.render(r)}</TableCell>
-                  ))}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-        <LoadMore hasMore={page.hasMore} shown={page.shown} total={page.total} onClick={page.loadMore} onLoadAll={page.loadAll} onCollapse={page.collapse} />
+        <NewDataTable columns={mappedCols} data={filtered} onRowClick={onRowClick} />
       </CardContent>
     </Card>
   )
@@ -235,6 +223,13 @@ export function ServerDataTable({ title, subtitle, cols, endpoint, baseParams, i
   initialRows: any[]; totalRows: number; initialSortKey: string; onRowClick?: (r: any) => void
 }) {
   const t = useServerRows<any>({ endpoint, baseParams, initialRows, totalRows, initialSortKey })
+
+  const mappedCols: ColumnDef<any>[] = useMemo(() => cols.map(c => ({
+    accessorKey: c.key,
+    header: ({ column }) => <DataTableColumnHeader column={column} title={c.label} className={c.align === 'right' ? 'justify-end' : c.align === 'center' ? 'justify-center' : ''} />,
+    cell: ({ row }) => <div className={c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : ''}>{c.render(row.original)}</div>
+  })), [cols])
+
   return (
     <Card className="overflow-hidden">
       <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -248,31 +243,18 @@ export function ServerDataTable({ title, subtitle, cols, endpoint, baseParams, i
         </div>
       </CardHeader>
       <CardContent className="p-0">
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader><TableRow>
-              {cols.map((c) => (
-                <SortHead key={c.key} label={c.label} column={c.key} sortKey={t.sortKey} sortDir={t.sortDir} onSort={t.toggle} className={c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : ''} />
-              ))}
-            </TableRow></TableHeader>
-            <TableBody>
-              {t.rows.length === 0 ? (
-                <TableRow><TableCell colSpan={cols.length} className="text-center text-muted-foreground py-8">No records found</TableCell></TableRow>
-              ) : t.rows.map((r, i) => (
-                <TableRow
-                  key={r.id ?? r.payreqId ?? r.loanId ?? r.mbId ?? r.reimburseId ?? i}
-                  className={onRowClick ? 'cursor-pointer hover:bg-muted/50 transition-colors' : ''}
-                  onClick={() => onRowClick?.(r)}
-                >
-                  {cols.map((c) => (
-                    <TableCell key={c.key} className={c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : ''}>{c.render(r)}</TableCell>
-                  ))}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-        <LoadMore hasMore={t.hasMore} shown={t.shown} total={t.total} onClick={t.loadMore} onLoadAll={t.loadAll} onCollapse={t.collapse} />
+        <NewDataTable 
+          columns={mappedCols} 
+          data={t.rows} 
+          onRowClick={onRowClick} 
+          manualPagination={true}
+          pageCount={t.pageCount}
+          pagination={t.pagination}
+          onPaginationChange={t.onPaginationChange}
+          manualSorting={true}
+          sorting={t.sorting}
+          onSortingChange={t.onSortingChange}
+        />
       </CardContent>
     </Card>
   )

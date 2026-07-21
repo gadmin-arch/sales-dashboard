@@ -4,6 +4,8 @@ import { Inter } from 'next/font/google'
 import './globals.css'
 import { GoogleOAuthProvider } from '@react-oauth/google'
 import { AuthProvider } from '@/lib/auth-context'
+import { ThemeProvider } from '@/components/theme-provider'
+import { Toaster } from 'sonner'
 
 const inter = Inter({ variable: '--font-inter', subsets: ['latin'] })
 
@@ -11,14 +13,6 @@ export const metadata: Metadata = {
   title: 'Sales Dashboard',
   description: 'Monitor sales performance and invoice payments',
   generator: 'v0.app',
-  icons: {
-    icon: [
-      { url: '/icon-light-32x32.png', media: '(prefers-color-scheme: light)' },
-      { url: '/icon-dark-32x32.png', media: '(prefers-color-scheme: dark)' },
-      { url: '/icon.svg', type: 'image/svg+xml' },
-    ],
-    apple: '/apple-icon.png',
-  },
 }
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
@@ -27,12 +21,20 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en" className={inter.variable} suppressHydrationWarning>
       <body className="font-sans antialiased" suppressHydrationWarning>
-        <GoogleOAuthProvider clientId={clientId}>
-          <AuthProvider>
-            {children}
-            {process.env.NODE_ENV === 'production' && <Analytics />}
-          </AuthProvider>
-        </GoogleOAuthProvider>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <GoogleOAuthProvider clientId={clientId}>
+            <AuthProvider>
+              {children}
+              <Toaster />
+              {process.env.NODE_ENV === 'production' && <Analytics />}
+            </AuthProvider>
+          </GoogleOAuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   )

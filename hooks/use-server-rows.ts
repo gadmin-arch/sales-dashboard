@@ -1,6 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, useMemo } from 'react'
+import { PaginationState, SortingState } from '@tanstack/react-table'
 import { buildQuery } from '@/lib/sales-helpers'
 
 /**
@@ -26,8 +27,8 @@ export function useServerRows<T>(opts: {
 
   const [rows, setRows] = useState<T[]>(initialRows)
   const [total, setTotal] = useState(totalRows)
-  const [sortKey, setSortKey] = useState(initialSortKey)
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>(initialSortDir)
+  const [sorting, setSorting] = useState<SortingState>([{ id: initialSortKey, desc: initialSortDir === 'desc' }])
+  const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: step })
   const [search, setSearchState] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -35,17 +36,17 @@ export function useServerRows<T>(opts: {
   useEffect(() => {
     setRows(initialRows)
     setTotal(totalRows)
-    setSortKey(initialSortKey)
-    setSortDir(initialSortDir)
+    setSorting([{ id: initialSortKey, desc: initialSortDir === 'desc' }])
+    setPagination({ pageIndex: 0, pageSize: step })
     setSearchState('')
-  }, [initialRows, totalRows, initialSortKey, initialSortDir])
+  }, [initialRows, totalRows, initialSortKey, initialSortDir, step])
 
   const seqRef = useRef(0)
   const baseRef = useRef(baseParams)
   baseRef.current = baseParams
 
   const fetchRows = useCallback(async (p: {
-    sortKey: string; sortDir: 'asc' | 'desc'; q: string; offset: number; limit: number | 'all'; append: boolean
+    sortKey: string; sortDir: 'asc' | 'desc'; q: string; offset: number; limit: number
   }) => {
     const seq = ++seqRef.current
     setBusy(true)
@@ -62,7 +63,7 @@ export function useServerRows<T>(opts: {
       if (!res.ok) throw new Error('Failed to load rows')
       const json: { rows: T[]; totalRows: number } = await res.json()
       if (seq !== seqRef.current) return
-      setRows((prev) => (p.append ? [...prev, ...json.rows] : json.rows))
+      setRows(json.rows)
       setTotal(json.totalRows)
     } catch {
       // keep current rows on failure
@@ -71,39 +72,41 @@ export function useServerRows<T>(opts: {
     }
   }, [endpoint])
 
-  const toggle = useCallback((key: string) => {
-    const nextDir: 'asc' | 'desc' = key === sortKey ? (sortDir === 'asc' ? 'desc' : 'asc') : 'desc'
-    setSortKey(key); setSortDir(nextDir)
-    fetchRows({ sortKey: key, sortDir: nextDir, q: search, offset: 0, limit: Math.max(step, rows.length), append: false })
-  }, [sortKey, sortDir, search, rows.length, step, fetchRows])
+  const onSortingChange = useCallback((updater: any) => {
+    setSorting((old) => {
+      const next: SortingState = typeof updater === 'function' ? updater(old) : updater
+      if (!next.length) return old
+      fetchRows({ sortKey: next[0].id, sortDir: next[0].desc ? 'desc' : 'asc', q: search, offset: pagination.pageIndex * pagination.pageSize, limit: pagination.pageSize })
+      return next
+    })
+  }, [search, pagination, fetchRows])
+
+  const onPaginationChange = useCallback((updater: any) => {
+    setPagination((old) => {
+      const next: PaginationState = typeof updater === 'function' ? updater(old) : updater
+      const s = sorting[0] || { id: initialSortKey, desc: initialSortDir === 'desc' }
+      fetchRows({ sortKey: s.id, sortDir: s.desc ? 'desc' : 'asc', q: search, offset: next.pageIndex * next.pageSize, limit: next.pageSize })
+      return next
+    })
+  }, [sorting, search, fetchRows, initialSortKey, initialSortDir])
 
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const setSearch = useCallback((q: string) => {
     setSearchState(q)
+    setPagination((old) => ({ ...old, pageIndex: 0 }))
     if (searchTimer.current) clearTimeout(searchTimer.current)
     searchTimer.current = setTimeout(() => {
-      fetchRows({ sortKey, sortDir, q, offset: 0, limit: step, append: false })
+      const s = sorting[0] || { id: initialSortKey, desc: initialSortDir === 'desc' }
+      fetchRows({ sortKey: s.id, sortDir: s.desc ? 'desc' : 'asc', q, offset: 0, limit: pagination.pageSize })
     }, 300)
-  }, [sortKey, sortDir, step, fetchRows])
+  }, [sorting, pagination.pageSize, fetchRows, initialSortKey, initialSortDir])
   useEffect(() => () => { if (searchTimer.current) clearTimeout(searchTimer.current) }, [])
-
-  const loadMore = useCallback(() => {
-    fetchRows({ sortKey, sortDir, q: search, offset: rows.length, limit: step, append: true })
-  }, [sortKey, sortDir, search, rows.length, step, fetchRows])
-
-  const loadAll = useCallback(() => {
-    fetchRows({ sortKey, sortDir, q: search, offset: rows.length, limit: 'all', append: true })
-  }, [sortKey, sortDir, search, rows.length, step, fetchRows])
-
-  const collapse = useCallback(() => { setRows((prev) => prev.slice(0, step)) }, [step])
 
   return {
     rows, total, busy,
-    sortKey, sortDir, toggle,
     search, setSearch,
-    hasMore: rows.length < total,
-    shown: rows.length,
-    loadMore, loadAll, collapse,
-    step,
+    pagination, onPaginationChange,
+    sorting, onSortingChange,
+    pageCount: Math.ceil(total / pagination.pageSize),
   }
 }

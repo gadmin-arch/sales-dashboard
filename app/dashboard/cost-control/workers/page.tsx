@@ -10,7 +10,7 @@ import { MultiSelect } from '@/components/multi-select'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { PageHeader } from '@/components/page-header'
 import { FilterCard } from '@/components/filter-card'
-import { PageSpinner, PageError } from '@/components/page-states'
+import { DashboardSkeleton, PageError } from '@/components/page-states'
 import { SearchInput } from '@/components/search-input'
 import { LoadMore, useLoadMore } from '@/components/load-more'
 import { useSort, SortHead } from '@/components/sortable'
@@ -156,7 +156,7 @@ export default function CostControlWorkerKPIsPage() {
 
   const fmtRp = useCallback((v: number) => fmtCurrency(v, 'IDR'), [])
 
-  if (loading && !data) return <PageSpinner />
+  if (loading && !data) return <DashboardSkeleton />
   if (error && !data) return <PageError error={error} onRetry={onClear} />
   if (!data) return null
   const k = data.kpis
@@ -176,7 +176,7 @@ export default function CostControlWorkerKPIsPage() {
           </Link>
           <PageHeader 
             title="Worker KPIs & Order Monitoring" 
-            subtitle="Cost Control — Analisis kinerja worker disandingkan dengan total nominal order pekerjaan" 
+            subtitle="Cost Control — Analisis kinerja worker disandingkan dengan total nominal order pekerjaan" breadcrumbs={[{ label: 'Cost Control' }, { label: 'Worker KPIs' }]} 
             chartFilter={chartFilter} 
             onClearFilter={() => setChartFilter(null)} 
           />

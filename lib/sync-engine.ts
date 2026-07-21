@@ -111,7 +111,13 @@ const syncTargets: SyncTarget[] = [
   // Reports
   { spreadsheetId: GOOGLE_CONFIG.reports.spreadsheetId, sheetName: GOOGLE_CONFIG.reports.sheets.reports },
   { spreadsheetId: GOOGLE_CONFIG.reports.archiveSpreadsheetId, sheetName: GOOGLE_CONFIG.reports.sheets.reports },
-  { spreadsheetId: GOOGLE_CONFIG.reports.overtimeSpreadsheetId, sheetName: GOOGLE_CONFIG.reports.sheets.overtimes }
+  { spreadsheetId: GOOGLE_CONFIG.reports.overtimeSpreadsheetId, sheetName: GOOGLE_CONFIG.reports.sheets.overtimes },
+  { spreadsheetId: GOOGLE_CONFIG.reports.overtimeSpreadsheetId, sheetName: GOOGLE_CONFIG.reports.sheets.leaves },
+  { spreadsheetId: GOOGLE_CONFIG.reports.overtimeSpreadsheetId, sheetName: GOOGLE_CONFIG.reports.sheets.holidays },
+
+  // Attendances
+  { spreadsheetId: GOOGLE_CONFIG.attendances.currentSpreadsheetId, sheetName: GOOGLE_CONFIG.attendances.sheets.attendances },
+  { spreadsheetId: GOOGLE_CONFIG.attendances.backupSpreadsheetId, sheetName: GOOGLE_CONFIG.attendances.sheets.attendances }
 ]
 
 function getTableName(spreadsheetId: string, sheetName: string): string {

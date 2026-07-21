@@ -421,7 +421,11 @@ const getData = cachedRoute('sales-overview', compute)
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    return NextResponse.json(await getData(searchParams))
+    return NextResponse.json(await getData(searchParams), {
+      headers: {
+        'Cache-Control': 'public, max-age=60, stale-while-revalidate=120',
+      }
+    })
   } catch (error) {
     console.error('Sales overview error:', error)
     return NextResponse.json({ error: 'Failed to load sales data' }, { status: 500 })

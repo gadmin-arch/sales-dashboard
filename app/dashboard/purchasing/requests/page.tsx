@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { KPICard } from '@/components/kpi-card'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table'
 import { ChartContainer, ChartLegend, ChartLegendContent } from '@/components/ui/chart'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts'
 import { DonutChart } from '@/components/donut-chart'
@@ -13,11 +12,12 @@ import { SalesPageShell } from '@/components/theme-toggle'
 import { MultiSelect } from '@/components/multi-select'
 import { PageHeader } from '@/components/page-header'
 import { FilterCard } from '@/components/filter-card'
-import { PageSpinner, PageError } from '@/components/page-states'
+import { DashboardSkeleton, PageError } from '@/components/page-states'
 import { SearchInput } from '@/components/search-input'
-import { LoadMore } from '@/components/load-more'
-import { SortHead } from '@/components/sortable'
 import { useServerRows } from '@/hooks/use-server-rows'
+import { DataTable } from '@/components/ui/data-table'
+import { DataTableColumnHeader } from '@/components/ui/data-table-column-header'
+import { ColumnDef } from '@tanstack/react-table'
 import { fmtCurrency, buildQuery, sameSet, getYTD, fmtShortDate as fmtDate } from '@/lib/sales-helpers'
 import { useChartFilter } from '@/hooks/use-chart-filter'
 import { ExportButton } from '@/components/export-button'
@@ -46,26 +46,24 @@ interface PRData {
   totalRows: number
   filterOptions: { statusList: Option[]; overdueList: Option[]; approvalList: Option[]; projectList: Option[]; handlerList: Option[]; requesterList: Option[] }
 }
-
-const statusClass: Record<string, string> = {
-  P: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
-  S: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
-  H: 'bg-sky-500/10 text-sky-600 dark:text-sky-400',
-  NS: 'bg-muted text-muted-foreground',
-  Hold: 'bg-red-500/10 text-red-600 dark:text-red-400',
-}
-const overdueClass: Record<string, string> = {
-  active: 'bg-sky-500/10 text-sky-600 dark:text-sky-400',
-  onTime: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
-  dueToday: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
-  overdue: 'bg-red-500/10 text-red-600 dark:text-red-400',
-  overdueOngoing: 'bg-orange-500/10 text-orange-600 dark:text-orange-400',
-  unhandledOverdue: 'bg-rose-500/10 text-rose-600 dark:text-rose-400',
-}
+const statusClass: Record<string, string> = { pending: 'bg-amber-500/10 text-amber-600', processed: 'bg-sky-500/10 text-sky-600', open: 'bg-purple-500/10 text-purple-600', completed: 'bg-emerald-500/10 text-emerald-600', cancelled: 'bg-red-500/10 text-red-600' }
+const overdueClass: Record<string, string> = { safe: 'bg-emerald-500/10 text-emerald-600', warning: 'bg-amber-500/10 text-amber-600', critical: 'bg-red-500/10 text-red-600' }
 
 // Stable fallback while data is loading — a fresh `?? []` per render would
 // retrigger useServerRows' reset effect in a loop.
 const EMPTY_ROWS: PRRow[] = []
+
+const columns: ColumnDef<PRRow>[] = [
+  { accessorKey: 'prId', header: ({ column }) => <DataTableColumnHeader column={column} title="PR ID" /> },
+  { accessorKey: 'item', header: ({ column }) => <DataTableColumnHeader column={column} title="Item" /> },
+  { accessorKey: 'project', header: ({ column }) => <DataTableColumnHeader column={column} title="Project" /> },
+  { accessorKey: 'createdAt', header: ({ column }) => <DataTableColumnHeader column={column} title="Date" />, cell: ({ row }) => fmtDate(row.original.createdAt) },
+  { accessorKey: 'duedate', header: ({ column }) => <DataTableColumnHeader column={column} title="Due" />, cell: ({ row }) => fmtDate(row.original.duedate) },
+  { accessorKey: 'statusLabel', header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />, cell: ({ row }) => { const l = row.original.statusLabel; const c = statusClass[row.original.status] || 'bg-muted'; return <span className={`px-2 py-0.5 rounded text-xs font-medium ${c}`}>{l}</span> } },
+  { accessorKey: 'overdueLabel', header: ({ column }) => <DataTableColumnHeader column={column} title="Overdue" />, cell: ({ row }) => { const l = row.original.overdueLabel; const c = overdueClass[row.original.overdue] || 'bg-muted'; return <span className={`px-2 py-0.5 rounded text-xs font-medium ${c}`}>{l}</span> } },
+  { accessorKey: 'handler', header: ({ column }) => <DataTableColumnHeader column={column} title="Handler" /> },
+  { accessorKey: 'requester', header: ({ column }) => <DataTableColumnHeader column={column} title="Requester" /> },
+]
 
 export default function PurchaseRequestsPage() {
   const [data, setData] = useState<PRData | null>(null)
@@ -123,7 +121,7 @@ export default function PurchaseRequestsPage() {
 
   const hasUnapplied = lFrom !== dateFrom || lTo !== dateTo || !sameSet(lSt, st) || !sameSet(lOv, ov) || !sameSet(lAp, ap) || !sameSet(lPrj, prj) || !sameSet(lHdl, hdl) || !sameSet(lReq, req)
 
-  if (loading && !data) return <PageSpinner />
+  if (loading && !data) return <DashboardSkeleton />
   if (error && !data) return <PageError error={error} onRetry={onClear} />
   if (!data) return null
 
@@ -133,7 +131,7 @@ export default function PurchaseRequestsPage() {
   return (
     <SalesPageShell>
       <div className="bg-background text-foreground min-h-screen space-y-6">
-        <PageHeader title="Purchase Requests" subtitle="PT. Multi Daya Mitra — Procurement Pipeline" chartFilter={chartFilter} onClearFilter={() => setChartFilter(null)} />
+        <PageHeader title="Purchase Requests" subtitle="PT. Multi Daya Mitra — Procurement Pipeline" breadcrumbs={[{ label: 'Purchasing' }, { label: 'Purchase Requests' }]} chartFilter={chartFilter} onClearFilter={() => setChartFilter(null)} />
 
         <FilterCard from={lFrom} to={lTo} onDateChange={(f, t) => { setLFrom(f); setLTo(t) }} onApply={onApply} onClear={onClear} hasUnapplied={hasUnapplied} loading={loading && !!data}>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 items-start">
@@ -247,45 +245,17 @@ export default function PurchaseRequestsPage() {
             <SearchInput value={pr.search} onChange={pr.setSearch} />
           </CardHeader>
           <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader><TableRow>
-                  <SortHead label="PR #" column="prId" sortKey={pr.sortKey} sortDir={pr.sortDir} onSort={pr.toggle} />
-                  <SortHead label="Item" column="item" sortKey={pr.sortKey} sortDir={pr.sortDir} onSort={pr.toggle} />
-                  <SortHead label="Project" column="project" sortKey={pr.sortKey} sortDir={pr.sortDir} onSort={pr.toggle} />
-                  <SortHead label="Qty" column="qtyReq" sortKey={pr.sortKey} sortDir={pr.sortDir} onSort={pr.toggle} className="text-right" />
-                  <SortHead label="Estimated" column="estimated" sortKey={pr.sortKey} sortDir={pr.sortDir} onSort={pr.toggle} className="text-right" />
-                  <SortHead label="Purchased" column="purchased" sortKey={pr.sortKey} sortDir={pr.sortDir} onSort={pr.toggle} className="text-right" />
-                  <SortHead label="Variance" column="variance" sortKey={pr.sortKey} sortDir={pr.sortDir} onSort={pr.toggle} className="text-right" />
-                  <SortHead label="Status" column="status" sortKey={pr.sortKey} sortDir={pr.sortDir} onSort={pr.toggle} />
-                  <SortHead label="Overdue" column="overdue" sortKey={pr.sortKey} sortDir={pr.sortDir} onSort={pr.toggle} />
-                  <SortHead label="Handler" column="handler" sortKey={pr.sortKey} sortDir={pr.sortDir} onSort={pr.toggle} />
-                  <SortHead label="Due" column="duedate" sortKey={pr.sortKey} sortDir={pr.sortDir} onSort={pr.toggle} />
-                  <SortHead label="Lead Time" column="leadTimePO" sortKey={pr.sortKey} sortDir={pr.sortDir} onSort={pr.toggle} className="text-right" />
-                  <SortHead label="Diterima" column="leadTimeReceived" sortKey={pr.sortKey} sortDir={pr.sortDir} onSort={pr.toggle} className="text-right" />
-                </TableRow></TableHeader>
-                <TableBody>
-                  {pr.rows.length === 0 ? <TableRow><TableCell colSpan={13} className="text-center text-muted-foreground py-8">No purchase requests found</TableCell></TableRow> : pr.rows.map(r => (
-                    <TableRow key={r.prId}>
-                      <TableCell className="text-xs font-semibold text-primary whitespace-nowrap">{r.prId}</TableCell>
-                      <TableCell className="max-w-[220px] truncate" title={r.item}>{r.item}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{r.project}</TableCell>
-                      <TableCell className="text-right text-muted-foreground">{r.qtyPurchased.toLocaleString('en-US')}/{r.qtyReq.toLocaleString('en-US')}</TableCell>
-                      <TableCell className="text-right font-medium">{fmtRp(r.estimated)}</TableCell>
-                      <TableCell className="text-right font-medium">{fmtRp(r.purchased)}</TableCell>
-                      <TableCell className={`text-right font-medium ${r.variance > 0 ? 'text-emerald-600 dark:text-emerald-400' : r.variance < 0 ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}>{fmtRp(r.variance)}</TableCell>
-                      <TableCell><span className={`inline-flex rounded-md px-2 py-0.5 text-[10px] font-medium ${statusClass[r.status] || 'bg-muted text-muted-foreground'}`}>{r.statusLabel}</span></TableCell>
-                      <TableCell><span className={`inline-flex rounded-md px-2 py-0.5 text-[10px] font-medium ${overdueClass[r.overdue] || 'bg-muted text-muted-foreground'}`}>{r.overdueLabel}</span></TableCell>
-                      <TableCell className="text-xs">{r.handler}</TableCell>
-                      <TableCell className="text-muted-foreground whitespace-nowrap">{fmtDate(r.duedate)}</TableCell>
-                      <TableCell className="text-right whitespace-nowrap">{r.leadTimePO != null ? `${r.leadTimePO.toLocaleString('en-US')} days` : <span className="text-muted-foreground">—</span>}</TableCell>
-                      <TableCell className="text-right whitespace-nowrap">{r.leadTimeReceived != null ? `${r.leadTimeReceived.toLocaleString('en-US')} days` : <span className="text-muted-foreground">—</span>}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-            <LoadMore hasMore={pr.hasMore} shown={pr.shown} total={pr.total} onClick={pr.loadMore} onLoadAll={pr.loadAll} onCollapse={pr.collapse} />
+            <DataTable 
+              columns={columns} 
+              data={pr.rows} 
+              manualPagination={true}
+              pageCount={pr.pageCount}
+              pagination={pr.pagination}
+              onPaginationChange={pr.onPaginationChange}
+              manualSorting={true}
+              sorting={pr.sorting}
+              onSortingChange={pr.onSortingChange}
+            />
           </CardContent>
         </Card>
       </div>

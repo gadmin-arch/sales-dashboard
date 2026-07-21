@@ -23,6 +23,7 @@ async function compute(searchParams: URLSearchParams) {
     const projectFlag = parseMulti(searchParams, 'projectFlag')
     const pePic = parseMulti(searchParams, 'pePic')
     const peTeam = parseMulti(searchParams, 'peTeam')
+    const userEmail = searchParams.get('userEmail') || undefined
 
     await loadOrderRefMaps()
     const [
@@ -43,6 +44,7 @@ async function compute(searchParams: URLSearchParams) {
         projectFlag,
         pePic,
         peTeam,
+        userEmail,
       }),
       getAllOrders(),
       getAllSalesUsers(),
@@ -51,12 +53,14 @@ async function compute(searchParams: URLSearchParams) {
       getAllFinanceStatuses(),
     ])
 
-    // Filter all orders by date range to extract dynamic filter lists
     const fromTime = dateFrom ? parseDate(dateFrom)?.getTime() : undefined
-    const toTime = dateTo ? parseDate(dateTo)?.getTime() : undefined
+    let toTime = dateTo ? parseDate(dateTo)?.getTime() : undefined
+    if (toTime !== undefined) {
+      toTime += 24 * 60 * 60 * 1000 - 1
+    }
 
     const dateFilteredOrders = allOrders.filter(p => {
-      const targetTime = (parseDate(p.prjPoDate) || parseDate(p.createdAt))?.getTime()
+      const targetTime = (parseDate(p.prjPoDate) || parseDate(p.prjStartDate) || parseDate(p.createdAt))?.getTime()
       if ((fromTime !== undefined || toTime !== undefined) && targetTime === undefined) return false
       if (fromTime !== undefined && targetTime! < fromTime) return false
       if (toTime !== undefined && targetTime! > toTime) return false
@@ -81,6 +85,7 @@ async function compute(searchParams: URLSearchParams) {
       
     // For active PIC IDs that are not in the salesUsers employee directory, add fallback
     activePicIds.forEach(id => {
+      if (!id) return
       if (!pePicList.some(u => u.id === id)) {
         pePicList.push({ id, name: id })
       }
@@ -155,7 +160,11 @@ const getView = cachedRouteView('projects-v3', compute, ['detail'], (full, view)
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    return NextResponse.json(await getView(searchParams))
+    return NextResponse.json(await getView(searchParams), {
+      headers: {
+        'Cache-Control': 'public, max-age=60, stale-while-revalidate=120',
+      }
+    })
   } catch (error: any) {
     console.error('Projects Dashboard API error:', error)
     return NextResponse.json({ error: error.message || 'Unknown error' }, { status: 500 })

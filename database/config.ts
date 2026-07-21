@@ -199,6 +199,17 @@ export const GOOGLE_CONFIG = {
     sheets: {
       reports: 'reports',
       overtimes: 'overtimes',
+      leaves: 'leaves',
+      holidays: 'holidays',
+    },
+  },
+
+  // Attendances
+  attendances: {
+    currentSpreadsheetId: '1ByxCAn-v3ephJjhx85hM1Raz6lfsuUmzIzezcMcMHmE',
+    backupSpreadsheetId: '1pQ8NXL7B1FsR02glPJLarLHb1dqS3ioUcQBzjZ-CcAU',
+    sheets: {
+      attendances: 'attendances',
     },
   },
 } as const

@@ -2,18 +2,19 @@
 
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table'
-import { useSort, SortHead } from '@/components/sortable'
+import { DataTable } from '@/components/ui/data-table'
+import { columns, ProjectDashboardCalculated } from './columns'
 import { FolderOpen, Search, AlertCircle, X, CheckCircle, Lightbulb, Clock, ShoppingCart, Receipt, Utensils, Settings2, TrendingUp, Activity } from 'lucide-react'
 import { DateRangeRow } from '@/components/date-range-row'
 import { MultiSelect } from '@/components/multi-select'
 import { buildQuery, getYTD, sameSet, fmtCurrency } from '@/lib/sales-helpers'
-import { PageSpinner, PageError } from '@/components/page-states'
+import { DashboardSkeleton, PageError } from '@/components/page-states'
+import { PageHeader } from '@/components/page-header'
 import { SearchInput } from '@/components/search-input'
 import { ExportButton } from '@/components/export-button'
-import { ThemeToggle } from '@/components/theme-toggle'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { useAuth } from '@/lib/auth-context'
 
 const fmtRp = (v: number) => fmtCurrency(v, 'IDR')
 
@@ -21,28 +22,8 @@ const fmtRp = (v: number) => fmtCurrency(v, 'IDR')
 // Ubah ke true untuk memunculkannya kembali.
 const SHOW_WORKFORCE_CALCULATOR = false
 
-interface ProjectDashboardData {
-  prjId: string
-  prjName: string
-  budgetMaterial: number
-  budgetService: number
-  budgetTotal: number
-  spentMaterial: number
-  spentService: number
-  spentMeal: number
-  reimburseMaterialSpent: number
-  reimburseServiceSpent: number
-
-  reimburseCount: number
-  mealCount: number
-
-  overtimeHours: number
-  reportCount: number
-  reportHours: number
-
-  pePicName: string
-  peTeamName: string
-}
+// Interfaces merged/exported from columns.tsx
+type ProjectDashboardData = Omit<ProjectDashboardCalculated, 'spentTotal' | 'overtimeCost' | 'reportCost' | 'calculatedWorkforceCost' | 'matPct' | 'svcPct' | 'totalPct' | 'totalItems'>
 
 // Per-project transaction lists — fetched lazily via ?detail=<prjId> when the
 // modal opens (they are no longer embedded in the list response).
@@ -72,7 +53,8 @@ export default function ProjectsDashboardPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
-  const [selectedProject, setSelectedProject] = useState<ProjectDashboardData | null>(null)
+  const { user } = useAuth()
+  const [selectedProject, setSelectedProject] = useState<ProjectDashboardCalculated | null>(null)
   const [activeTab, setActiveTab] = useState<'purchasing' | 'reimburse' | 'meal' | 'overtime' | 'report'>('purchasing')
   const [detailItems, setDetailItems] = useState<ProjectDetailItems | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
@@ -133,9 +115,10 @@ export default function ProjectsDashboardPage() {
     doFetch({
       dateFrom, dateTo, salesUser: su, orderType: ot, projectStatus: ps, invoiceStatus: inv, projectFlag: prjFlag,
       pePic, peTeam,
+      ...(user?.email ? { userEmail: user.email } : {}),
       ...(fresh ? { fresh: '1' } : {})
     })
-  }, [doFetch, dateFrom, dateTo, su, ot, ps, inv, prjFlag, pePic, peTeam])
+  }, [doFetch, dateFrom, dateTo, su, ot, ps, inv, prjFlag, pePic, peTeam, user?.email])
 
   const onApply = () => { 
     setDateFrom(lFrom); setDateTo(lTo); setSu(lSu); setOt(lOt); setPs(lPs); setInv(lInv); setPrjFlag(lPrjFlag); setPePic(lPePic); setPeTeam(lPeTeam) 
@@ -192,13 +175,14 @@ export default function ProjectsDashboardPage() {
     fetch('/api/projects?' + buildQuery({
       dateFrom, dateTo, salesUser: su, orderType: ot, projectStatus: ps, invoiceStatus: inv, projectFlag: prjFlag,
       pePic, peTeam, detail: selectedProject.prjId,
+      ...(user?.email ? { userEmail: user.email } : {}),
     }))
       .then((r) => r.json())
       .then((j) => { if (!cancelled) setDetailItems(j.detail || null) })
       .catch(() => { if (!cancelled) setDetailItems(null) })
       .finally(() => { if (!cancelled) setDetailLoading(false) })
     return () => { cancelled = true }
-  }, [selectedProject, dateFrom, dateTo, su, ot, ps, inv, prjFlag, pePic, peTeam])
+  }, [selectedProject, dateFrom, dateTo, su, ot, ps, inv, prjFlag, pePic, peTeam, user?.email])
 
   // Recalculate selected project reference when data changes + merge lazily
   // fetched detail lists (empty while loading)
@@ -216,12 +200,11 @@ export default function ProjectsDashboardPage() {
     }
   }, [selectedProject, filtered, detailItems])
 
-  // Computed columns
+  // Computations handled by memo
   const tableRows = useMemo(() => filtered.map((d) => ({
     ...d,
     totalItems: d.reimburseCount + d.mealCount,
   })), [filtered])
-  const sort = useSort(tableRows, 'totalPct', 'desc')
 
   const insights = useMemo(() => {
     if (calculatedRows.length === 0) return []
@@ -253,18 +236,12 @@ export default function ProjectsDashboardPage() {
 
   return (
     <div className="space-y-6 relative">
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Project Dashboard</h1>
-          <p className="text-muted-foreground mt-2">
-            Track project operations, resource utilization, and expense items without exposing financial amounts.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <ExportButton data={tableRows} filename="projects.csv" />
-          <ThemeToggle />
-        </div>
-      </div>
+      <PageHeader 
+        title="Project Dashboard" 
+        subtitle="Track project operations, resource utilization, and expense items without exposing financial amounts." 
+        breadcrumbs={[{ label: 'Project Management' }, { label: 'Projects' }]}
+        actions={<ExportButton data={tableRows} filename="projects.csv" />}
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Side: Filter Card (Col span 2, full width while calculator is hidden) */}
@@ -381,7 +358,7 @@ export default function ProjectsDashboardPage() {
       )}
 
       {loading && data.length === 0 ? (
-        <PageSpinner />
+        <DashboardSkeleton />
       ) : (
         <>
           <div className="flex items-center gap-4">
@@ -397,79 +374,8 @@ export default function ProjectsDashboardPage() {
             </div>
           </div>
 
-          <div className="rounded-md border bg-card">
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader className="bg-muted/50">
-                  <TableRow>
-                    <SortHead label="Project" column="prjName" sortKey={sort.sortKey} sortDir={sort.sortDir} onSort={sort.toggle} className="w-[160px] max-w-[180px]" />
-                    <SortHead label="PE PIC" column="pePicName" sortKey={sort.sortKey} sortDir={sort.sortDir} onSort={sort.toggle} className="w-[110px]" />
-                    <SortHead label="PE Team" column="peTeamName" sortKey={sort.sortKey} sortDir={sort.sortDir} onSort={sort.toggle} className="w-[80px]" />
-                    <SortHead label="Reports" column="reportCount" sortKey={sort.sortKey} sortDir={sort.sortDir} onSort={sort.toggle} className="text-right w-[90px]" />
-                    <SortHead label="Overtime" column="overtimeHours" sortKey={sort.sortKey} sortDir={sort.sortDir} onSort={sort.toggle} className="text-right w-[90px]" />
-                    <SortHead label="Material Util %" column="matPct" sortKey={sort.sortKey} sortDir={sort.sortDir} onSort={sort.toggle} className="text-right w-[110px]" />
-                    <SortHead label="Service Util %" column="svcPct" sortKey={sort.sortKey} sortDir={sort.sortDir} onSort={sort.toggle} className="text-right w-[110px]" />
-                    <SortHead label="Total Util %" column="totalPct" sortKey={sort.sortKey} sortDir={sort.sortDir} onSort={sort.toggle} className="text-right w-[130px] bg-muted/20 font-bold" />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {sort.sorted.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
-                        No projects found.
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    sort.sorted.map((row) => {
-                      return (
-                        <TableRow 
-                          key={row.prjId} 
-                          className="cursor-pointer hover:bg-muted/50 transition-colors"
-                          onClick={() => setSelectedProject(row)}
-                        >
-                          <TableCell className="max-w-[180px]">
-                            <div className="font-semibold truncate text-xs text-foreground" title={row.prjName}>{row.prjName}</div>
-                            <div className="text-[9px] text-muted-foreground uppercase tracking-widest mt-1">{row.prjId}</div>
-                          </TableCell>
-                          <TableCell className="max-w-[110px] truncate text-xs font-medium">
-                            {row.pePicName || '-'}
-                          </TableCell>
-                          <TableCell className="max-w-[80px] truncate text-xs text-muted-foreground">
-                            {row.peTeamName || '-'}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="font-medium text-xs text-foreground">{row.reportCount}</div>
-                            <div className="text-[9px] text-muted-foreground">{row.reportHours.toFixed(1)} hrs</div>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="font-medium text-xs text-amber-600 dark:text-amber-400">{row.overtimeHours.toFixed(1)}h</div>
-                          </TableCell>
-                          <TableCell className="text-right font-mono text-xs text-foreground">
-                            {row.matPct > 0 ? `${row.matPct.toFixed(1)}%` : '-'}
-                          </TableCell>
-                          <TableCell className="text-right font-mono text-xs text-foreground">
-                            {row.svcPct > 0 ? `${row.svcPct.toFixed(1)}%` : '-'}
-                          </TableCell>
-                          <TableCell className="text-right bg-muted/10 font-bold">
-                            <div className="flex items-center justify-end gap-2">
-                              <div className="flex-1 h-1.5 bg-secondary rounded-full overflow-hidden max-w-[50px] hidden sm:block">
-                                <div 
-                                  className={`h-full ${row.totalPct > 100 ? 'bg-red-500' : 'bg-emerald-500'}`} 
-                                  style={{ width: `${Math.min(row.totalPct, 100)}%` }} 
-                                />
-                              </div>
-                              <span className={`font-mono text-xs ${row.totalPct > 100 ? 'text-red-600 font-bold' : 'text-foreground'}`}>
-                                {row.totalPct.toFixed(1)}%
-                              </span>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      )
-                    })
-                  )}
-                </TableBody>
-              </Table>
-            </div>
+          <div className="rounded-md border bg-card p-0">
+            <DataTable columns={columns} data={tableRows} search={search} onRowClick={setSelectedProject} />
           </div>
         </>
       )}
