@@ -233,39 +233,42 @@ input[type="date"] { color-scheme: light; }
     display: block !important;
   }
 
-  /* Compact layout gaps and margins */
-  .space-y-6 > * + * {
-    margin-top: 0.5rem !important;
+  /* Grid & Multi-Column Print Layouts — match web dashboard compact multi-column grid */
+  .grid {
+    display: grid !important;
+    width: 100% !important;
   }
-  .space-y-5 > * + * {
-    margin-top: 0.4rem !important;
+  
+  /* Force 3-column grid in print for Donut & Bar charts */
+  .grid-cols-1.lg\:grid-cols-3,
+  .grid-cols-1.md\:grid-cols-3,
+  .lg\:grid-cols-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
   }
-  .space-y-4 > * + * {
-    margin-top: 0.35rem !important;
+
+  /* Force 2-column grid in print */
+  .grid-cols-1.lg\:grid-cols-2,
+  .grid-cols-1.md\:grid-cols-2,
+  .lg\:grid-cols-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
-  .space-y-3 > * + * {
-    margin-top: 0.25rem !important;
+
+  /* Force 4-column grid for KPI Cards in print */
+  .grid-cols-1.lg\:grid-cols-5,
+  .grid-cols-1.lg\:grid-cols-6,
+  .grid-cols-1.md\:grid-cols-4,
+  .grid-cols-1.sm\:grid-cols-2,
+  .lg\:grid-cols-5,
+  .lg\:grid-cols-6 {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
   }
-  .space-y-2 > * + * {
-    margin-top: 0.15rem !important;
+
+  /* Span overrides for wide bar charts */
+  .lg\:col-span-2 {
+    grid-column: span 2 / span 2 !important;
   }
-  .gap-6 {
-    gap: 0.5rem !important;
-  }
-  .gap-4 {
-    gap: 0.35rem !important;
-  }
-  .gap-3 {
-    gap: 0.25rem !important;
-  }
-  .p-6, .p-8 {
-    padding: 0.4rem !important;
-  }
-  .p-4 {
-    padding: 0.3rem !important;
-  }
-  .p-3 {
-    padding: 0.25rem !important;
+  .lg\:col-span-3 {
+    grid-column: span 3 / span 3 !important;
   }
 
   /* Prevent page breaks cutting charts & table rows in half */
@@ -284,17 +287,29 @@ input[type="date"] { color-scheme: light; }
   }
 
   /* Chart height reduction & centering for compact print density */
+  [data-chart],
+  .recharts-responsive-container,
   .recharts-wrapper {
+    width: 100% !important;
+    min-width: 100% !important;
     max-height: 160px !important;
     margin: 0 auto !important;
   }
-  .recharts-responsive-container,
-  .recharts-wrapper svg {
+  
+  .recharts-surface {
+    width: 100% !important;
     max-height: 160px !important;
   }
-  .h-\[260px\], .h-\[220px\], .h-\[50vh\] {
+
+  .h-\[260px\], .h-\[220px\], .h-\[300px\], .h-\[50vh\] {
     height: 160px !important;
     max-height: 160px !important;
+  }
+
+  /* Compact legends below charts */
+  .recharts-default-legend-item,
+  .chart-legend {
+    font-size: 8px !important;
   }
 
   /* Table styling & column expansion for official report legibility */
