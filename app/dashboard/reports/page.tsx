@@ -20,6 +20,7 @@ import { ComposedChart, Bar, Line, BarChart, XAxis, YAxis, CartesianGrid, Toolti
 import { buildQuery, sameSet, getYTD } from '@/lib/sales-helpers'
 import { useChartFilter } from '@/hooks/use-chart-filter'
 import { ExportButton } from '@/components/export-button'
+import { PrintButton } from '@/components/print-button'
 
 interface Option { value: string; label: string }
 interface WorkerRow {
@@ -157,7 +158,20 @@ export default function WorkerReportsPage() {
   return (
     <SalesPageShell>
       <div className="space-y-6">
-        <PageHeader title="Worker Reports" subtitle="PT. Multi Daya Mitra — field & site daily reports" breadcrumbs={[{ label: 'Project Management' }, { label: 'Worker Reports' }]} chartFilter={chartFilter} onClearFilter={() => setChartFilter(null)} />
+        <PageHeader 
+          title="Worker Reports" 
+          subtitle="PT. Multi Daya Mitra — field & site daily reports" 
+          breadcrumbs={[{ label: 'Project Management' }, { label: 'Worker Reports' }]} 
+          chartFilter={chartFilter} 
+          onClearFilter={() => setChartFilter(null)} 
+          actions={
+            <div className="flex items-center gap-2 print:hidden">
+              <ExportButton data={workerRows} filename="worker-reports.csv" label="Export Workers" />
+              <ExportButton data={projectRows} filename="project-hours.csv" label="Export Projects" />
+              <PrintButton />
+            </div>
+          }
+        />
 
         <FilterCard from={lFrom} to={lTo} onDateChange={(f, t) => { setLFrom(f); setLTo(t) }} onApply={onApply} onClear={onClear} hasUnapplied={hasUnapplied} loading={loading && !!data}>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 lg:grid-cols-6 items-start">
