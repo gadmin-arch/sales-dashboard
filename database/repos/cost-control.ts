@@ -7,6 +7,7 @@ import { getAllPoLines, getAllPurchaseOrders } from './procurement'
 import { getFinanceAPData } from './finance-ap'
 import { getAllReports } from './reports'
 import { getAllSalesUsers, getTeamNameSync } from './sales-users'
+import { findAccessUserByEmail } from './users'
 
 export interface ProjectCostControl {
   prjId: string
@@ -72,7 +73,8 @@ export async function getCostControlData(f: CostControlFilter = {}): Promise<Pro
     overtimeRes,
     mbdRes,
     mbRes,
-    salesUsers
+    salesUsers,
+    accessUser
   ] = await Promise.all([
     getAllOrders(),
     getAllPurchaseOrders(),
@@ -85,12 +87,32 @@ export async function getCostControlData(f: CostControlFilter = {}): Promise<Pro
     fetchAllRows(GOOGLE_CONFIG.payroll.spreadsheetId, 'meal_benefit_details'),
     fetchAllRows(GOOGLE_CONFIG.payroll.spreadsheetId, 'meal_benefits'),
     getAllSalesUsers(),
+    f.userEmail ? findAccessUserByEmail(f.userEmail) : Promise.resolve(null),
   ])
+
+  // Look up user site & ownership scoping
+  const currentUser = f.userEmail ? salesUsers.find(u => u.email.toLowerCase() === f.userEmail!.toLowerCase()) : null
+  const userSite = currentUser?.siteId?.trim().toUpperCase() || ''
+  const userId = currentUser?.userId || ''
+  const userName = currentUser?.name?.toLowerCase() || ''
+  const userEmailLower = f.userEmail?.toLowerCase() || ''
+  const isAdmin = accessUser?.admin || false
 
   // Filter projects
   const fromTime = f.dateFrom ? parseDate(f.dateFrom)?.getTime() : undefined
   const toTime = f.dateTo ? parseDate(f.dateTo)?.getTime() : undefined
   const projects = allProjects.filter(p => {
+    // Non-HO branch site users can ONLY see projects created or owned by their account
+    if (userSite && userSite !== 'HO') {
+      const ownerMatch = (p.prjOwner && p.prjOwner === userId)
+      const createdByMatch = (p.createdBy && (
+        p.createdBy === userId ||
+        p.createdBy.toLowerCase() === userEmailLower ||
+        p.createdBy.toLowerCase() === userName
+      ))
+      if (!ownerMatch && !createdByMatch) return false
+    }
+
     // Sheet dates aren't ISO, so parse before comparing (PO date, created_at fallback)
     const targetTime = (parseDate(p.prjPoDate) || parseDate(p.createdAt))?.getTime()
     if ((fromTime !== undefined || toTime !== undefined) && targetTime === undefined) return false

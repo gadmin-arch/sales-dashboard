@@ -16,6 +16,7 @@ import { LoadMore, useLoadMore } from '@/components/load-more'
 import { useSort, SortHead } from '@/components/sortable'
 import { fmtCurrency, buildQuery, sameSet, getYTD } from '@/lib/sales-helpers'
 import { ExportButton } from '@/components/export-button'
+import { useAuth } from '@/lib/auth-context'
 
 interface CostControlRow {
   prjId: string
@@ -74,6 +75,7 @@ export default function CostControlPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
+  const { user } = useAuth()
   const [statusFilter, setStatusFilter] = useState<'all' | 'safe' | 'overbudget'>('all')
   const [selectedProject, setSelectedProject] = useState<CostControlRow | null>(null)
   const [detailTab, setDetailTab] = useState<'purchasing' | 'reimburse' | 'meal' | 'overtime' | 'report'>('purchasing')
@@ -126,9 +128,10 @@ export default function CostControlPage() {
     doFetch({
       dateFrom, dateTo, salesUser: su, orderType: ot, projectStatus: ps, invoiceStatus: inv, projectFlag: prjFlag,
       pePic, peTeam,
+      ...(user?.email ? { userEmail: user.email } : {}),
       ...(fresh ? { fresh: '1' } : {}),
     })
-  }, [doFetch, dateFrom, dateTo, su, ot, ps, inv, prjFlag, pePic, peTeam])
+  }, [doFetch, dateFrom, dateTo, su, ot, ps, inv, prjFlag, pePic, peTeam, user?.email])
 
   const onApply = () => { 
     setDateFrom(lFrom); setDateTo(lTo); setSu(lSu); setOt(lOt); setPs(lPs); setInv(lInv); setPrjFlag(lPrjFlag); setPePic(lPePic); setPeTeam(lPeTeam) 

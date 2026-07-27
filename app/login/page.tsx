@@ -35,14 +35,22 @@ export default function LoginPage() {
           body: JSON.stringify({ email: userData.email }),
         })
 
+        const contentType = validateResponse.headers.get('content-type')
+        if (!contentType || !contentType.includes('application/json')) {
+          setError(`Server error (${validateResponse.status}). Please try again later.`)
+          setIsLoading(false)
+          return
+        }
+
+        const data = await validateResponse.json()
+
         if (!validateResponse.ok) {
-          const data = await validateResponse.json()
           setError(data.error || 'Access denied.')
           setIsLoading(false)
           return
         }
 
-        const validatedUser = await validateResponse.json()
+        const validatedUser = data
 
         localStorage.setItem(
           'user',

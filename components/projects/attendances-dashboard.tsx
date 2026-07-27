@@ -18,6 +18,9 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { MultiSelect } from '@/components/multi-select'
+import { PageHeader } from '@/components/page-header'
+import { ExportButton } from '@/components/export-button'
+import { PrintButton } from '@/components/print-button'
 import type { ColumnDef } from '@tanstack/react-table'
 
 interface AttendancesDashboardProps {
@@ -431,6 +434,17 @@ export function AttendancesDashboard({
 
   return (
     <div className="space-y-6">
+      <PageHeader
+        title="Work Hours by Attendances"
+        subtitle="Track employee work hours, holidays, and overtime based on Google Sheets data."
+        breadcrumbs={[{ label: 'Project Management' }, { label: 'Attendances' }]}
+        actions={
+          <div className="flex items-center gap-2 print:hidden">
+            <ExportButton data={attendanceTableData} filename="work-hours-attendances.csv" label="Export Attendances" />
+            <PrintButton />
+          </div>
+        }
+      />
       <FilterCard 
         from={localFrom}
         to={localTo}
@@ -475,7 +489,7 @@ export function AttendancesDashboard({
           </div>
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-muted-foreground">Day Type</label>
-            <Select value={selectedDayType} onValueChange={setSelectedDayType}>
+            <Select value={selectedDayType} onValueChange={(v) => setSelectedDayType(v ?? 'all')}>
               <SelectTrigger className="w-full text-xs h-9 bg-background"><SelectValue>All Days</SelectValue></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Days</SelectItem>
@@ -492,25 +506,25 @@ export function AttendancesDashboard({
           title="Total Work Hours"
           value={Math.round(totalWorkHours).toLocaleString()}
           icon={<Clock className="w-5 h-5 text-blue-500" />}
-          description="Normal working days"
+          tooltip="Normal working days"
         />
         <KPICard
           title="Holiday Work Hours"
           value={Math.round(totalHolidayHours).toLocaleString()}
           icon={<CalendarCheck className="w-5 h-5 text-orange-500" />}
-          description="Weekends & Public Holidays"
+          tooltip="Weekends & Public Holidays"
         />
         <KPICard
           title="Total Overtime"
           value={Math.round(totalOvertime).toLocaleString() + ' hrs'}
           icon={<Clock className="w-5 h-5 text-purple-500" />}
-          description="Approved overtime"
+          tooltip="Approved overtime"
         />
         <KPICard
           title="Total Leave/Sick"
           value={totalLeaveDays.toLocaleString() + ' days'}
           icon={<CalendarOff className="w-5 h-5 text-red-500" />}
-          description="Approved leaves"
+          tooltip="Approved leaves"
         />
       </div>
 

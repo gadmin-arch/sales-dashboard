@@ -71,12 +71,7 @@ export default async function AttendancesPage({
   }
   
   return (
-    <div className="flex flex-col gap-6">
-      <PageHeader 
-        title="Work Hours by Attendances" 
-        description="Track employee work hours, holidays, and overtime based on Google Sheets data."
-      />
-      <AttendancesDashboard 
+    <AttendancesDashboard 
         attendances={attendances}
         leaves={leaves}
         overtimes={overtimes}
@@ -89,6 +84,5 @@ export default async function AttendancesPage({
         dateFrom={dateFrom}
         dateTo={dateTo}
       />
-    </div>
   )
 }

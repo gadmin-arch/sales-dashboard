@@ -23,6 +23,7 @@ async function compute(searchParams: URLSearchParams) {
     const projectFlag = parseMulti(searchParams, 'projectFlag')
     const pePic = parseMulti(searchParams, 'pePic')
     const peTeam = parseMulti(searchParams, 'peTeam')
+    const userEmail = searchParams.get('userEmail') || undefined
 
     await loadOrderRefMaps()
     const [
@@ -43,6 +44,7 @@ async function compute(searchParams: URLSearchParams) {
         projectFlag,
         pePic,
         peTeam,
+        userEmail,
       }),
       getAllOrders(),
       getAllSalesUsers(),
@@ -81,7 +83,7 @@ async function compute(searchParams: URLSearchParams) {
       
     // For active PIC IDs that are not in the salesUsers employee directory, add fallback
     activePicIds.forEach(id => {
-      if (!pePicList.some(u => u.id === id)) {
+      if (id && !pePicList.some(u => u.id === id)) {
         pePicList.push({ id, name: id })
       }
     })

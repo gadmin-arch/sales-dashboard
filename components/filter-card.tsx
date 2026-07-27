@@ -32,7 +32,7 @@ export function FilterCard({
   children?: ReactNode
 }) {
   return (
-    <Card>
+    <Card className="print:hidden">
       <CardContent className="pt-5">
         {children}
         <div className={children ? 'mt-4 border-t border-border pt-4' : ''}>

@@ -31,6 +31,7 @@ import { MultiSelect } from '@/components/multi-select'
 import { DateRangeRow } from '@/components/date-range-row'
 import { LoadMore, useLoadMore } from '@/components/load-more'
 import { useChartFilter } from '@/hooks/use-chart-filter'
+import { useAuth } from '@/lib/auth-context'
 
 /* ── Types ── */
 interface SalesData {
@@ -66,6 +67,7 @@ export default function SalesPage() {
   const [data, setData] = useState<SalesData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const { user } = useAuth()
   const [chartPeriod, setChartPeriod] = useState<'monthly' | 'weekly'>('monthly')
   const [tableSearch, setTableSearch] = useState('')
   const { chartFilter, setChartFilter, handleChartClick } = useChartFilter('sales-projects-table')
@@ -140,10 +142,11 @@ export default function SalesPage() {
     const fresh = firstLoad.current; firstLoad.current = false;
     doFetch({
       dateFrom, dateTo, salesUser: su, currency: cur, orderType: ot, projectStatus: ps, invoiceStatus: inv, projectFlag: prjFlag, period: chartPeriod,
+      ...(user?.email ? { userEmail: user.email } : {}),
       ...(chartFilter ? { cType: chartFilter.type, cVal: chartFilter.value } : {}),
       ...(fresh ? { fresh: '1' } : {})
     })
-  }, [doFetch, dateFrom, dateTo, su, cur, ot, ps, inv, prjFlag, chartPeriod, chartFilter])
+  }, [doFetch, dateFrom, dateTo, su, cur, ot, ps, inv, prjFlag, chartPeriod, chartFilter, user?.email])
 
   const onPeriod = (p: 'monthly' | 'weekly') => { setChartPeriod(p) }
   const onApply = () => { setDateFrom(lFrom); setDateTo(lTo); setSu(lSu); setCur(lCur); setOt(lOt); setPs(lPs); setInv(lInv); setPrjFlag(lPrjFlag) }

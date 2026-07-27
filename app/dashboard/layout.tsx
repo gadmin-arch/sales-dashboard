@@ -352,7 +352,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </aside>
 
       {/* Mobile header */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 flex h-16 items-center justify-between border-b border-border bg-card px-4">
+      <div className="lg:hidden print:hidden fixed top-0 left-0 right-0 z-50 flex h-16 items-center justify-between border-b border-border bg-card px-4">
         <h1 className="text-lg font-semibold text-foreground">Dashboard</h1>
         <button onClick={() => setSidebarOpen(!sidebarOpen)} className="text-muted-foreground">
           {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}

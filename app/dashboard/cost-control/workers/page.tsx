@@ -21,6 +21,7 @@ import { buildQuery, sameSet, getYTD, fmtCurrency } from '@/lib/sales-helpers'
 import { useChartFilter } from '@/hooks/use-chart-filter'
 import Link from 'next/link'
 import { ExportButton } from '@/components/export-button'
+import { PrintButton } from '@/components/print-button'
 
 interface Option { value: string; label: string }
 interface WorkerRow {
@@ -176,9 +177,17 @@ export default function CostControlWorkerKPIsPage() {
           </Link>
           <PageHeader 
             title="Worker KPIs & Order Monitoring" 
-            subtitle="Cost Control — Analisis kinerja worker disandingkan dengan total nominal order pekerjaan" breadcrumbs={[{ label: 'Cost Control' }, { label: 'Worker KPIs' }]} 
+            subtitle="Cost Control — Analisis kinerja worker disandingkan dengan total nominal order pekerjaan" 
+            breadcrumbs={[{ label: 'Cost Control' }, { label: 'Worker KPIs' }]} 
             chartFilter={chartFilter} 
             onClearFilter={() => setChartFilter(null)} 
+            actions={
+              <div className="flex items-center gap-2 print:hidden">
+                <ExportButton data={workerRows} filename="worker-kpis.csv" label="Export Workers" />
+                <ExportButton data={projectRows} filename="project-hours.csv" label="Export Projects" />
+                <PrintButton />
+              </div>
+            }
           />
         </div>
 

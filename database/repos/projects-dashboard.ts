@@ -7,7 +7,6 @@ import { getFinanceAPData } from './finance-ap'
 import { getAllReports } from './reports'
 import { isMaterial, CostControlFilter } from './cost-control'
 import { getAllSalesUsers, getTeamNameSync } from './sales-users'
-import { findAccessUserByEmail } from './users'
 import { parseDate } from '@/lib/utils-date-currency'
 
 export interface ProjectDashboardData {
@@ -47,7 +46,6 @@ export async function getProjectDashboardData(f: CostControlFilter = {}): Promis
     mbdRes,
     mbRes,
     salesUsers,
-    accessUser
   ] = await Promise.all([
     getAllOrders(),
     getAllPurchaseOrders(),
@@ -59,27 +57,22 @@ export async function getProjectDashboardData(f: CostControlFilter = {}): Promis
     fetchAllRows(GOOGLE_CONFIG.payroll.spreadsheetId, 'meal_benefit_details'),
     fetchAllRows(GOOGLE_CONFIG.payroll.spreadsheetId, 'meal_benefits'),
     getAllSalesUsers(),
-    f.userEmail ? findAccessUserByEmail(f.userEmail) : Promise.resolve(null),
   ])
 
-  // Apply filters to projects first
+  // Apply site-based visibility filter to projects.
+  // user_site = HO or empty → see all; otherwise only projects whose
+  // PE Team list contains the user's site (exact match per entry).
   let projects = allProjects
   if (f.userEmail) {
     const currentUser = salesUsers.find(u => u.email.toLowerCase() === f.userEmail!.toLowerCase())
     const userSite = currentUser?.siteId?.trim().toUpperCase() || ''
-    const isAdmin = accessUser?.admin || false
 
-    projects = projects.filter(p => {
-      if (isAdmin) return true // Admins bypass site visibility restrictions
-
-      const peTeamUpper = p.prjPeSiteId?.toUpperCase() || ''
-
-      if (userSite === 'HO' || userSite === '') {
-        return true
-      } else {
-        return peTeamUpper.includes(userSite)
-      }
-    })
+    if (userSite && userSite !== 'HO') {
+      projects = projects.filter(p => {
+        const sites = (p.prjPeSiteId || '').split(',').map(s => s.trim().toUpperCase())
+        return sites.includes(userSite)
+      })
+    }
   }
 
   if (f.salesUser && f.salesUser.length > 0) {

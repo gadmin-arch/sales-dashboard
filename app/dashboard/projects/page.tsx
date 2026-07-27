@@ -12,6 +12,7 @@ import { DashboardSkeleton, PageError } from '@/components/page-states'
 import { PageHeader } from '@/components/page-header'
 import { SearchInput } from '@/components/search-input'
 import { ExportButton } from '@/components/export-button'
+import { PrintButton } from '@/components/print-button'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { useAuth } from '@/lib/auth-context'
@@ -206,6 +207,22 @@ export default function ProjectsDashboardPage() {
     totalItems: d.reimburseCount + d.mealCount,
   })), [filtered])
 
+  // Clean export dataset without nominal budget amounts (operational & utilization percentages only)
+  const exportTableRows = useMemo(() => filtered.map((d) => ({
+    'Project ID': d.prjId,
+    'Project Name': d.prjName,
+    'PE PIC': d.pePicName || '-',
+    'PE Team': d.peTeamName || '-',
+    'Total Reports': d.reportCount,
+    'Total Report Hours': Number(d.reportHours.toFixed(1)),
+    'Overtime Hours': Number(d.overtimeHours.toFixed(1)),
+    'Reimburse Requests': d.reimburseCount,
+    'Meal Requests': d.mealCount,
+    'Material Util %': `${d.matPct.toFixed(1)}%`,
+    'Service Util %': `${d.svcPct.toFixed(1)}%`,
+    'Total Util %': `${d.totalPct.toFixed(1)}%`,
+  })), [filtered])
+
   const insights = useMemo(() => {
     if (calculatedRows.length === 0) return []
     const totalReports = calculatedRows.reduce((sum, d) => sum + d.reportCount, 0)
@@ -240,7 +257,12 @@ export default function ProjectsDashboardPage() {
         title="Project Dashboard" 
         subtitle="Track project operations, resource utilization, and expense items without exposing financial amounts." 
         breadcrumbs={[{ label: 'Project Management' }, { label: 'Projects' }]}
-        actions={<ExportButton data={tableRows} filename="projects.csv" />}
+        actions={
+          <div className="flex items-center gap-2 print:hidden">
+            <ExportButton data={exportTableRows} filename="projects.csv" />
+            <PrintButton />
+          </div>
+        }
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -537,26 +559,43 @@ export default function ProjectsDashboardPage() {
               {/* Right Side: Detailed lists in tabs (Cols span 7) */}
               <div className="lg:col-span-7 space-y-4">
                 {/* Tabs Header */}
-                <div className="flex border-b border-border gap-2 text-xs overflow-x-auto pb-1">
-                  {(['purchasing', 'reimburse', 'meal', 'overtime', 'report'] as const).map((tab) => {
-                    const n = (arr: unknown[]) => detailLoading ? '…' : arr.length
-                    const label =
-                      tab === 'purchasing' ? `Purchases (${n(selectedCalculatedProject.purchasingItems)})` :
-                      tab === 'reimburse' ? `Reimbursements (${n(selectedCalculatedProject.reimburseItems)})` :
-                      tab === 'meal' ? `Meal Benefits (${n(selectedCalculatedProject.mealItems)})` :
-                      tab === 'overtime' ? `Overtimes (${n(selectedCalculatedProject.overtimeItems)})` :
-                      `Daily Reports (${n(selectedCalculatedProject.reportItems)})`
-                    
+                <div className="flex items-center justify-between border-b border-border pb-1 gap-2">
+                  <div className="flex gap-2 text-xs overflow-x-auto">
+                    {(['purchasing', 'reimburse', 'meal', 'overtime', 'report'] as const).map((tab) => {
+                      const n = (arr: unknown[]) => detailLoading ? '…' : arr.length
+                      const label =
+                        tab === 'purchasing' ? `Purchases (${n(selectedCalculatedProject.purchasingItems)})` :
+                        tab === 'reimburse' ? `Reimbursements (${n(selectedCalculatedProject.reimburseItems)})` :
+                        tab === 'meal' ? `Meal Benefits (${n(selectedCalculatedProject.mealItems)})` :
+                        tab === 'overtime' ? `Overtimes (${n(selectedCalculatedProject.overtimeItems)})` :
+                        `Daily Reports (${n(selectedCalculatedProject.reportItems)})`
+                      
+                      return (
+                        <button
+                          key={tab}
+                          onClick={() => setActiveTab(tab)}
+                          className={`pb-2 px-1 font-semibold whitespace-nowrap border-b-2 transition-colors ${activeTab === tab ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
+                        >
+                          {label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  {(() => {
+                    const tabData =
+                      activeTab === 'purchasing' ? selectedCalculatedProject.purchasingItems :
+                      activeTab === 'reimburse' ? selectedCalculatedProject.reimburseItems :
+                      activeTab === 'meal' ? selectedCalculatedProject.mealItems :
+                      activeTab === 'overtime' ? selectedCalculatedProject.overtimeItems :
+                      selectedCalculatedProject.reportItems
                     return (
-                      <button
-                        key={tab}
-                        onClick={() => setActiveTab(tab)}
-                        className={`pb-2 px-1 font-semibold whitespace-nowrap border-b-2 transition-colors ${activeTab === tab ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
-                      >
-                        {label}
-                      </button>
+                      <ExportButton 
+                        data={tabData} 
+                        filename={`project-${selectedCalculatedProject.prjId}-${activeTab}.csv`} 
+                        label="Export Tab" 
+                      />
                     )
-                  })}
+                  })()}
                 </div>
 
                 {/* Tab Contents */}

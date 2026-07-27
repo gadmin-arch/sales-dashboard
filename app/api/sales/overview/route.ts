@@ -4,6 +4,7 @@ import { parseDashboardParams } from '@/lib/api-helpers'
 import { getProjectOrders, getOrderTypeLabelSync, getPeStatusLabelSync, getFinanceStatusLabelSync, loadRefMaps as loadOrderRefMaps, getAllOrderTypes, getAllPeStatuses, getAllFinanceStatuses, getFlagLabel } from '@/database/repos/orders'
 import { getAllQuotations, getStatusLabel, loadRefMaps as loadQuotRefMaps, getAllQuotationTypes } from '@/database/repos/quotations'
 import { getAllSalesUsers } from '@/database/repos/sales-users'
+import { findAccessUserByEmail } from '@/database/repos/users'
 import { getAllCompanies } from '@/database/repos/companies'
 import { getInvoicingData } from '@/database/repos/invoicing'
 import { parseDate, formatMonth, formatWeek, sortByPeriod, filterDataByDateRange, parseMulti } from '@/lib/utils-date-currency'
@@ -72,6 +73,39 @@ async function compute(searchParams: URLSearchParams) {
     // Filter orders and quotations by date
     let filteredOrders = filterDataByDateRange(orders, (o) => o.prjPoDate, dateFrom, dateTo)
     let filteredQuotations = filterDataByDateRange(quotations, (q) => q.qDate, dateFrom, dateTo)
+
+    // User site & ownership scoping
+    const userEmail = searchParams.get('userEmail') || undefined
+    const accessUser = userEmail ? await findAccessUserByEmail(userEmail) : null
+    const currentUser = userEmail ? salesUsers.find(u => u.email.toLowerCase() === userEmail.toLowerCase()) : null
+    const userSite = currentUser?.siteId?.trim().toUpperCase() || ''
+    const userId = currentUser?.userId || ''
+    const userName = currentUser?.name?.toLowerCase() || ''
+    const userEmailLower = userEmail?.toLowerCase() || ''
+    const isAdmin = accessUser?.admin || false
+
+    if (userSite && userSite !== 'HO') {
+      filteredOrders = filteredOrders.filter((o) => {
+        const ownerId = o.prjOwner || orderToSalesOwner.get(o.prjId) || ''
+        const ownerMatch = ownerId === userId
+        const createdByMatch = o.createdBy && (
+          o.createdBy === userId ||
+          o.createdBy.toLowerCase() === userEmailLower ||
+          o.createdBy.toLowerCase() === userName
+        )
+        return ownerMatch || createdByMatch
+      })
+      filteredQuotations = filteredQuotations.filter((q) => {
+        const ownerId = q.qOwner || ''
+        const ownerMatch = ownerId === userId
+        const createdByMatch = q.createdBy && (
+          q.createdBy === userId ||
+          q.createdBy.toLowerCase() === userEmailLower ||
+          q.createdBy.toLowerCase() === userName
+        )
+        return ownerMatch || createdByMatch
+      })
+    }
 
     if (salesUser.length) {
       filteredOrders = filteredOrders.filter((o) =>

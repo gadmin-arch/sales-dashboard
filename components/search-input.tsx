@@ -1,7 +1,6 @@
 'use client'
 
 import { Search } from 'lucide-react'
-import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { useState, useEffect } from 'react'
 import { useDebouncedCallback } from 'use-debounce'
@@ -36,7 +35,7 @@ export function SearchInput({
   }
 
   return (
-    <div className={cn('relative w-48', className)}>
+    <div className={cn('relative w-48 print:hidden', className)}>
       <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
       <input
         type="text"

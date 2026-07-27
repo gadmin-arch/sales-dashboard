@@ -109,7 +109,7 @@ export function DataTable<TData, TValue>({
   return (
     <div className="space-y-4 flex flex-col h-full">
       {/* Table Toolbar (Optional Search space & Column Visibility) */}
-      <div className="flex items-center justify-end px-4 pt-4">
+      <div className="flex items-center justify-end px-4 pt-4 print:hidden">
         <DropdownMenu>
           <DropdownMenuTrigger render={<Button variant="outline" size="sm" className="ml-auto flex items-center gap-2 h-9 text-xs" />}>
             <Settings2 className="h-4 w-4" />
@@ -127,8 +127,6 @@ export function DataTable<TData, TValue>({
                     checked={column.getIsVisible()}
                     onCheckedChange={(value) => column.toggleVisibility(!!value)}
                   >
-                    {/* Assuming column IDs are camelCase, convert them to readable format, or use header string if possible. 
-                        Usually column.id is good enough if we don't have explicit labels, but we can replace hyphens/underscores */}
                     {column.id.replace(/_/g, ' ')}
                   </DropdownMenuCheckboxItem>
                 )
@@ -163,8 +161,26 @@ export function DataTable<TData, TValue>({
           <TableBody>
             {rows.length ? (
               <>
+                {/* Print mode rows: hidden on screen, visible as table-row during print */}
+                {rows.map((row) => (
+                  <TableRow
+                    key={`print-${row.id}`}
+                    className="hidden print:table-row hover:bg-muted/50 transition-colors"
+                  >
+                    {row.getVisibleCells().map((cell) => (
+                      <TableCell key={cell.id} className="py-1.5">
+                        {flexRender(
+                          cell.column.columnDef.cell,
+                          cell.getContext()
+                        )}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))}
+
+                {/* Normal screen mode virtualized rows: visible on screen, hidden during print */}
                 {paddingTop > 0 && (
-                  <tr><td style={{ height: `${paddingTop}px` }} colSpan={columns.length} /></tr>
+                  <tr className="print:hidden"><td style={{ height: `${paddingTop}px` }} colSpan={columns.length} /></tr>
                 )}
                 {virtualRows.map((virtualRow) => {
                   const row = rows[virtualRow.index]
@@ -174,7 +190,7 @@ export function DataTable<TData, TValue>({
                       data-index={virtualRow.index}
                       ref={rowVirtualizer.measureElement}
                       data-state={row.getIsSelected() && 'selected'}
-                      className={`hover:bg-muted/50 transition-colors ${onRowClick ? 'cursor-pointer' : ''}`}
+                      className={`print:hidden hover:bg-muted/50 transition-colors ${onRowClick ? 'cursor-pointer' : ''}`}
                       onClick={() => onRowClick && onRowClick(row.original)}
                     >
                       {row.getVisibleCells().map((cell) => (
@@ -189,7 +205,7 @@ export function DataTable<TData, TValue>({
                   )
                 })}
                 {paddingBottom > 0 && (
-                  <tr><td style={{ height: `${paddingBottom}px` }} colSpan={columns.length} /></tr>
+                  <tr className="print:hidden"><td style={{ height: `${paddingBottom}px` }} colSpan={columns.length} /></tr>
                 )}
               </>
             ) : (
@@ -207,7 +223,7 @@ export function DataTable<TData, TValue>({
       </div>
       
       {/* Pagination Controls */}
-      <div className="flex items-center justify-between px-4 pb-4">
+      <div className="flex items-center justify-between px-4 pb-4 print:hidden">
         <div className="flex-1 text-xs text-muted-foreground">
           Showing {table.getState().pagination.pageIndex * table.getState().pagination.pageSize + (table.getRowModel().rows.length ? 1 : 0)} to{' '}
           {manualPagination
