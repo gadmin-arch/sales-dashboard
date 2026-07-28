@@ -9,7 +9,13 @@ interface PrintButtonProps {
 
 export function PrintButton({ label = 'Print' }: PrintButtonProps) {
   const handlePrint = () => {
-    window.print()
+    window.dispatchEvent(new Event('beforeprint'))
+    setTimeout(() => {
+      window.print()
+      setTimeout(() => {
+        window.dispatchEvent(new Event('afterprint'))
+      }, 500)
+    }, 100)
   }
 
   return (
