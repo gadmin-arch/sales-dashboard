@@ -194,25 +194,27 @@ input[type="date"] { color-scheme: light; }
     margin: 10mm 10mm 10mm 10mm;
   }
 
-  /* Override dark mode theme variables during print so dark theme colors don't render white-on-white text/lines */
+  /* Override dark mode theme variables during print using HEX colors supported by Chrome SVG print engine */
   :root,
+  html,
+  body,
   .dark,
   [data-theme="dark"] {
-    --background: oklch(0.99 0.003 280) !important;
-    --foreground: oklch(0.14 0.01 280) !important;
-    --card: oklch(1 0 0) !important;
-    --card-foreground: oklch(0.14 0.01 280) !important;
-    --popover: oklch(1 0 0) !important;
-    --popover-foreground: oklch(0.14 0.01 280) !important;
-    --muted: oklch(0.95 0.01 280) !important;
-    --muted-foreground: oklch(0.35 0.02 280) !important;
-    --border: oklch(0.75 0.01 280) !important;
-    --input: oklch(0.75 0.01 280) !important;
-    --chart-1: oklch(0.55 0.20 270) !important;
-    --chart-2: oklch(0.55 0.18 160) !important;
-    --chart-3: oklch(0.60 0.18 80) !important;
-    --chart-4: oklch(0.55 0.22 340) !important;
-    --chart-5: oklch(0.55 0.15 210) !important;
+    --background: #ffffff !important;
+    --foreground: #0f172a !important;
+    --card: #ffffff !important;
+    --card-foreground: #0f172a !important;
+    --popover: #ffffff !important;
+    --popover-foreground: #0f172a !important;
+    --muted: #f1f5f9 !important;
+    --muted-foreground: #475569 !important;
+    --border: #cbd5e1 !important;
+    --input: #cbd5e1 !important;
+    --chart-1: #4f46e5 !important;
+    --chart-2: #059669 !important;
+    --chart-3: #d97706 !important;
+    --chart-4: #dc2626 !important;
+    --chart-5: #7c3aed !important;
   }
 
   /* Force exact color reproduction for SVG fills, bars, pie charts, and background graphics */
