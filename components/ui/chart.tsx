@@ -59,6 +59,17 @@ function ChartContainer({
   const uniqueId = React.useId()
   const chartId = `chart-${id ?? uniqueId.replace(/:/g, "")}`
 
+  // Clone children for print mode with explicit width and height so Recharts renders static SVG nodes directly in DOM
+  const printChildren = React.Children.map(children, (child) => {
+    if (React.isValidElement(child)) {
+      return React.cloneElement(child, {
+        width: 420,
+        height: 180,
+      } as any)
+    }
+    return child
+  })
+
   return (
     <ChartContext.Provider value={{ config }}>
       <div
@@ -71,15 +82,20 @@ function ChartContainer({
         {...props}
       >
         <ChartStyle id={chartId} config={config} />
-        <RechartsPrimitive.ResponsiveContainer
-          width="100%"
-          height="100%"
-          minWidth={200}
-          minHeight={180}
-          initialDimension={initialDimension}
-        >
-          {children}
-        </RechartsPrimitive.ResponsiveContainer>
+
+        {/* Screen mode: dynamic ResponsiveContainer */}
+        <div className="w-full h-full print:hidden">
+          <RechartsPrimitive.ResponsiveContainer
+            initialDimension={initialDimension}
+          >
+            {children}
+          </RechartsPrimitive.ResponsiveContainer>
+        </div>
+
+        {/* Print mode: static SVG render bypassing ResponsiveContainer */}
+        <div className="hidden print:block w-full h-[180px]">
+          {printChildren}
+        </div>
       </div>
     </ChartContext.Provider>
   )
