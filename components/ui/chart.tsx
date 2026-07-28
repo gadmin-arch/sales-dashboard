@@ -39,32 +39,6 @@ function useChart() {
   return context
 }
 
-function useIsPrinting() {
-  const [isPrinting, setIsPrinting] = React.useState(false)
-
-  React.useEffect(() => {
-    const beforePrint = () => setIsPrinting(true)
-    const afterPrint = () => setIsPrinting(false)
-
-    window.addEventListener("beforeprint", beforePrint)
-    window.addEventListener("afterprint", afterPrint)
-
-    const mediaQuery = typeof window !== "undefined" && window.matchMedia ? window.matchMedia("print") : null
-    const handleMediaChange = (mql: MediaQueryListEvent) => {
-      setIsPrinting(mql.matches)
-    }
-    mediaQuery?.addEventListener("change", handleMediaChange)
-
-    return () => {
-      window.removeEventListener("beforeprint", beforePrint)
-      window.removeEventListener("afterprint", afterPrint)
-      mediaQuery?.removeEventListener("change", handleMediaChange)
-    }
-  }, [])
-
-  return isPrinting
-}
-
 function ChartContainer({
   id,
   className,
@@ -84,7 +58,6 @@ function ChartContainer({
 }) {
   const uniqueId = React.useId()
   const chartId = `chart-${id ?? uniqueId.replace(/:/g, "")}`
-  const isPrinting = useIsPrinting()
 
   return (
     <ChartContext.Provider value={{ config }}>
@@ -100,7 +73,9 @@ function ChartContainer({
         <ChartStyle id={chartId} config={config} />
         <RechartsPrimitive.ResponsiveContainer
           width="100%"
-          height={isPrinting ? 180 : "100%"}
+          height="100%"
+          minWidth={200}
+          minHeight={180}
           initialDimension={initialDimension}
         >
           {children}
