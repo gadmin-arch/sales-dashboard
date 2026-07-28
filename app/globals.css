@@ -194,6 +194,22 @@ input[type="date"] { color-scheme: light; }
     margin: 10mm 10mm 10mm 10mm;
   }
 
+  /* Force exact color reproduction for SVG fills, bars, pie charts, and background graphics */
+  *,
+  body,
+  svg,
+  path,
+  rect,
+  circle,
+  .recharts-surface,
+  .recharts-layer,
+  .recharts-bar-rectangle,
+  .recharts-pie-sector {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+
   /* Hide navigation, headers, forms, inputs, buttons */
   aside,
   header,
@@ -286,24 +302,38 @@ input[type="date"] { color-scheme: light; }
     page-break-inside: auto !important;
   }
 
-  /* Chart height reduction & centering for compact print density */
+  /* Recharts & SVG print rendering fixes: guarantee full width and visible SVGs */
+  [data-slot="chart"],
   [data-chart],
-  .recharts-responsive-container,
-  .recharts-wrapper {
+  .recharts-responsive-container {
     width: 100% !important;
     min-width: 100% !important;
-    max-height: 160px !important;
-    margin: 0 auto !important;
+    height: 170px !important;
+    min-height: 170px !important;
+    display: block !important;
+    position: relative !important;
+    overflow: visible !important;
   }
   
-  .recharts-surface {
+  .recharts-wrapper {
     width: 100% !important;
-    max-height: 160px !important;
+    height: 170px !important;
+    position: relative !important;
+    margin: 0 auto !important;
+    overflow: visible !important;
+  }
+
+  svg.recharts-surface {
+    width: 100% !important;
+    height: 170px !important;
+    min-height: 170px !important;
+    overflow: visible !important;
+    display: block !important;
   }
 
   .h-\[260px\], .h-\[220px\], .h-\[300px\], .h-\[50vh\] {
-    height: 160px !important;
-    max-height: 160px !important;
+    height: 170px !important;
+    max-height: 170px !important;
   }
 
   /* Compact legends below charts */
