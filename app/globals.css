@@ -194,6 +194,27 @@ input[type="date"] { color-scheme: light; }
     margin: 10mm 10mm 10mm 10mm;
   }
 
+  /* Override dark mode theme variables during print so dark theme colors don't render white-on-white text/lines */
+  :root,
+  .dark,
+  [data-theme="dark"] {
+    --background: oklch(0.99 0.003 280) !important;
+    --foreground: oklch(0.14 0.01 280) !important;
+    --card: oklch(1 0 0) !important;
+    --card-foreground: oklch(0.14 0.01 280) !important;
+    --popover: oklch(1 0 0) !important;
+    --popover-foreground: oklch(0.14 0.01 280) !important;
+    --muted: oklch(0.95 0.01 280) !important;
+    --muted-foreground: oklch(0.35 0.02 280) !important;
+    --border: oklch(0.75 0.01 280) !important;
+    --input: oklch(0.75 0.01 280) !important;
+    --chart-1: oklch(0.55 0.20 270) !important;
+    --chart-2: oklch(0.55 0.18 160) !important;
+    --chart-3: oklch(0.60 0.18 80) !important;
+    --chart-4: oklch(0.55 0.22 340) !important;
+    --chart-5: oklch(0.55 0.15 210) !important;
+  }
+
   /* Force exact color reproduction for SVG fills, bars, pie charts, and background graphics */
   *,
   body,
@@ -305,6 +326,17 @@ input[type="date"] { color-scheme: light; }
   /* Recharts & SVG print rendering fixes: guarantee full width and visible SVGs */
   [data-slot="chart"],
   [data-chart],
+  .aspect-video {
+    aspect-ratio: auto !important;
+    width: 100% !important;
+    min-width: 100% !important;
+    height: 170px !important;
+    min-height: 170px !important;
+    display: block !important;
+    position: relative !important;
+    overflow: visible !important;
+  }
+
   .recharts-responsive-container {
     width: 100% !important;
     min-width: 100% !important;
@@ -318,6 +350,7 @@ input[type="date"] { color-scheme: light; }
   .recharts-wrapper {
     width: 100% !important;
     height: 170px !important;
+    min-height: 170px !important;
     position: relative !important;
     margin: 0 auto !important;
     overflow: visible !important;
@@ -325,8 +358,8 @@ input[type="date"] { color-scheme: light; }
 
   svg.recharts-surface {
     width: 100% !important;
-    height: 170px !important;
-    min-height: 170px !important;
+    height: 100% !important;
+    min-height: 160px !important;
     overflow: visible !important;
     display: block !important;
   }
@@ -334,6 +367,34 @@ input[type="date"] { color-scheme: light; }
   .h-\[260px\], .h-\[220px\], .h-\[300px\], .h-\[50vh\] {
     height: 170px !important;
     max-height: 170px !important;
+  }
+
+  /* Force visibility and high contrast for SVG elements inside recharts */
+  svg.recharts-surface *,
+  .recharts-layer,
+  .recharts-bar-rectangles,
+  .recharts-bar-rectangle,
+  .recharts-pie-sector,
+  .recharts-pie,
+  .recharts-curve,
+  .recharts-line,
+  .recharts-area,
+  .recharts-sector {
+    visibility: visible !important;
+    opacity: 1 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .recharts-cartesian-axis-tick text {
+    fill: #334155 !important;
+    font-size: 8px !important;
+    visibility: visible !important;
+  }
+  .recharts-cartesian-grid line {
+    stroke: #cbd5e1 !important;
+    stroke-opacity: 1 !important;
+    visibility: visible !important;
   }
 
   /* Compact legends below charts */
