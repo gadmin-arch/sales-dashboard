@@ -2,7 +2,7 @@
 
 import { useAuth } from '@/lib/auth-context'
 import { usePathname } from 'next/navigation'
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useState, useRef, type ReactNode } from 'react'
 import Link from 'next/link'
 import { BarChart3, FileText, CreditCard, FolderOpen, LogOut, Menu, X, ListTodo, Users, Lock, ClipboardList, ShoppingCart, Store, Loader2, CalendarClock, ClipboardCheck, Banknote, Gauge, ChevronDown, ChevronRight, Shield, BookOpen, Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -71,6 +71,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const accessDenied = Boolean(user && currentItem && roles && !roles[currentItem.role])
   const firstAllowed = firstAllowedHref(roles)
 
+  const prevSyncStatus = useRef<string | null>(null)
+
   const fetchSyncStatus = async () => {
     try {
       const res = await fetch('/api/sync/status')
@@ -90,6 +92,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         setSyncStatus(data.status || null)
         setSyncErrorMessage(data.errorMessage || null)
         setSyncHistory(data.history || [])
+
+        if (data.status === 'IN_PROGRESS') {
+          setSyncing(true)
+        }
       }
     } catch (e) {
       console.error('Failed to fetch sync status', e)
@@ -109,8 +115,34 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   }, [user])
 
+  // Poll sync status every 3 seconds while syncing is active
+  useEffect(() => {
+    let interval: NodeJS.Timeout
+    if (syncing || syncStatus === 'IN_PROGRESS') {
+      interval = setInterval(() => {
+        fetchSyncStatus()
+      }, 3000)
+    }
+    return () => clearInterval(interval)
+  }, [syncing, syncStatus])
+
+  // Reload page once background sync transitions to SUCCESS
+  useEffect(() => {
+    if (prevSyncStatus.current === 'IN_PROGRESS' && syncStatus === 'SUCCESS') {
+      setSyncing(false)
+      window.location.reload()
+    } else if (prevSyncStatus.current === 'IN_PROGRESS' && syncStatus === 'FAILED') {
+      setSyncing(false)
+      alert('Sync gagal: ' + (syncErrorMessage || 'Terjadi kesalahan pada server'))
+    }
+    prevSyncStatus.current = syncStatus
+  }, [syncStatus, syncErrorMessage])
+
   const handleManualSync = async () => {
-    if (syncing) return
+    if (syncing || syncStatus === 'IN_PROGRESS') {
+      alert('Sinkronisasi data sedang berjalan di background. Mohon tunggu beberapa saat...')
+      return
+    }
     const confirmed = window.confirm("Apakah Anda yakin ingin melakukan sinkronisasi data dari Google Sheets?")
     if (!confirmed) return
     setSyncing(true)
@@ -118,16 +150,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       const res = await fetch('/api/sync/manual', { method: 'POST' })
       const data = await res.json()
       if (data.success) {
+        setSyncStatus('IN_PROGRESS')
         await fetchSyncStatus()
-        window.location.reload()
       } else {
-        alert('Sync failed: ' + (data.error || 'Unknown error'))
+        setSyncing(false)
+        alert('Gagal memulai sync: ' + (data.error || 'Unknown error'))
       }
     } catch (e) {
       console.error(e)
-      alert('Sync failed. Please check connection.')
-    } finally {
       setSyncing(false)
+      alert('Gagal menghubungi server. Mohon periksa koneksi.')
     }
   }
 

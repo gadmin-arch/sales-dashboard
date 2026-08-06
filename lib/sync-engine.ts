@@ -150,6 +150,16 @@ export async function syncAllSheets(): Promise<{ success: boolean; syncedCount: 
     // 1. Initialize tables
     await initDatabase()
 
+    // Record IN_PROGRESS in sync_metadata
+    try {
+      await query(`
+        INSERT INTO sync_metadata (status, last_sync_time)
+        VALUES ('IN_PROGRESS', NOW());
+      `)
+    } catch (metaErr) {
+      console.warn('[sync] Failed to record IN_PROGRESS metadata:', metaErr)
+    }
+
     let syncedCount = 0
 
     // 2. Fetch per spreadsheet (one values.batchGet each) instead of one
