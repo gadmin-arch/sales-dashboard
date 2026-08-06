@@ -53,6 +53,8 @@ export function isMaterial(typeId: string): boolean {
 export interface CostControlFilter {
   dateFrom?: string
   dateTo?: string
+  dateType?: string
+  customer?: string[]
   salesUser?: string[]
   orderType?: string[]
   projectStatus?: string[]
@@ -113,11 +115,20 @@ export async function getCostControlData(f: CostControlFilter = {}): Promise<Pro
       if (!ownerMatch && !createdByMatch) return false
     }
 
-    // Sheet dates aren't ISO, so parse before comparing (PO date, created_at fallback)
-    const targetTime = (parseDate(p.prjPoDate) || parseDate(p.createdAt))?.getTime()
+    // Date filtering based on dateType
+    const targetDateStr = f.dateType === 'plan_start'
+      ? (p.prjStartDatePlan || p.prjStartDate)
+      : f.dateType === 'plan_due'
+        ? (p.prjDueDatePlan || p.prjDueDate)
+        : f.dateType === 'actual_end'
+          ? p.prjEndDateActual
+          : (p.prjPoDate || p.createdAt)
+
+    const targetTime = parseDate(targetDateStr)?.getTime()
     if ((fromTime !== undefined || toTime !== undefined) && targetTime === undefined) return false
     if (fromTime !== undefined && targetTime! < fromTime) return false
     if (toTime !== undefined && targetTime! > toTime) return false
+    if (f.customer?.length && !f.customer.includes(p.prjCompanyId)) return false
     if (f.salesUser?.length && !f.salesUser.includes(p.prjOwner)) return false
     if (f.orderType?.length && !f.orderType.includes(p.prjType)) return false
     if (f.projectStatus?.length && !f.projectStatus.includes(p.prjPeStatus)) return false

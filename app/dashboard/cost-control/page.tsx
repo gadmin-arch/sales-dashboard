@@ -8,6 +8,7 @@ import { Wallet, ShoppingCart, AlertCircle, CheckCircle2, X, Lightbulb, Trending
 import { SalesPageShell } from '@/components/theme-toggle'
 import Link from 'next/link'
 import { MultiSelect } from '@/components/multi-select'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { PageHeader } from '@/components/page-header'
 import { FilterCard } from '@/components/filter-card'
 import { DashboardSkeleton, PageError } from '@/components/page-states'
@@ -60,6 +61,7 @@ interface ProjectDetailItems {
 
 interface Option { value: string; label: string }
 interface FilterMetadata {
+  customerList: { id: string; name: string }[]
   salesUserList: { id: string; name: string }[]
   pePicList: { id: string; name: string }[]
   peTeamList: { id: string; name: string }[]
@@ -89,12 +91,16 @@ export default function CostControlPage() {
   const [calcMethod, setCalcMethod] = useState<'hours' | 'report'>('hours')
 
   const [dateFrom, setDateFrom] = useState(getYTD().from), [dateTo, setDateTo] = useState(getYTD().to)
+  const [dateType, setDateType] = useState<string>('po')
+  const [cust, setCust] = useState<string[]>([])
   const [su, setSu] = useState<string[]>([]), [ot, setOt] = useState<string[]>([])
   const [ps, setPs] = useState<string[]>([]), [inv, setInv] = useState<string[]>([])
   const [prjFlag, setPrjFlag] = useState<string[]>([])
   const [pePic, setPePic] = useState<string[]>([]), [peTeam, setPeTeam] = useState<string[]>([])
   
   const [lFrom, setLFrom] = useState(dateFrom), [lTo, setLTo] = useState(dateTo)
+  const [lDateType, setLDateType] = useState<string>('po')
+  const [lCust, setLCust] = useState<string[]>([])
   const [lSu, setLSu] = useState<string[]>([]), [lOt, setLOt] = useState<string[]>([])
   const [lPs, setLPs] = useState<string[]>([]), [lInv, setLInv] = useState<string[]>([])
   const [lPrjFlag, setLPrjFlag] = useState<string[]>([])
@@ -111,6 +117,7 @@ export default function CostControlPage() {
       if (json.error) throw new Error(json.error)
       setData(json.projects || [])
       setMetadata({
+        customerList: json.customerList || [],
         salesUserList: json.salesUserList || [],
         pePicList: json.pePicList || [],
         peTeamList: json.peTeamList || [],
@@ -126,20 +133,20 @@ export default function CostControlPage() {
   useEffect(() => {
     const fresh = firstLoad.current; firstLoad.current = false
     doFetch({
-      dateFrom, dateTo, salesUser: su, orderType: ot, projectStatus: ps, invoiceStatus: inv, projectFlag: prjFlag,
+      dateFrom, dateTo, dateType, customer: cust, salesUser: su, orderType: ot, projectStatus: ps, invoiceStatus: inv, projectFlag: prjFlag,
       pePic, peTeam,
       ...(user?.email ? { userEmail: user.email } : {}),
       ...(fresh ? { fresh: '1' } : {}),
     })
-  }, [doFetch, dateFrom, dateTo, su, ot, ps, inv, prjFlag, pePic, peTeam, user?.email])
+  }, [doFetch, dateFrom, dateTo, dateType, cust, su, ot, ps, inv, prjFlag, pePic, peTeam, user?.email])
 
   const onApply = () => { 
-    setDateFrom(lFrom); setDateTo(lTo); setSu(lSu); setOt(lOt); setPs(lPs); setInv(lInv); setPrjFlag(lPrjFlag); setPePic(lPePic); setPeTeam(lPeTeam) 
+    setDateFrom(lFrom); setDateTo(lTo); setDateType(lDateType); setCust(lCust); setSu(lSu); setOt(lOt); setPs(lPs); setInv(lInv); setPrjFlag(lPrjFlag); setPePic(lPePic); setPeTeam(lPeTeam) 
   }
   const onClear = () => {
     const d = getYTD()
-    setLFrom(d.from); setLTo(d.to); setLSu([]); setLOt([]); setLPs([]); setLInv([]); setLPrjFlag([]); setLPePic([]); setLPeTeam([])
-    setDateFrom(d.from); setDateTo(d.to); setSu([]); setOt([]); setPs([]); setInv([]); setPrjFlag([]); setPePic([]); setPeTeam([])
+    setLFrom(d.from); setLTo(d.to); setLDateType('po'); setLCust([]); setLSu([]); setLOt([]); setLPs([]); setLInv([]); setLPrjFlag([]); setLPePic([]); setLPeTeam([])
+    setDateFrom(d.from); setDateTo(d.to); setDateType('po'); setCust([]); setSu([]); setOt([]); setPs([]); setInv([]); setPrjFlag([]); setPePic([]); setPeTeam([])
   }
 
   // Calculate dynamic rows with Workforce Cost additions
@@ -267,6 +274,7 @@ export default function CostControlPage() {
     return items
   }, [calculatedRows])
 
+  const customerOpts: Option[] = (metadata?.customerList || []).map((c) => ({ value: c.id, label: c.name }))
   const salesUserOpts: Option[] = (metadata?.salesUserList || []).map((u) => ({ value: u.id, label: u.name }))
   const pePicOpts: Option[] = (metadata?.pePicList || []).map((u) => ({ value: u.id, label: u.name }))
   const peTeamOpts: Option[] = (metadata?.peTeamList || []).map((u) => ({ value: u.id, label: u.name }))
@@ -275,7 +283,7 @@ export default function CostControlPage() {
   const invOpts: Option[] = (metadata?.invoiceStatusList || []).map((t) => ({ value: t.fsId, label: t.fsDescription }))
   const flagOpts: Option[] = (metadata?.projectFlagList || []).map((t) => ({ value: t.flagId, label: t.flagDescription }))
 
-  const hasUnapplied = lFrom !== dateFrom || lTo !== dateTo || !sameSet(lSu, su) || !sameSet(lOt, ot) || !sameSet(lPs, ps) || !sameSet(lInv, inv) || !sameSet(lPrjFlag, prjFlag) || !sameSet(lPePic, pePic) || !sameSet(lPeTeam, peTeam)
+  const hasUnapplied = lFrom !== dateFrom || lTo !== dateTo || lDateType !== dateType || !sameSet(lCust, cust) || !sameSet(lSu, su) || !sameSet(lOt, ot) || !sameSet(lPs, ps) || !sameSet(lInv, inv) || !sameSet(lPrjFlag, prjFlag) || !sameSet(lPePic, pePic) || !sameSet(lPeTeam, peTeam)
 
   const exportRows = useMemo(() => {
     return (calculatedRows || []).map(r => ({
@@ -320,8 +328,21 @@ export default function CostControlPage() {
         />
 
         {/* Filter Card */}
-        <FilterCard from={lFrom} to={lTo} onDateChange={(f, t) => { setLFrom(f); setLTo(t) }} onApply={onApply} onClear={onClear} hasUnapplied={hasUnapplied} loading={loading && !!data} dateLabel="PO / Project Date">
+        <FilterCard from={lFrom} to={lTo} onDateChange={(f, t) => { setLFrom(f); setLTo(t) }} onApply={onApply} onClear={onClear} hasUnapplied={hasUnapplied} loading={loading && !!data} dateLabel="Filter Date">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 items-start">
+            <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Basis Tanggal</label>
+              <Select value={lDateType} onValueChange={(v) => setLDateType(v || 'po')}>
+                <SelectTrigger className="w-full text-xs h-9 bg-background"><SelectValue>{lDateType === 'plan_start' ? 'Planned Start Date' : lDateType === 'plan_due' ? 'Planned End Date' : lDateType === 'actual_end' ? 'Actual End Date' : 'PO / Project Date'}</SelectValue></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="po">PO / Project Date</SelectItem>
+                  <SelectItem value="plan_start">Planned Start Date</SelectItem>
+                  <SelectItem value="plan_due">Planned End Date</SelectItem>
+                  <SelectItem value="actual_end">Actual End Date</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Customer</label>
+              <MultiSelect allLabel="All Customers" selected={lCust} onChange={setLCust} options={customerOpts} /></div>
             <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Sales User</label>
               <MultiSelect allLabel="All Sales Users" selected={lSu} onChange={setLSu} options={salesUserOpts} /></div>
             <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Project Executor PIC</label>

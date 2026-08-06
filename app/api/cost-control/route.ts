@@ -11,11 +11,14 @@ import {
   getAllOrders,
 } from '@/database/repos/orders'
 import { getAllSalesUsers } from '@/database/repos/sales-users'
+import { getAllCompanies } from '@/database/repos/companies'
 
 export const dynamic = 'force-dynamic'
 
 async function compute(searchParams: URLSearchParams) {
     const { dateFrom, dateTo } = parseDashboardParams(searchParams)
+    const dateType = searchParams.get('dateType') || 'po'
+    const customer = parseMulti(searchParams, 'customer')
     const salesUser = parseMulti(searchParams, 'salesUser')
     const orderType = parseMulti(searchParams, 'orderType')
     const projectStatus = parseMulti(searchParams, 'projectStatus')
@@ -29,6 +32,7 @@ async function compute(searchParams: URLSearchParams) {
     const [
       costData,
       allOrders,
+      companies,
       salesUsers,
       orderTypes,
       peStatuses,
@@ -37,6 +41,8 @@ async function compute(searchParams: URLSearchParams) {
       getCostControlData({
         dateFrom,
         dateTo,
+        dateType,
+        customer,
         salesUser,
         orderType,
         projectStatus,
@@ -47,6 +53,7 @@ async function compute(searchParams: URLSearchParams) {
         userEmail,
       }),
       getAllOrders(),
+      getAllCompanies(),
       getAllSalesUsers(),
       getAllOrderTypes(),
       getAllPeStatuses(),
@@ -58,7 +65,14 @@ async function compute(searchParams: URLSearchParams) {
     const toTime = dateTo ? parseDate(dateTo)?.getTime() : undefined
 
     const dateFilteredOrders = allOrders.filter(p => {
-      const targetTime = (parseDate(p.prjPoDate) || parseDate(p.createdAt))?.getTime()
+      const targetDateStr = dateType === 'plan_start' 
+        ? (p.prjStartDatePlan || p.prjStartDate) 
+        : dateType === 'plan_due' 
+          ? (p.prjDueDatePlan || p.prjDueDate) 
+          : dateType === 'actual_end' 
+            ? p.prjEndDateActual 
+            : (p.prjPoDate || p.createdAt)
+      const targetTime = parseDate(targetDateStr)?.getTime()
       if ((fromTime !== undefined || toTime !== undefined) && targetTime === undefined) return false
       if (fromTime !== undefined && targetTime! < fromTime) return false
       if (toTime !== undefined && targetTime! > toTime) return false
@@ -102,6 +116,13 @@ async function compute(searchParams: URLSearchParams) {
       .map(t => ({ id: t, name: t }))
       .sort((a, b) => a.name.localeCompare(b.name))
 
+    // Build customerList (companies active in date range)
+    const activeCompanyIds = new Set(dateFilteredOrders.map(p => p.prjCompanyId).filter(Boolean))
+    const customerList = companies
+      .filter((c) => c.companyId && activeCompanyIds.has(c.companyId))
+      .map((c) => ({ id: c.companyId, name: c.companyName }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+
     const orderTypeList = [
       { otId: 'Project', otDescription: 'Project' },
       { otId: 'Internal', otDescription: 'Internal' }
@@ -116,6 +137,7 @@ async function compute(searchParams: URLSearchParams) {
 
     return ({
       projects: costData,
+      customerList,
       salesUserList,
       pePicList,
       peTeamList,
