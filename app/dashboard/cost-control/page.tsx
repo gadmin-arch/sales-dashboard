@@ -333,7 +333,10 @@ export default function CostControlPage() {
       'Budget Total': r.budgetTotal,
       'Spent Total': r.spentTotal,
       'Variance': r.spentTotal - r.budgetTotal,
-      'Overbudget': r.isOverbudget ? 'Yes' : 'No'
+      'Overbudget': r.isOverbudget ? 'Yes' : 'No',
+      'Total Report Hours': r.reportHours,
+      'Total Overtime Hours': r.overtimeHours,
+      'Total Report Count': r.reportCount,
     }))
   }, [calculatedRows])
 
