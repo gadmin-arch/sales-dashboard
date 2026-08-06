@@ -173,16 +173,16 @@ async function compute(searchParams: URLSearchParams) {
       .sort((a, b) => a.name.localeCompare(b.name))
 
     // Build customerList & endUserList (companies active in date range)
+    const companyMap = new Map(companies.map(c => [c.companyId, c.companyName]))
+
     const activeCompanyIds = new Set(dateFilteredOrders.map(p => p.prjCompanyId).filter(Boolean))
-    const customerList = companies
-      .filter((c) => c.companyId && activeCompanyIds.has(c.companyId))
-      .map((c) => ({ id: c.companyId, name: c.companyName }))
+    const customerList = Array.from(activeCompanyIds)
+      .map((id) => ({ id, name: companyMap.get(id) || id }))
       .sort((a, b) => a.name.localeCompare(b.name))
 
     const activeEndUserIds = new Set(dateFilteredOrders.map(p => p.prjEndUserId).filter(Boolean))
-    const endUserList = companies
-      .filter((c) => c.companyId && activeEndUserIds.has(c.companyId))
-      .map((c) => ({ id: c.companyId, name: c.companyName }))
+    const endUserList = Array.from(activeEndUserIds)
+      .map((id) => ({ id, name: companyMap.get(id) || id }))
       .sort((a, b) => a.name.localeCompare(b.name))
 
     const orderTypeList = [
@@ -213,12 +213,8 @@ async function compute(searchParams: URLSearchParams) {
     })
 }
 
-// v2: the list response no longer embeds the five per-project item arrays —
-// they were the bulk of the old ~2MB payload, which exceeded the server data
-// cache's per-entry limit so the route effectively never cached. The modal now
-// requests them per project via ?detail=<prjId>; both views share one compute.
-// Name bumped so stale old-shape cache entries can't be served.
-const getView = cachedRouteView('cost-control-v2', compute, ['detail'], (full, view) => {
+// v3: bumped cache key to cost-control-v3 so endUserList is served freshly.
+const getView = cachedRouteView('cost-control-v3', compute, ['detail'], (full, view) => {
   if (view.detail) {
     const p = full.projects.find((x) => x.prjId === view.detail)
     return {
