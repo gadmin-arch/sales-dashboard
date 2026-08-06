@@ -498,7 +498,55 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                         <div className="text-foreground font-medium text-xs mb-1">
                           {formattedDate}
                         </div>
-                        {run.errorMessage && (
+
+                        {run.details && (
+                          <div className="mt-2 space-y-2 text-xs">
+                            <div className="flex items-center gap-2 font-medium">
+                              <span className="text-emerald-600 dark:text-emerald-400">✓ {run.details.syncedCount || 0} Berhasil</span>
+                              {run.details.failedCount > 0 && (
+                                <span className="text-rose-600 dark:text-rose-400">✗ {run.details.failedCount} Gagal</span>
+                              )}
+                              {run.details.durationMs && (
+                                <span className="text-muted-foreground ml-auto font-mono text-[10px]">
+                                  {(run.details.durationMs / 1000).toFixed(1)}s
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Failed Sheets breakdown if any */}
+                            {run.details.failedSheets && run.details.failedSheets.length > 0 && (
+                              <div className="mt-1.5 p-2 bg-rose-100/50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 rounded-lg">
+                                <p className="font-semibold text-rose-700 dark:text-rose-400 text-[11px] mb-1">Sheet Gagal Sync:</p>
+                                <div className="space-y-1">
+                                  {run.details.failedSheets.map((f: any, idx: number) => (
+                                    <div key={idx} className="text-[11px] text-rose-800 dark:text-rose-300 font-mono flex flex-col">
+                                      <span className="font-semibold">• {f.sheet}</span>
+                                      <span className="text-[10px] opacity-85 pl-2">{f.error}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Succeeded Sheets preview */}
+                            {run.details.succeededSheets && run.details.succeededSheets.length > 0 && (
+                              <details className="mt-1 text-[11px] text-muted-foreground cursor-pointer">
+                                <summary className="font-medium hover:underline text-primary">
+                                  Lihat Rincian {run.details.succeededSheets.length} Sheet Berhasil
+                                </summary>
+                                <div className="mt-1.5 max-h-36 overflow-y-auto grid grid-cols-2 gap-1 p-2 bg-muted/40 rounded border border-border">
+                                  {run.details.succeededSheets.map((s: any, idx: number) => (
+                                    <div key={idx} className="truncate text-[10px] font-mono text-foreground" title={`${s.sheet} (${s.rows} baris)`}>
+                                      • <span className="font-semibold">{s.sheet}</span>: {s.rows} baris
+                                    </div>
+                                  ))}
+                                </div>
+                              </details>
+                            )}
+                          </div>
+                        )}
+
+                        {run.errorMessage && !run.details && (
                           <div className="mt-1.5 bg-rose-100/40 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 text-xs p-2 rounded border border-rose-200/50 dark:border-rose-900/30 font-mono overflow-x-auto whitespace-pre-wrap">
                             {run.errorMessage}
                           </div>

@@ -7,7 +7,7 @@ export async function GET() {
     await initDatabase()
     
     const { rows } = await query(`
-      SELECT id, last_sync_time, status, error_message
+      SELECT id, last_sync_time, status, error_message, details
       FROM sync_metadata
       ORDER BY last_sync_time DESC
       LIMIT 5
@@ -22,11 +22,13 @@ export async function GET() {
       lastSyncTime: rows[0].last_sync_time,
       status: rows[0].status,
       errorMessage: rows[0].error_message,
+      details: rows[0].details || null,
       history: rows.map(r => ({
         id: r.id,
         lastSyncTime: r.last_sync_time,
         status: r.status,
-        errorMessage: r.error_message
+        errorMessage: r.error_message,
+        details: r.details || null
       }))
     })
   } catch (err: any) {

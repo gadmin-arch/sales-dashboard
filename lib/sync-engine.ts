@@ -144,8 +144,13 @@ function getSafeColNames(headers: string[]): string[] {
   })
 }
 
-export async function syncAllSheets(): Promise<{ success: boolean; syncedCount: number; error?: string }> {
+export async function syncAllSheets(): Promise<{ success: boolean; syncedCount: number; error?: string; details?: any }> {
   console.log('[sync] Starting Google Sheets synchronization...')
+  const startTime = Date.now()
+  let syncedCount = 0
+  const succeededSheets: Array<{ sheet: string; spreadsheetId: string; rows: number }> = []
+  const failedSheets: Array<{ sheet: string; spreadsheetId: string; error: string }> = []
+
   try {
     // 1. Initialize tables
     await initDatabase()
@@ -160,11 +165,7 @@ export async function syncAllSheets(): Promise<{ success: boolean; syncedCount: 
       console.warn('[sync] Failed to record IN_PROGRESS metadata:', metaErr)
     }
 
-    let syncedCount = 0
-
-    // 2. Fetch per spreadsheet (one values.batchGet each) instead of one
-    // values.get per sheet: 74 requests → ~24, comfortably under the Sheets
-    // read quota (60 req/min/user) that single-sheet fetches regularly tripped.
+    // 2. Fetch per spreadsheet (one values.batchGet each)
     const bySpreadsheet = new Map<string, SyncTarget[]>()
     for (const t of syncTargets) {
       const list = bySpreadsheet.get(t.spreadsheetId) || []
@@ -176,137 +177,175 @@ export async function syncAllSheets(): Promise<{ success: boolean; syncedCount: 
       console.log(`[sync] Fetching ${targets.length} sheet(s) from ${spreadsheetId.substring(0, 8)}...`)
 
       // Spacing delay to stay under Sheets API rate limits
-      await new Promise((resolve) => setTimeout(resolve, 200))
+      await new Promise((resolve) => setTimeout(resolve, 100))
 
       let sheetsData: string[][][] | undefined
       let retries = 3
+      let fetchErrorMsg = ''
+
       while (retries > 0) {
         try {
           sheetsData = await fetchSheetsBatch(spreadsheetId, targets.map((t) => `${t.sheetName}!A:ZZZ`))
           break
         } catch (fetchErr: any) {
+          fetchErrorMsg = fetchErr?.message || String(fetchErr)
           const isQuotaError =
             fetchErr?.message?.includes('Quota exceeded') ||
             fetchErr?.status === 429 ||
             String(fetchErr).includes('Read requests per minute')
 
           if (isQuotaError && retries > 1) {
-            console.warn(`[sync] Sheets API Quota exceeded for spreadsheet ${spreadsheetId.substring(0, 8)}... Waiting 5s before retry... (${retries - 1} retries left)`)
-            await new Promise((resolve) => setTimeout(resolve, 5000))
+            console.warn(`[sync] Sheets API Quota exceeded for spreadsheet ${spreadsheetId.substring(0, 8)}... Waiting 3s before retry... (${retries - 1} retries left)`)
+            await new Promise((resolve) => setTimeout(resolve, 3000))
             retries--
           } else {
-            console.error(`[sync] Failed to fetch spreadsheet ${spreadsheetId.substring(0, 8)}... — keeping its previously synced data:`, fetchErr)
+            console.error(`[sync] Failed to fetch spreadsheet ${spreadsheetId.substring(0, 8)}...:`, fetchErr)
             break
           }
         }
       }
-      if (!sheetsData) continue // this spreadsheet failed; others still sync
+
+      if (!sheetsData) {
+        for (const t of targets) {
+          failedSheets.push({
+            sheet: t.sheetName,
+            spreadsheetId: t.spreadsheetId,
+            error: fetchErrorMsg || 'Gagal mengambil data dari Google Sheets API'
+          })
+        }
+        continue
+      }
 
       for (let ti = 0; ti < targets.length; ti++) {
         const target = targets[ti]
         const key = `${target.spreadsheetId}::${target.sheetName}`
 
-      try {
-        const rawData = sheetsData[ti] || []
-        const headers = rawData.length > 0 ? rawData[0] : []
-        const rows = rawData.length > 1 ? rawData.slice(1) : []
+        try {
+          const rawData = sheetsData[ti] || []
+          const headers = rawData.length > 0 ? rawData[0] : []
+          const rows = rawData.length > 1 ? rawData.slice(1) : []
 
-        // Backup in sheets_cache
-        await query(`
-          INSERT INTO sheets_cache (key, headers, rows, updated_at)
-          VALUES ($1, $2, $3, NOW())
-          ON CONFLICT (key) DO UPDATE
-          SET headers = EXCLUDED.headers,
-              rows = EXCLUDED.rows,
-              updated_at = NOW();
-        `, [key, JSON.stringify(headers), JSON.stringify(rows)])
-
-        // Create and populate structured SQL table
-        if (headers.length > 0) {
-          const tableName = getTableName(target.spreadsheetId, target.sheetName)
-          const colNames = getSafeColNames(headers)
-
-          // 1. Drop old table if exists
-          await query(`DROP TABLE IF EXISTS "${tableName}"`)
-
-          // 2. Create structured table (all columns are TEXT to handle mixed format safely)
-          const colDefs = colNames.map(col => `"${col}" TEXT`).join(',\n')
+          // Backup in sheets_cache
           await query(`
-            CREATE TABLE "${tableName}" (
-              id SERIAL PRIMARY KEY,
-              ${colDefs}
-            )
-          `)
+            INSERT INTO sheets_cache (key, headers, rows, updated_at)
+            VALUES ($1, $2, $3, NOW())
+            ON CONFLICT (key) DO UPDATE
+            SET headers = EXCLUDED.headers,
+                rows = EXCLUDED.rows,
+                updated_at = NOW();
+          `, [key, JSON.stringify(headers), JSON.stringify(rows)])
 
-          // 3. Batch insert rows in chunks of 100
-          if (rows.length > 0) {
-            const batchSize = 100
-            for (let i = 0; i < rows.length; i += batchSize) {
-              const batch = rows.slice(i, i + batchSize)
-              const valuesPlaceholder: string[] = []
-              const flatValues: any[] = []
-              
-              batch.forEach((row) => {
-                const rowPlaceholders: string[] = []
-                colNames.forEach((_, colIndex) => {
-                  const val = row[colIndex] !== undefined ? String(row[colIndex]) : null
-                  flatValues.push(val)
-                  rowPlaceholders.push(`$${flatValues.length}`)
+          // Create and populate structured SQL table
+          if (headers.length > 0) {
+            const tableName = getTableName(target.spreadsheetId, target.sheetName)
+            const colNames = getSafeColNames(headers)
+
+            // 1. Drop old table if exists
+            await query(`DROP TABLE IF EXISTS "${tableName}"`)
+
+            // 2. Create structured table (all columns are TEXT to handle mixed format safely)
+            const colDefs = colNames.map(col => `"${col}" TEXT`).join(',\n')
+            await query(`
+              CREATE TABLE "${tableName}" (
+                id SERIAL PRIMARY KEY,
+                ${colDefs}
+              )
+            `)
+
+            // 3. Batch insert rows in chunks of 100
+            if (rows.length > 0) {
+              const batchSize = 100
+              for (let i = 0; i < rows.length; i += batchSize) {
+                const batch = rows.slice(i, i + batchSize)
+                const valuesPlaceholder: string[] = []
+                const flatValues: any[] = []
+
+                batch.forEach((row) => {
+                  const rowPlaceholders: string[] = []
+                  colNames.forEach((_, colIndex) => {
+                    const val = row[colIndex] !== undefined ? String(row[colIndex]) : null
+                    flatValues.push(val)
+                    rowPlaceholders.push(`$${flatValues.length}`)
+                  })
+                  valuesPlaceholder.push(`(${rowPlaceholders.join(', ')})`)
                 })
-                valuesPlaceholder.push(`(${rowPlaceholders.join(', ')})`)
-              })
 
-              const insertQuery = `
-                INSERT INTO "${tableName}" (${colNames.map(c => `"${c}"`).join(', ')})
-                VALUES ${valuesPlaceholder.join(', ')}
-              `
-              await query(insertQuery, flatValues)
+                const insertQuery = `
+                  INSERT INTO "${tableName}" (${colNames.map(c => `"${c}"`).join(', ')})
+                  VALUES ${valuesPlaceholder.join(', ')}
+                `
+                await query(insertQuery, flatValues)
+              }
             }
+
+            // 4. Record metadata
+            await query(`
+              INSERT INTO sheet_metadata (key, table_name, headers, col_names, updated_at)
+              VALUES ($1, $2, $3, $4, NOW())
+              ON CONFLICT (key) DO UPDATE
+              SET table_name = EXCLUDED.table_name,
+                  headers = EXCLUDED.headers,
+                  col_names = EXCLUDED.col_names,
+                  updated_at = NOW();
+            `, [key, tableName, JSON.stringify(headers), JSON.stringify(colNames)])
           }
 
-          // 4. Record metadata
-          await query(`
-            INSERT INTO sheet_metadata (key, table_name, headers, col_names, updated_at)
-            VALUES ($1, $2, $3, $4, NOW())
-            ON CONFLICT (key) DO UPDATE
-            SET table_name = EXCLUDED.table_name,
-                headers = EXCLUDED.headers,
-                col_names = EXCLUDED.col_names,
-                updated_at = NOW();
-          `, [key, tableName, JSON.stringify(headers), JSON.stringify(colNames)])
+          syncedCount++
+          succeededSheets.push({
+            sheet: target.sheetName,
+            spreadsheetId: target.spreadsheetId,
+            rows: rawData.length > 1 ? rawData.length - 1 : 0
+          })
+        } catch (sheetErr: any) {
+          console.error(`[sync] Failed to sync sheet "${target.sheetName}":`, sheetErr)
+          failedSheets.push({
+            sheet: target.sheetName,
+            spreadsheetId: target.spreadsheetId,
+            error: sheetErr?.message || String(sheetErr)
+          })
         }
-
-        syncedCount++
-      } catch (sheetErr) {
-        console.error(`[sync] Failed to sync sheet "${target.sheetName}":`, sheetErr)
-        // Continue with other sheets if one fails to keep partial availability
-      }
       }
     }
 
-    // 3. Log success metadata. The new last_sync_time doubles as the data
-    // version for the route-level cache (lib/route-cache.ts) — writing it
-    // invalidates all cached dashboard aggregates.
-    await query(`
-      INSERT INTO sync_metadata (status, last_sync_time)
-      VALUES ('SUCCESS', NOW());
-    `)
+    const details = {
+      totalTargets: syncTargets.length,
+      syncedCount,
+      failedCount: failedSheets.length,
+      durationMs: Date.now() - startTime,
+      succeededSheets,
+      failedSheets
+    }
 
-    console.log(`[sync] Sync completed successfully. Synced ${syncedCount}/${syncTargets.length} sheets.`)
-    return { success: true, syncedCount }
+    // 3. Log success metadata with details
+    await query(`
+      INSERT INTO sync_metadata (status, last_sync_time, details)
+      VALUES ('SUCCESS', NOW(), $1);
+    `, [JSON.stringify(details)])
+
+    console.log(`[sync] Sync completed in ${Math.round((Date.now() - startTime) / 1000)}s. Synced ${syncedCount}/${syncTargets.length} sheets (${failedSheets.length} failed).`)
+    return { success: true, syncedCount, details }
   } catch (err: any) {
     console.error('[sync] Global sync engine error:', err)
-    
+
+    const details = {
+      totalTargets: syncTargets.length,
+      syncedCount,
+      failedCount: failedSheets.length,
+      durationMs: Date.now() - startTime,
+      succeededSheets,
+      failedSheets
+    }
+
     // Log failure metadata
     try {
       await query(`
-        INSERT INTO sync_metadata (status, error_message, last_sync_time)
-        VALUES ('FAILED', $1, NOW());
-      `, [err?.message || String(err)])
+        INSERT INTO sync_metadata (status, error_message, last_sync_time, details)
+        VALUES ('FAILED', $1, NOW(), $2);
+      `, [err?.message || String(err), JSON.stringify(details)])
     } catch (metaErr) {
       console.error('[sync] Failed to log failure metadata:', metaErr)
     }
 
-    return { success: false, syncedCount: 0, error: err?.message || String(err) }
+    return { success: false, syncedCount: 0, error: err?.message || String(err), details }
   }
 }

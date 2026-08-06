@@ -34,8 +34,10 @@ export async function initDatabase() {
         id SERIAL PRIMARY KEY,
         last_sync_time TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         status VARCHAR(50) NOT NULL,
-        error_message TEXT
+        error_message TEXT,
+        details JSONB
       );
+      ALTER TABLE sync_metadata ADD COLUMN IF NOT EXISTS details JSONB;
     `)
 
     // Create dashboard_users table
