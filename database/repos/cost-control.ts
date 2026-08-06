@@ -72,6 +72,7 @@ export interface CostControlFilter {
   pePic?: string[]
   peTeam?: string[]
   userEmail?: string
+  taxOption?: 'all' | 'ppn' | 'pph' | 'none'
 }
 
 export async function getCostControlData(f: CostControlFilter = {}): Promise<ProjectCostControl[]> {
@@ -306,10 +307,18 @@ export async function getCostControlData(f: CostControlFilter = {}): Promise<Pro
   // We need to know which PO is approved/valid. 
   // Let's assume all poLines whose parent PO is not soft-deleted and status != 'Cancelled' are valid.
   // We already filter soft-deleted POs in getAllPurchaseOrders.
-  const validPos = new Map<string, { date: string; vendor: string }>()
+  const taxOpt = f.taxOption || 'all'
+  const validPos = new Map<string, { date: string; vendor: string; poNet: number; poPpn: number; poPph: number; poAmount: number }>()
   for (const po of pos) {
     if (!po.poStatus.toLowerCase().includes('cancel') && !po.poStatus.toLowerCase().includes('reject')) {
-      validPos.set(po.poNumber, { date: po.poDate || '', vendor: po.poCompanyName || '' })
+      validPos.set(po.poNumber, {
+        date: po.poDate || '',
+        vendor: po.poCompanyName || '',
+        poNet: po.poNet || 0,
+        poPpn: po.poPpn || 0,
+        poPph: po.poPph || 0,
+        poAmount: po.poAmount || 0,
+      })
     }
   }
 
@@ -325,12 +334,31 @@ export async function getCostControlData(f: CostControlFilter = {}): Promise<Pro
     const prjId = pol.polPrjId
     if (!prjId) continue
 
+    const subtotal = pol.polTotal || 0
+    let lineAmount = subtotal
+
+    if (poInfo.poNet > 0) {
+      const ratio = subtotal / poInfo.poNet
+      const ppn = poInfo.poPpn * ratio
+      const pph = poInfo.poPph * ratio
+
+      if (taxOpt === 'all') {
+        lineAmount = subtotal + ppn - pph
+      } else if (taxOpt === 'ppn') {
+        lineAmount = subtotal + ppn
+      } else if (taxOpt === 'pph') {
+        lineAmount = subtotal - pph
+      } else if (taxOpt === 'none') {
+        lineAmount = subtotal
+      }
+    }
+
     const type = isMaterial(pol.polItemTypeId) ? 'Material' : 'Service'
     if (type === 'Material') {
-      purMatByPrj.set(prjId, (purMatByPrj.get(prjId) || 0) + pol.polTotal)
+      purMatByPrj.set(prjId, (purMatByPrj.get(prjId) || 0) + lineAmount)
       countPurMatByPrj.set(prjId, (countPurMatByPrj.get(prjId) || 0) + 1)
     } else {
-      purSvcByPrj.set(prjId, (purSvcByPrj.get(prjId) || 0) + pol.polTotal)
+      purSvcByPrj.set(prjId, (purSvcByPrj.get(prjId) || 0) + lineAmount)
       countPurSvcByPrj.set(prjId, (countPurSvcByPrj.get(prjId) || 0) + 1)
     }
 
@@ -341,7 +369,7 @@ export async function getCostControlData(f: CostControlFilter = {}): Promise<Pro
       type,
       poNumber: pol.polPoNumber,
       vendor: poInfo.vendor,
-      amount: pol.polTotal
+      amount: lineAmount
     })
   }
 

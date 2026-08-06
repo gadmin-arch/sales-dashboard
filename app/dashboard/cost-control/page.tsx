@@ -80,6 +80,7 @@ interface FilterMetadata {
 }
 
 type BudgetSource = 'auto' | 'po' | 'est' | 'invoice' | 'payment'
+type TaxOption = 'all' | 'ppn' | 'pph' | 'none'
 
 export default function CostControlPage() {
   const [data, setData] = useState<CostControlRow[] | null>(null)
@@ -103,6 +104,10 @@ export default function CostControlPage() {
   // Budget Source State
   const [budgetSource, setBudgetSource] = useState<BudgetSource>('auto')
   const [lBudgetSource, setLBudgetSource] = useState<BudgetSource>('auto')
+
+  // Purchasing Tax Filter State
+  const [taxOption, setTaxOption] = useState<TaxOption>('all')
+  const [lTaxOption, setLTaxOption] = useState<TaxOption>('all')
 
   const [dateFrom, setDateFrom] = useState(getYTD().from), [dateTo, setDateTo] = useState(getYTD().to)
   const [dateType, setDateType] = useState<string>('po')
@@ -148,19 +153,19 @@ export default function CostControlPage() {
     const fresh = firstLoad.current; firstLoad.current = false
     doFetch({
       dateFrom, dateTo, dateType, customer: cust, salesUser: su, orderType: ot, projectStatus: ps, invoiceStatus: inv, projectFlag: prjFlag,
-      pePic, peTeam,
+      pePic, peTeam, taxOption,
       ...(user?.email ? { userEmail: user.email } : {}),
       ...(fresh ? { fresh: '1' } : {}),
     })
-  }, [doFetch, dateFrom, dateTo, dateType, cust, su, ot, ps, inv, prjFlag, pePic, peTeam, user?.email])
+  }, [doFetch, dateFrom, dateTo, dateType, cust, su, ot, ps, inv, prjFlag, pePic, peTeam, taxOption, user?.email])
 
   const onApply = () => { 
-    setDateFrom(lFrom); setDateTo(lTo); setDateType(lDateType); setBudgetSource(lBudgetSource); setCust(lCust); setSu(lSu); setOt(lOt); setPs(lPs); setInv(lInv); setPrjFlag(lPrjFlag); setPePic(lPePic); setPeTeam(lPeTeam) 
+    setDateFrom(lFrom); setDateTo(lTo); setDateType(lDateType); setBudgetSource(lBudgetSource); setTaxOption(lTaxOption); setCust(lCust); setSu(lSu); setOt(lOt); setPs(lPs); setInv(lInv); setPrjFlag(lPrjFlag); setPePic(lPePic); setPeTeam(lPeTeam) 
   }
   const onClear = () => {
     const d = getYTD()
-    setLFrom(d.from); setLTo(d.to); setLDateType('po'); setLBudgetSource('auto'); setLCust([]); setLSu([]); setLOt([]); setLPs([]); setLInv([]); setLPrjFlag([]); setLPePic([]); setLPeTeam([])
-    setDateFrom(d.from); setDateTo(d.to); setDateType('po'); setBudgetSource('auto'); setCust([]); setSu([]); setOt([]); setPs([]); setInv([]); setPrjFlag([]); setPePic([]); setPeTeam([])
+    setLFrom(d.from); setLTo(d.to); setLDateType('po'); setLBudgetSource('auto'); setLTaxOption('all'); setLCust([]); setLSu([]); setLOt([]); setLPs([]); setLInv([]); setLPrjFlag([]); setLPePic([]); setLPeTeam([])
+    setDateFrom(d.from); setDateTo(d.to); setDateType('po'); setBudgetSource('auto'); setTaxOption('all'); setCust([]); setSu([]); setOt([]); setPs([]); setInv([]); setPrjFlag([]); setPePic([]); setPeTeam([])
   }
 
   // Calculate dynamic rows with Workforce Cost additions & Budget Source selection
@@ -317,7 +322,7 @@ export default function CostControlPage() {
   const invOpts: Option[] = (metadata?.invoiceStatusList || []).map((t) => ({ value: t.fsId, label: t.fsDescription }))
   const flagOpts: Option[] = (metadata?.projectFlagList || []).map((t) => ({ value: t.flagId, label: t.flagDescription }))
 
-  const hasUnapplied = lFrom !== dateFrom || lTo !== dateTo || lDateType !== dateType || lBudgetSource !== budgetSource || !sameSet(lCust, cust) || !sameSet(lSu, su) || !sameSet(lOt, ot) || !sameSet(lPs, ps) || !sameSet(lInv, inv) || !sameSet(lPrjFlag, prjFlag) || !sameSet(lPePic, pePic) || !sameSet(lPeTeam, peTeam)
+  const hasUnapplied = lFrom !== dateFrom || lTo !== dateTo || lDateType !== dateType || lBudgetSource !== budgetSource || lTaxOption !== taxOption || !sameSet(lCust, cust) || !sameSet(lSu, su) || !sameSet(lOt, ot) || !sameSet(lPs, ps) || !sameSet(lInv, inv) || !sameSet(lPrjFlag, prjFlag) || !sameSet(lPePic, pePic) || !sameSet(lPeTeam, peTeam)
 
   const exportRows = useMemo(() => {
     return (calculatedRows || []).map(r => ({
@@ -376,6 +381,17 @@ export default function CostControlPage() {
                   <SelectItem value="est">Estimate Budget (Est Total)</SelectItem>
                   <SelectItem value="invoice">Invoice Amount (Billed)</SelectItem>
                   <SelectItem value="payment">Payment Amount (Collected)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Pajak Purchasing</label>
+              <Select value={lTaxOption} onValueChange={(v) => setLTaxOption((v as TaxOption) || 'all')}>
+                <SelectTrigger className="w-full text-xs h-9 bg-background"><SelectValue>{lTaxOption === 'ppn' ? 'PPN Only (Gross + PPN)' : lTaxOption === 'pph' ? 'PPH Only (Gross - PPH)' : lTaxOption === 'none' ? 'Non Tax / Gross Only' : 'Include All (PPN & PPH)'}</SelectValue></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Include All (PPN & PPH)</SelectItem>
+                  <SelectItem value="ppn">PPN Only (Gross + PPN)</SelectItem>
+                  <SelectItem value="pph">PPH Only (Gross - PPH)</SelectItem>
+                  <SelectItem value="none">Non Tax / Gross Only</SelectItem>
                 </SelectContent>
               </Select>
             </div>

@@ -29,6 +29,7 @@ async function compute(searchParams: URLSearchParams) {
     const pePic = parseMulti(searchParams, 'pePic')
     const peTeam = parseMulti(searchParams, 'peTeam')
     const userEmail = searchParams.get('userEmail') || undefined
+    const taxOption = (searchParams.get('taxOption') as any) || 'all'
 
     await loadOrderRefMaps()
     const [
@@ -54,6 +55,7 @@ async function compute(searchParams: URLSearchParams) {
         pePic,
         peTeam,
         userEmail,
+        taxOption,
       }),
       getAllOrders(),
       getAllCompanies(),
