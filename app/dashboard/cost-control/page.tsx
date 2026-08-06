@@ -22,6 +22,8 @@ import { useAuth } from '@/lib/auth-context'
 interface CostControlRow {
   prjId: string
   prjName: string
+  prjEndUserId?: string
+  endUserName?: string
   budgetMaterial: number
   budgetService: number
   budgetPoMaterial?: number
@@ -70,6 +72,7 @@ interface ProjectDetailItems {
 interface Option { value: string; label: string }
 interface FilterMetadata {
   customerList: { id: string; name: string }[]
+  endUserList: { id: string; name: string }[]
   salesUserList: { id: string; name: string }[]
   pePicList: { id: string; name: string }[]
   peTeamList: { id: string; name: string }[]
@@ -112,6 +115,7 @@ export default function CostControlPage() {
   const [dateFrom, setDateFrom] = useState(getYTD().from), [dateTo, setDateTo] = useState(getYTD().to)
   const [dateType, setDateType] = useState<string>('po')
   const [cust, setCust] = useState<string[]>([])
+  const [endUser, setEndUser] = useState<string[]>([])
   const [su, setSu] = useState<string[]>([]), [ot, setOt] = useState<string[]>([])
   const [ps, setPs] = useState<string[]>([]), [inv, setInv] = useState<string[]>([])
   const [prjFlag, setPrjFlag] = useState<string[]>([])
@@ -120,6 +124,7 @@ export default function CostControlPage() {
   const [lFrom, setLFrom] = useState(dateFrom), [lTo, setLTo] = useState(dateTo)
   const [lDateType, setLDateType] = useState<string>('po')
   const [lCust, setLCust] = useState<string[]>([])
+  const [lEndUser, setLEndUser] = useState<string[]>([])
   const [lSu, setLSu] = useState<string[]>([]), [lOt, setLOt] = useState<string[]>([])
   const [lPs, setLPs] = useState<string[]>([]), [lInv, setLInv] = useState<string[]>([])
   const [lPrjFlag, setLPrjFlag] = useState<string[]>([])
@@ -137,6 +142,7 @@ export default function CostControlPage() {
       setData(json.projects || [])
       setMetadata({
         customerList: json.customerList || [],
+        endUserList: json.endUserList || [],
         salesUserList: json.salesUserList || [],
         pePicList: json.pePicList || [],
         peTeamList: json.peTeamList || [],
@@ -152,20 +158,20 @@ export default function CostControlPage() {
   useEffect(() => {
     const fresh = firstLoad.current; firstLoad.current = false
     doFetch({
-      dateFrom, dateTo, dateType, customer: cust, salesUser: su, orderType: ot, projectStatus: ps, invoiceStatus: inv, projectFlag: prjFlag,
+      dateFrom, dateTo, dateType, customer: cust, endUser, salesUser: su, orderType: ot, projectStatus: ps, invoiceStatus: inv, projectFlag: prjFlag,
       pePic, peTeam, taxOption,
       ...(user?.email ? { userEmail: user.email } : {}),
       ...(fresh ? { fresh: '1' } : {}),
     })
-  }, [doFetch, dateFrom, dateTo, dateType, cust, su, ot, ps, inv, prjFlag, pePic, peTeam, taxOption, user?.email])
+  }, [doFetch, dateFrom, dateTo, dateType, cust, endUser, su, ot, ps, inv, prjFlag, pePic, peTeam, taxOption, user?.email])
 
   const onApply = () => { 
-    setDateFrom(lFrom); setDateTo(lTo); setDateType(lDateType); setBudgetSource(lBudgetSource); setTaxOption(lTaxOption); setCust(lCust); setSu(lSu); setOt(lOt); setPs(lPs); setInv(lInv); setPrjFlag(lPrjFlag); setPePic(lPePic); setPeTeam(lPeTeam) 
+    setDateFrom(lFrom); setDateTo(lTo); setDateType(lDateType); setBudgetSource(lBudgetSource); setTaxOption(lTaxOption); setCust(lCust); setEndUser(lEndUser); setSu(lSu); setOt(lOt); setPs(lPs); setInv(lInv); setPrjFlag(lPrjFlag); setPePic(lPePic); setPeTeam(lPeTeam) 
   }
   const onClear = () => {
     const d = getYTD()
-    setLFrom(d.from); setLTo(d.to); setLDateType('po'); setLBudgetSource('auto'); setLTaxOption('all'); setLCust([]); setLSu([]); setLOt([]); setLPs([]); setLInv([]); setLPrjFlag([]); setLPePic([]); setLPeTeam([])
-    setDateFrom(d.from); setDateTo(d.to); setDateType('po'); setBudgetSource('auto'); setTaxOption('all'); setCust([]); setSu([]); setOt([]); setPs([]); setInv([]); setPrjFlag([]); setPePic([]); setPeTeam([])
+    setLFrom(d.from); setLTo(d.to); setLDateType('po'); setLBudgetSource('auto'); setLTaxOption('all'); setLCust([]); setLEndUser([]); setLSu([]); setLOt([]); setLPs([]); setLInv([]); setLPrjFlag([]); setLPePic([]); setLPeTeam([])
+    setDateFrom(d.from); setDateTo(d.to); setDateType('po'); setBudgetSource('auto'); setTaxOption('all'); setCust([]); setEndUser([]); setSu([]); setOt([]); setPs([]); setInv([]); setPrjFlag([]); setPePic([]); setPeTeam([])
   }
 
   // Calculate dynamic rows with Workforce Cost additions & Budget Source selection
@@ -314,6 +320,7 @@ export default function CostControlPage() {
   }, [calculatedRows])
 
   const customerOpts: Option[] = (metadata?.customerList || []).map((c) => ({ value: c.id, label: c.name }))
+  const endUserOpts: Option[] = (metadata?.endUserList || []).map((c) => ({ value: c.id, label: c.name }))
   const salesUserOpts: Option[] = (metadata?.salesUserList || []).map((u) => ({ value: u.id, label: u.name }))
   const pePicOpts: Option[] = (metadata?.pePicList || []).map((u) => ({ value: u.id, label: u.name }))
   const peTeamOpts: Option[] = (metadata?.peTeamList || []).map((u) => ({ value: u.id, label: u.name }))
@@ -322,12 +329,13 @@ export default function CostControlPage() {
   const invOpts: Option[] = (metadata?.invoiceStatusList || []).map((t) => ({ value: t.fsId, label: t.fsDescription }))
   const flagOpts: Option[] = (metadata?.projectFlagList || []).map((t) => ({ value: t.flagId, label: t.flagDescription }))
 
-  const hasUnapplied = lFrom !== dateFrom || lTo !== dateTo || lDateType !== dateType || lBudgetSource !== budgetSource || lTaxOption !== taxOption || !sameSet(lCust, cust) || !sameSet(lSu, su) || !sameSet(lOt, ot) || !sameSet(lPs, ps) || !sameSet(lInv, inv) || !sameSet(lPrjFlag, prjFlag) || !sameSet(lPePic, pePic) || !sameSet(lPeTeam, peTeam)
+  const hasUnapplied = lFrom !== dateFrom || lTo !== dateTo || lDateType !== dateType || lBudgetSource !== budgetSource || lTaxOption !== taxOption || !sameSet(lCust, cust) || !sameSet(lEndUser, endUser) || !sameSet(lSu, su) || !sameSet(lOt, ot) || !sameSet(lPs, ps) || !sameSet(lInv, inv) || !sameSet(lPrjFlag, prjFlag) || !sameSet(lPePic, pePic) || !sameSet(lPeTeam, peTeam)
 
   const exportRows = useMemo(() => {
     return (calculatedRows || []).map(r => ({
       'Project ID': r.prjId,
       'Project Name': r.prjName,
+      'End User': r.endUserName || '-',
       'PE PIC': r.pePicName || '-',
       'PE Team': r.peTeamName || '-',
       'Budget Material': r.budgetMaterial,
@@ -410,6 +418,8 @@ export default function CostControlPage() {
             </div>
             <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Customer</label>
               <MultiSelect allLabel="All Customers" selected={lCust} onChange={setLCust} options={customerOpts} /></div>
+            <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">End User</label>
+              <MultiSelect allLabel="All End Users" selected={lEndUser} onChange={setLEndUser} options={endUserOpts} /></div>
             <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Sales User</label>
               <MultiSelect allLabel="All Sales Users" selected={lSu} onChange={setLSu} options={salesUserOpts} /></div>
             <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Project Executor PIC</label>

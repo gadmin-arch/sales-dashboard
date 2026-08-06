@@ -21,6 +21,7 @@ async function compute(searchParams: URLSearchParams) {
     const { dateFrom, dateTo } = parseDashboardParams(searchParams)
     const dateType = searchParams.get('dateType') || 'po'
     const customer = parseMulti(searchParams, 'customer')
+    const endUser = parseMulti(searchParams, 'endUser')
     const salesUser = parseMulti(searchParams, 'salesUser')
     const orderType = parseMulti(searchParams, 'orderType')
     const projectStatus = parseMulti(searchParams, 'projectStatus')
@@ -47,6 +48,7 @@ async function compute(searchParams: URLSearchParams) {
         dateTo,
         dateType,
         customer,
+        endUser,
         salesUser,
         orderType,
         projectStatus,
@@ -170,10 +172,16 @@ async function compute(searchParams: URLSearchParams) {
       .map(t => ({ id: t, name: t }))
       .sort((a, b) => a.name.localeCompare(b.name))
 
-    // Build customerList (companies active in date range)
+    // Build customerList & endUserList (companies active in date range)
     const activeCompanyIds = new Set(dateFilteredOrders.map(p => p.prjCompanyId).filter(Boolean))
     const customerList = companies
       .filter((c) => c.companyId && activeCompanyIds.has(c.companyId))
+      .map((c) => ({ id: c.companyId, name: c.companyName }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+
+    const activeEndUserIds = new Set(dateFilteredOrders.map(p => p.prjEndUserId).filter(Boolean))
+    const endUserList = companies
+      .filter((c) => c.companyId && activeEndUserIds.has(c.companyId))
       .map((c) => ({ id: c.companyId, name: c.companyName }))
       .sort((a, b) => a.name.localeCompare(b.name))
 
@@ -194,6 +202,7 @@ async function compute(searchParams: URLSearchParams) {
     return ({
       projects: costData,
       customerList,
+      endUserList,
       salesUserList,
       pePicList,
       peTeamList,

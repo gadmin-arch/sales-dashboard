@@ -9,10 +9,13 @@ import { getAllReports } from './reports'
 import { getAllSalesUsers, getTeamNameSync } from './sales-users'
 import { findAccessUserByEmail } from './users'
 import { getInvoicingData } from './invoicing'
+import { getAllCompanies } from './companies'
 
 export interface ProjectCostControl {
   prjId: string
   prjName: string
+  prjEndUserId: string
+  endUserName: string
   budgetMaterial: number
   budgetService: number
   budgetPoMaterial: number
@@ -64,6 +67,7 @@ export interface CostControlFilter {
   dateTo?: string
   dateType?: string
   customer?: string[]
+  endUser?: string[]
   salesUser?: string[]
   orderType?: string[]
   projectStatus?: string[]
@@ -88,6 +92,7 @@ export async function getCostControlData(f: CostControlFilter = {}): Promise<Pro
     salesUsers,
     accessUser,
     invoicingData,
+    companies,
   ] = await Promise.all([
     getAllOrders(),
     getAllPurchaseOrders(),
@@ -102,7 +107,10 @@ export async function getCostControlData(f: CostControlFilter = {}): Promise<Pro
     getAllSalesUsers(),
     f.userEmail ? findAccessUserByEmail(f.userEmail) : Promise.resolve(null),
     getInvoicingData(),
+    getAllCompanies(),
   ])
+
+  const companyMap = new Map(companies.map(c => [c.companyId, c.companyName]))
 
   // Look up user site & ownership scoping
   const currentUser = f.userEmail ? salesUsers.find(u => u.email.toLowerCase() === f.userEmail!.toLowerCase()) : null
@@ -195,6 +203,7 @@ export async function getCostControlData(f: CostControlFilter = {}): Promise<Pro
       }
     }
     if (f.customer?.length && !f.customer.includes(p.prjCompanyId)) return false
+    if (f.endUser?.length && !f.endUser.includes(p.prjEndUserId)) return false
     if (f.salesUser?.length && !f.salesUser.includes(p.prjOwner)) return false
     if (f.orderType?.length && !f.orderType.includes(p.prjType)) return false
     if (f.projectStatus?.length && !f.projectStatus.includes(p.prjPeStatus)) return false
@@ -460,6 +469,8 @@ export async function getCostControlData(f: CostControlFilter = {}): Promise<Pro
     return {
       prjId: pId,
       prjName: prj.prjName,
+      prjEndUserId: prj.prjEndUserId || '',
+      endUserName: companyMap.get(prj.prjEndUserId) || prj.prjEndUserId || '',
       budgetMaterial,
       budgetService,
       budgetPoMaterial,
