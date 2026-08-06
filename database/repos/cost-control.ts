@@ -8,6 +8,7 @@ import { getFinanceAPData } from './finance-ap'
 import { getAllReports } from './reports'
 import { getAllSalesUsers, getTeamNameSync } from './sales-users'
 import { findAccessUserByEmail } from './users'
+import { getInvoicingData } from './invoicing'
 
 export interface ProjectCostControl {
   prjId: string
@@ -76,7 +77,8 @@ export async function getCostControlData(f: CostControlFilter = {}): Promise<Pro
     mbdRes,
     mbRes,
     salesUsers,
-    accessUser
+    accessUser,
+    invoicingData,
   ] = await Promise.all([
     getAllOrders(),
     getAllPurchaseOrders(),
@@ -90,6 +92,7 @@ export async function getCostControlData(f: CostControlFilter = {}): Promise<Pro
     fetchAllRows(GOOGLE_CONFIG.payroll.spreadsheetId, 'meal_benefits'),
     getAllSalesUsers(),
     f.userEmail ? findAccessUserByEmail(f.userEmail) : Promise.resolve(null),
+    getInvoicingData(),
   ])
 
   // Look up user site & ownership scoping
@@ -99,6 +102,34 @@ export async function getCostControlData(f: CostControlFilter = {}): Promise<Pro
   const userName = currentUser?.name?.toLowerCase() || ''
   const userEmailLower = f.userEmail?.toLowerCase() || ''
   const isAdmin = accessUser?.admin || false
+
+  // Build prjId -> invoiceDates & paymentDates maps
+  const prjInvDatesMap = new Map<string, string[]>()
+  const prjPayDatesMap = new Map<string, string[]>()
+
+  const invToPrjIds = new Map<string, string[]>()
+  for (const [invId, prjStr] of invoicingData.invPrjMap.entries()) {
+    const prjList = prjStr.split(',').map(s => s.trim()).filter(Boolean)
+    invToPrjIds.set(invId, prjList)
+  }
+
+  for (const inv of invoicingData.invoices) {
+    if (!inv.invId || !inv.invDate) continue
+    const prjList = invToPrjIds.get(inv.invId) || []
+    for (const pId of prjList) {
+      if (!prjInvDatesMap.has(pId)) prjInvDatesMap.set(pId, [])
+      prjInvDatesMap.get(pId)!.push(inv.invDate)
+    }
+  }
+
+  for (const pd of invoicingData.paymentDetails) {
+    if (!pd.invId || !pd.date) continue
+    const prjList = invToPrjIds.get(pd.invId) || []
+    for (const pId of prjList) {
+      if (!prjPayDatesMap.has(pId)) prjPayDatesMap.set(pId, [])
+      prjPayDatesMap.get(pId)!.push(pd.date)
+    }
+  }
 
   // Filter projects
   const fromTime = f.dateFrom ? parseDate(f.dateFrom)?.getTime() : undefined
@@ -116,18 +147,44 @@ export async function getCostControlData(f: CostControlFilter = {}): Promise<Pro
     }
 
     // Date filtering based on dateType
-    const targetDateStr = f.dateType === 'plan_start'
-      ? (p.prjStartDatePlan || p.prjStartDate)
-      : f.dateType === 'plan_due'
-        ? (p.prjDueDatePlan || p.prjDueDate)
-        : f.dateType === 'actual_end'
-          ? p.prjEndDateActual
-          : (p.prjPoDate || p.createdAt)
+    if (fromTime !== undefined || toTime !== undefined) {
+      if (f.dateType === 'invoice') {
+        const dates = prjInvDatesMap.get(p.prjId) || []
+        if (dates.length === 0) return false
+        const hasDateInRange = dates.some(d => {
+          const t = parseDate(d)?.getTime()
+          if (t === undefined) return false
+          if (fromTime !== undefined && t < fromTime) return false
+          if (toTime !== undefined && t > toTime) return false
+          return true
+        })
+        if (!hasDateInRange) return false
+      } else if (f.dateType === 'payment') {
+        const dates = prjPayDatesMap.get(p.prjId) || []
+        if (dates.length === 0) return false
+        const hasDateInRange = dates.some(d => {
+          const t = parseDate(d)?.getTime()
+          if (t === undefined) return false
+          if (fromTime !== undefined && t < fromTime) return false
+          if (toTime !== undefined && t > toTime) return false
+          return true
+        })
+        if (!hasDateInRange) return false
+      } else {
+        const targetDateStr = f.dateType === 'plan_start'
+          ? (p.prjStartDatePlan || p.prjStartDate)
+          : f.dateType === 'plan_due'
+            ? (p.prjDueDatePlan || p.prjDueDate)
+            : f.dateType === 'actual_end'
+              ? p.prjEndDateActual
+              : (p.prjPoDate || p.createdAt)
 
-    const targetTime = parseDate(targetDateStr)?.getTime()
-    if ((fromTime !== undefined || toTime !== undefined) && targetTime === undefined) return false
-    if (fromTime !== undefined && targetTime! < fromTime) return false
-    if (toTime !== undefined && targetTime! > toTime) return false
+        const targetTime = parseDate(targetDateStr)?.getTime()
+        if (targetTime === undefined) return false
+        if (fromTime !== undefined && targetTime < fromTime) return false
+        if (toTime !== undefined && targetTime > toTime) return false
+      }
+    }
     if (f.customer?.length && !f.customer.includes(p.prjCompanyId)) return false
     if (f.salesUser?.length && !f.salesUser.includes(p.prjOwner)) return false
     if (f.orderType?.length && !f.orderType.includes(p.prjType)) return false

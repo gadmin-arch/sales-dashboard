@@ -13,6 +13,7 @@ import {
 } from '@/database/repos/orders'
 import { getAllSalesUsers } from '@/database/repos/sales-users'
 import { getAllCompanies } from '@/database/repos/companies'
+import { getInvoicingData } from '@/database/repos/invoicing'
 
 export const dynamic = 'force-dynamic'
 
@@ -38,6 +39,7 @@ async function compute(searchParams: URLSearchParams) {
       orderTypes,
       peStatuses,
       financeStatuses,
+      invoicingData,
     ] = await Promise.all([
       getCostControlData({
         dateFrom,
@@ -59,24 +61,73 @@ async function compute(searchParams: URLSearchParams) {
       getAllOrderTypes(),
       getAllPeStatuses(),
       getAllFinanceStatuses(),
+      getInvoicingData(),
     ])
 
     // Filter all orders by date range to extract dynamic filter lists
     const fromTime = dateFrom ? parseDate(dateFrom)?.getTime() : undefined
     const toTime = dateTo ? parseDate(dateTo)?.getTime() : undefined
 
+    const prjInvDatesMap = new Map<string, string[]>()
+    const prjPayDatesMap = new Map<string, string[]>()
+    const invToPrjIds = new Map<string, string[]>()
+    for (const [invId, prjStr] of invoicingData.invPrjMap.entries()) {
+      const prjList = prjStr.split(',').map(s => s.trim()).filter(Boolean)
+      invToPrjIds.set(invId, prjList)
+    }
+    for (const inv of invoicingData.invoices) {
+      if (!inv.invId || !inv.invDate) continue
+      const prjList = invToPrjIds.get(inv.invId) || []
+      for (const pId of prjList) {
+        if (!prjInvDatesMap.has(pId)) prjInvDatesMap.set(pId, [])
+        prjInvDatesMap.get(pId)!.push(inv.invDate)
+      }
+    }
+    for (const pd of invoicingData.paymentDetails) {
+      if (!pd.invId || !pd.date) continue
+      const prjList = invToPrjIds.get(pd.invId) || []
+      for (const pId of prjList) {
+        if (!prjPayDatesMap.has(pId)) prjPayDatesMap.set(pId, [])
+        prjPayDatesMap.get(pId)!.push(pd.date)
+      }
+    }
+
     const dateFilteredOrders = allOrders.filter(p => {
-      const targetDateStr = dateType === 'plan_start' 
-        ? (p.prjStartDatePlan || p.prjStartDate) 
-        : dateType === 'plan_due' 
-          ? (p.prjDueDatePlan || p.prjDueDate) 
-          : dateType === 'actual_end' 
-            ? p.prjEndDateActual 
-            : (p.prjPoDate || p.createdAt)
-      const targetTime = parseDate(targetDateStr)?.getTime()
-      if ((fromTime !== undefined || toTime !== undefined) && targetTime === undefined) return false
-      if (fromTime !== undefined && targetTime! < fromTime) return false
-      if (toTime !== undefined && targetTime! > toTime) return false
+      if (fromTime !== undefined || toTime !== undefined) {
+        if (dateType === 'invoice') {
+          const dates = prjInvDatesMap.get(p.prjId) || []
+          if (dates.length === 0) return false
+          return dates.some(d => {
+            const t = parseDate(d)?.getTime()
+            if (t === undefined) return false
+            if (fromTime !== undefined && t < fromTime) return false
+            if (toTime !== undefined && t > toTime) return false
+            return true
+          })
+        }
+        if (dateType === 'payment') {
+          const dates = prjPayDatesMap.get(p.prjId) || []
+          if (dates.length === 0) return false
+          return dates.some(d => {
+            const t = parseDate(d)?.getTime()
+            if (t === undefined) return false
+            if (fromTime !== undefined && t < fromTime) return false
+            if (toTime !== undefined && t > toTime) return false
+            return true
+          })
+        }
+        const targetDateStr = dateType === 'plan_start' 
+          ? (p.prjStartDatePlan || p.prjStartDate) 
+          : dateType === 'plan_due' 
+            ? (p.prjDueDatePlan || p.prjDueDate) 
+            : dateType === 'actual_end' 
+              ? p.prjEndDateActual 
+              : (p.prjPoDate || p.createdAt)
+        const targetTime = parseDate(targetDateStr)?.getTime()
+        if (targetTime === undefined) return false
+        if (fromTime !== undefined && targetTime < fromTime) return false
+        if (toTime !== undefined && targetTime > toTime) return false
+      }
       return true
     })
 

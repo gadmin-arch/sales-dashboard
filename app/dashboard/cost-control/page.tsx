@@ -332,9 +332,11 @@ export default function CostControlPage() {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 items-start">
             <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Basis Tanggal</label>
               <Select value={lDateType} onValueChange={(v) => setLDateType(v || 'po')}>
-                <SelectTrigger className="w-full text-xs h-9 bg-background"><SelectValue>{lDateType === 'plan_start' ? 'Planned Start Date' : lDateType === 'plan_due' ? 'Planned End Date' : lDateType === 'actual_end' ? 'Actual End Date' : 'PO / Project Date'}</SelectValue></SelectTrigger>
+                <SelectTrigger className="w-full text-xs h-9 bg-background"><SelectValue>{lDateType === 'invoice' ? 'Invoice Date' : lDateType === 'payment' ? 'Payment Date' : lDateType === 'plan_start' ? 'Planned Start Date' : lDateType === 'plan_due' ? 'Planned End Date' : lDateType === 'actual_end' ? 'Actual End Date' : 'PO / Project Date'}</SelectValue></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="po">PO / Project Date</SelectItem>
+                  <SelectItem value="invoice">Invoice Date</SelectItem>
+                  <SelectItem value="payment">Payment Date</SelectItem>
                   <SelectItem value="plan_start">Planned Start Date</SelectItem>
                   <SelectItem value="plan_due">Planned End Date</SelectItem>
                   <SelectItem value="actual_end">Actual End Date</SelectItem>
