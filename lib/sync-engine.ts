@@ -173,48 +173,51 @@ export async function syncAllSheets(): Promise<{ success: boolean; syncedCount: 
       bySpreadsheet.set(t.spreadsheetId, list)
     }
 
-    for (const [spreadsheetId, targets] of bySpreadsheet) {
-      console.log(`[sync] Fetching ${targets.length} sheet(s) from ${spreadsheetId.substring(0, 8)}...`)
+    const spreadsheetEntries = Array.from(bySpreadsheet.entries())
+    const chunkSize = 4
 
-      // Spacing delay to stay under Sheets API rate limits
-      await new Promise((resolve) => setTimeout(resolve, 100))
+    for (let i = 0; i < spreadsheetEntries.length; i += chunkSize) {
+      const chunk = spreadsheetEntries.slice(i, i + chunkSize)
+      
+      await Promise.all(chunk.map(async ([spreadsheetId, targets]) => {
+        console.log(`[sync] Fetching ${targets.length} sheet(s) from ${spreadsheetId.substring(0, 8)}...`)
 
-      let sheetsData: string[][][] | undefined
-      let retries = 3
-      let fetchErrorMsg = ''
+        let sheetsData: string[][][] | undefined
+        let retries = 3
+        let fetchErrorMsg = ''
 
-      while (retries > 0) {
-        try {
-          sheetsData = await fetchSheetsBatch(spreadsheetId, targets.map((t) => `${t.sheetName}!A:ZZZ`))
-          break
-        } catch (fetchErr: any) {
-          fetchErrorMsg = fetchErr?.message || String(fetchErr)
-          const isQuotaError =
-            fetchErr?.message?.includes('Quota exceeded') ||
-            fetchErr?.status === 429 ||
-            String(fetchErr).includes('Read requests per minute')
-
-          if (isQuotaError && retries > 1) {
-            console.warn(`[sync] Sheets API Quota exceeded for spreadsheet ${spreadsheetId.substring(0, 8)}... Waiting 3s before retry... (${retries - 1} retries left)`)
-            await new Promise((resolve) => setTimeout(resolve, 3000))
-            retries--
-          } else {
-            console.error(`[sync] Failed to fetch spreadsheet ${spreadsheetId.substring(0, 8)}...:`, fetchErr)
+        while (retries > 0) {
+          try {
+            sheetsData = await fetchSheetsBatch(spreadsheetId, targets.map((t) => `${t.sheetName}!A:ZZZ`))
             break
+          } catch (fetchErr: any) {
+            fetchErrorMsg = fetchErr?.message || String(fetchErr)
+            const isQuotaError =
+              fetchErr?.message?.includes('Quota exceeded') ||
+              fetchErr?.status === 429 ||
+              String(fetchErr).includes('Read requests per minute')
+
+            if (isQuotaError && retries > 1) {
+              console.warn(`[sync] Sheets API Quota exceeded for spreadsheet ${spreadsheetId.substring(0, 8)}... Waiting 3s before retry... (${retries - 1} retries left)`)
+              await new Promise((resolve) => setTimeout(resolve, 3000))
+              retries--
+            } else {
+              console.error(`[sync] Failed to fetch spreadsheet ${spreadsheetId.substring(0, 8)}...:`, fetchErr)
+              break
+            }
           }
         }
-      }
 
-      if (!sheetsData) {
-        for (const t of targets) {
-          failedSheets.push({
-            sheet: t.sheetName,
-            spreadsheetId: t.spreadsheetId,
-            error: fetchErrorMsg || 'Gagal mengambil data dari Google Sheets API'
-          })
+        if (!sheetsData) {
+          for (const t of targets) {
+            failedSheets.push({
+              sheet: t.sheetName,
+              spreadsheetId: t.spreadsheetId,
+              error: fetchErrorMsg || 'Gagal mengambil data dari Google Sheets API'
+            })
+          }
+          return
         }
-        continue
-      }
 
       for (let ti = 0; ti < targets.length; ti++) {
         const target = targets[ti]
@@ -305,6 +308,7 @@ export async function syncAllSheets(): Promise<{ success: boolean; syncedCount: 
           })
         }
       }
+    }))
     }
 
     const details = {

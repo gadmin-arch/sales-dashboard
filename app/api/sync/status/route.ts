@@ -6,6 +6,13 @@ export async function GET() {
   try {
     await initDatabase()
     
+    // Auto-clean any stale IN_PROGRESS row older than 5 minutes to prevent infinite UI spinning
+    await query(`
+      UPDATE sync_metadata
+      SET status = 'FAILED', error_message = 'Sinkronisasi terhenti karena melebihi batas waktu (timeout 5 menit)'
+      WHERE status = 'IN_PROGRESS' AND last_sync_time < NOW() - INTERVAL '5 minutes';
+    `)
+
     const { rows } = await query(`
       SELECT id, last_sync_time, status, error_message, details
       FROM sync_metadata
