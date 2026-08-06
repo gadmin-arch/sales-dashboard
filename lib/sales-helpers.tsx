@@ -22,13 +22,29 @@ export function fmtShortDate(d: string): string {
 // Truncate a long chart-axis label (full text stays available via tooltip).
 export const truncLabel = (v: string, n = 22): string => (v && v.length > n ? v.slice(0, n - 1) + '…' : v)
 
-// Currency formatter
+// Currency formatter (abbreviated with up to 2 decimal places e.g. 8.49M, 80.8M, 300M)
 export function fmtCurrency(v: number, currency = 'IDR'): string {
   const prefix = currency === 'USD' ? '$ ' : currency === 'EUR' ? '€ ' : currency === 'SGD' ? 'SGD ' : 'IDR '
-  if (v >= 1_000_000_000) return prefix + (v / 1_000_000_000).toFixed(1) + 'B'
-  if (v >= 1_000_000) return prefix + (v / 1_000_000).toFixed(0) + 'M'
-  if (v >= 1_000) return prefix + (v / 1_000).toFixed(0) + 'K'
-  return prefix + v.toLocaleString('id-ID')
+  const abs = Math.abs(v)
+  if (abs >= 1_000_000_000) {
+    const formatted = (v / 1_000_000_000).toLocaleString('id-ID', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+    return prefix + formatted + 'B'
+  }
+  if (abs >= 1_000_000) {
+    const formatted = (v / 1_000_000).toLocaleString('id-ID', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+    return prefix + formatted + 'M'
+  }
+  if (abs >= 1_000) {
+    const formatted = (v / 1_000).toLocaleString('id-ID', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+    return prefix + formatted + 'K'
+  }
+  return prefix + Math.round(v).toLocaleString('id-ID')
+}
+
+// Full un-abbreviated currency formatter with thousand separators (e.g. IDR 500.000, IDR 8.489.200)
+export function fmtCurrencyFull(v: number, currency = 'IDR'): string {
+  const prefix = currency === 'USD' ? '$ ' : currency === 'EUR' ? '€ ' : currency === 'SGD' ? 'SGD ' : 'IDR '
+  return prefix + Math.round(v).toLocaleString('id-ID')
 }
 
 // Select change handler

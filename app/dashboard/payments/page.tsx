@@ -94,7 +94,14 @@ export default function PaymentsPage() {
   return (
     <SalesPageShell>
       <div className="bg-background text-foreground min-h-screen space-y-6">
-        <PageHeader title="Payment Dashboard" subtitle="PT. Multi Daya Mitra" breadcrumbs={[{ label: 'Finance' }, { label: 'Payments Collection' }]} chartFilter={chartFilter} onClearFilter={() => setChartFilter(null)} />
+        <PageHeader 
+          title="Payment Dashboard" 
+          subtitle="PT. Multi Daya Mitra" 
+          breadcrumbs={[{ label: 'Finance' }, { label: 'Payments Collection' }]} 
+          chartFilter={chartFilter} 
+          onClearFilter={() => setChartFilter(null)} 
+          actions={<ExportButton data={tableRows} filename="payment-collections.csv" />}
+        />
 
         <FilterCard from={lFrom} to={lTo} onDateChange={(f, t) => { setLFrom(f); setLTo(t) }} onApply={onApply} onClear={onClear} hasUnapplied={hasUnapplied} loading={loading && !!data}>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 items-start">

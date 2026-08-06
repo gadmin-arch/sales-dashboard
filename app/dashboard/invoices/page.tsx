@@ -17,6 +17,7 @@ import { FilterCard } from '@/components/filter-card'
 import { DashboardSkeleton, PageError } from '@/components/page-states'
 import { SearchInput } from '@/components/search-input'
 import { fmtCurrency, buildQuery, sameSet, getYTD, fmtShortDate as fmtDate } from '@/lib/sales-helpers'
+import { ExportButton } from '@/components/export-button'
 import { useChartFilter } from '@/hooks/use-chart-filter'
 import { DataTable } from '@/components/ui/data-table'
 import { columns, InvoiceRow } from './columns'
@@ -126,7 +127,14 @@ export default function InvoicesPage() {
   return (
     <SalesPageShell>
       <div className="bg-background text-foreground min-h-screen space-y-6">
-        <PageHeader title="Invoice Dashboard" subtitle="PT. Multi Daya Mitra" breadcrumbs={[{ label: 'Finance' }, { label: 'Invoices & Receivables' }]} chartFilter={chartFilter} onClearFilter={() => setChartFilter(null)} />
+        <PageHeader 
+          title="Invoice Dashboard" 
+          subtitle="PT. Multi Daya Mitra" 
+          breadcrumbs={[{ label: 'Finance' }, { label: 'Invoices & Receivables' }]} 
+          chartFilter={chartFilter} 
+          onClearFilter={() => setChartFilter(null)} 
+          actions={<ExportButton data={tableRows} filename="invoices-receivables.csv" />}
+        />
 
         <FilterCard from={lFrom} to={lTo} onDateChange={(f, t) => { setLFrom(f); setLTo(t) }} onApply={onApply} onClear={onClear} hasUnapplied={hasUnapplied} loading={loading && !!data}>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-7 items-start">

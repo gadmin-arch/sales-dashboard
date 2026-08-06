@@ -14,7 +14,7 @@ import { DashboardSkeleton, PageError } from '@/components/page-states'
 import { SearchInput } from '@/components/search-input'
 import { LoadMore, useLoadMore } from '@/components/load-more'
 import { useSort, SortHead } from '@/components/sortable'
-import { fmtCurrency, buildQuery, sameSet, getYTD } from '@/lib/sales-helpers'
+import { fmtCurrency, fmtCurrencyFull, buildQuery, sameSet, getYTD } from '@/lib/sales-helpers'
 import { ExportButton } from '@/components/export-button'
 import { useAuth } from '@/lib/auth-context'
 
@@ -100,7 +100,7 @@ export default function CostControlPage() {
   const [lPrjFlag, setLPrjFlag] = useState<string[]>([])
   const [lPePic, setLPePic] = useState<string[]>([]), [lPeTeam, setLPeTeam] = useState<string[]>([])
 
-  const fmtRp = useCallback((v: number) => fmtCurrency(v, 'IDR'), [])
+  const fmtRp = useCallback((v: number) => fmtCurrencyFull(v, 'IDR'), [])
 
   const doFetch = useCallback(async (p: Record<string, string | string[]>) => {
     setLoading(true); setError(null)
@@ -277,6 +277,24 @@ export default function CostControlPage() {
 
   const hasUnapplied = lFrom !== dateFrom || lTo !== dateTo || !sameSet(lSu, su) || !sameSet(lOt, ot) || !sameSet(lPs, ps) || !sameSet(lInv, inv) || !sameSet(lPrjFlag, prjFlag) || !sameSet(lPePic, pePic) || !sameSet(lPeTeam, peTeam)
 
+  const exportRows = useMemo(() => {
+    return (calculatedRows || []).map(r => ({
+      'Project ID': r.prjId,
+      'Project Name': r.prjName,
+      'PE PIC': r.pePicName || '-',
+      'PE Team': r.peTeamName || '-',
+      'Budget Material': r.budgetMaterial,
+      'Spent Material': r.spentMaterial,
+      'Budget Service': r.budgetService,
+      'Spent Service': r.spentService,
+      'Spent Meal': r.spentMeal,
+      'Budget Total': r.budgetTotal,
+      'Spent Total': r.spentTotal,
+      'Variance': r.spentTotal - r.budgetTotal,
+      'Overbudget': r.isOverbudget ? 'Yes' : 'No'
+    }))
+  }, [calculatedRows])
+
   if (loading && !data) return <DashboardSkeleton />
   if (error && !data) return <PageError error={error} onRetry={onClear} />
   if (!data) return null
@@ -288,13 +306,16 @@ export default function CostControlPage() {
           title="Cost Control" 
           subtitle="PT. Multi Daya Mitra — Project Budget vs Actual Spend" breadcrumbs={[{ label: 'Cost Control' }, { label: 'Cost Control Overview' }]} 
           actions={
-            <Link
-              href="/dashboard/cost-control/workers"
-              className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground shadow-sm transition-all hover:bg-primary/95 hover:shadow cursor-pointer"
-            >
-              <Users className="h-3.5 w-3.5" />
-              Worker KPIs
-            </Link>
+            <div className="flex items-center gap-2">
+              <ExportButton data={exportRows} filename="cost-control-projects.csv" />
+              <Link
+                href="/dashboard/cost-control/workers"
+                className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground shadow-sm transition-all hover:bg-primary/95 hover:shadow cursor-pointer"
+              >
+                <Users className="h-3.5 w-3.5" />
+                Worker KPIs
+              </Link>
+            </div>
           }
         />
 
