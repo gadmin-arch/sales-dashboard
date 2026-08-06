@@ -15,6 +15,14 @@ export interface ProjectCostControl {
   prjName: string
   budgetMaterial: number
   budgetService: number
+  budgetPoMaterial: number
+  budgetPoService: number
+  budgetEstMaterial: number
+  budgetEstService: number
+  budgetInvMaterial: number
+  budgetInvService: number
+  budgetPayMaterial: number
+  budgetPayService: number
   spentMaterial: number
   spentService: number
   spentMeal: number
@@ -407,11 +415,33 @@ export async function getCostControlData(f: CostControlFilter = {}): Promise<Pro
       budgetService = 0
     }
 
+    const budgetPoMaterial = prj.prjPoMaterial || 0
+    const budgetPoService = prj.prjPoService || 0
+
+    const budgetEstMaterial = prj.prjEstPoMaterial || 0
+    const budgetEstService = prj.prjEstPoService || 0
+
+    const invBase = prj.prjInvAmount || 0
+    const budgetInvMaterial = poTotal > 0 ? (prj.prjPoMaterial || 0) * (invBase / poTotal) : invBase
+    const budgetInvService = poTotal > 0 ? (prj.prjPoService || 0) * (invBase / poTotal) : 0
+
+    const payBase = prj.prjPayAmount || 0
+    const budgetPayMaterial = poTotal > 0 ? (prj.prjPoMaterial || 0) * (payBase / poTotal) : payBase
+    const budgetPayService = poTotal > 0 ? (prj.prjPoService || 0) * (payBase / poTotal) : 0
+
     return {
       prjId: pId,
       prjName: prj.prjName,
       budgetMaterial,
       budgetService,
+      budgetPoMaterial,
+      budgetPoService,
+      budgetEstMaterial,
+      budgetEstService,
+      budgetInvMaterial,
+      budgetInvService,
+      budgetPayMaterial,
+      budgetPayService,
       spentMaterial: purMat + reimMat,
       spentService: purSvc + reimSvc + meal, // meal is part of service cost
       spentMeal: meal,

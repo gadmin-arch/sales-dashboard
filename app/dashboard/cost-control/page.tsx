@@ -24,6 +24,14 @@ interface CostControlRow {
   prjName: string
   budgetMaterial: number
   budgetService: number
+  budgetPoMaterial?: number
+  budgetPoService?: number
+  budgetEstMaterial?: number
+  budgetEstService?: number
+  budgetInvMaterial?: number
+  budgetInvService?: number
+  budgetPayMaterial?: number
+  budgetPayService?: number
   spentMaterial: number
   spentService: number
   spentMeal: number
@@ -71,6 +79,8 @@ interface FilterMetadata {
   projectFlagList: { flagId: string; flagDescription: string }[]
 }
 
+type BudgetSource = 'auto' | 'po' | 'est' | 'invoice' | 'payment'
+
 export default function CostControlPage() {
   const [data, setData] = useState<CostControlRow[] | null>(null)
   const [metadata, setMetadata] = useState<FilterMetadata | null>(null)
@@ -89,6 +99,10 @@ export default function CostControlPage() {
   const [hoursRate, setHoursRate] = useState<number>(0)
   const [reportRate, setReportRate] = useState<number>(0)
   const [calcMethod, setCalcMethod] = useState<'hours' | 'report'>('hours')
+
+  // Budget Source State
+  const [budgetSource, setBudgetSource] = useState<BudgetSource>('auto')
+  const [lBudgetSource, setLBudgetSource] = useState<BudgetSource>('auto')
 
   const [dateFrom, setDateFrom] = useState(getYTD().from), [dateTo, setDateTo] = useState(getYTD().to)
   const [dateType, setDateType] = useState<string>('po')
@@ -141,15 +155,15 @@ export default function CostControlPage() {
   }, [doFetch, dateFrom, dateTo, dateType, cust, su, ot, ps, inv, prjFlag, pePic, peTeam, user?.email])
 
   const onApply = () => { 
-    setDateFrom(lFrom); setDateTo(lTo); setDateType(lDateType); setCust(lCust); setSu(lSu); setOt(lOt); setPs(lPs); setInv(lInv); setPrjFlag(lPrjFlag); setPePic(lPePic); setPeTeam(lPeTeam) 
+    setDateFrom(lFrom); setDateTo(lTo); setDateType(lDateType); setBudgetSource(lBudgetSource); setCust(lCust); setSu(lSu); setOt(lOt); setPs(lPs); setInv(lInv); setPrjFlag(lPrjFlag); setPePic(lPePic); setPeTeam(lPeTeam) 
   }
   const onClear = () => {
     const d = getYTD()
-    setLFrom(d.from); setLTo(d.to); setLDateType('po'); setLCust([]); setLSu([]); setLOt([]); setLPs([]); setLInv([]); setLPrjFlag([]); setLPePic([]); setLPeTeam([])
-    setDateFrom(d.from); setDateTo(d.to); setDateType('po'); setCust([]); setSu([]); setOt([]); setPs([]); setInv([]); setPrjFlag([]); setPePic([]); setPeTeam([])
+    setLFrom(d.from); setLTo(d.to); setLDateType('po'); setLBudgetSource('auto'); setLCust([]); setLSu([]); setLOt([]); setLPs([]); setLInv([]); setLPrjFlag([]); setLPePic([]); setLPeTeam([])
+    setDateFrom(d.from); setDateTo(d.to); setDateType('po'); setBudgetSource('auto'); setCust([]); setSu([]); setOt([]); setPs([]); setInv([]); setPrjFlag([]); setPePic([]); setPeTeam([])
   }
 
-  // Calculate dynamic rows with Workforce Cost additions
+  // Calculate dynamic rows with Workforce Cost additions & Budget Source selection
   const calculatedRows = useMemo(() => {
     return (data || []).map((d) => {
       const overtimeCost = d.overtimeHours * overtimeRate
@@ -158,18 +172,38 @@ export default function CostControlPage() {
 
       const spentService = d.spentService + calculatedWorkforceCost
       const spentTotal = d.spentMaterial + spentService
-      const budgetTotal = d.budgetMaterial + d.budgetService
+
+      let budgetMaterial = d.budgetMaterial
+      let budgetService = d.budgetService
+
+      if (budgetSource === 'po') {
+        budgetMaterial = d.budgetPoMaterial ?? d.budgetMaterial
+        budgetService = d.budgetPoService ?? d.budgetService
+      } else if (budgetSource === 'est') {
+        budgetMaterial = d.budgetEstMaterial ?? d.budgetMaterial
+        budgetService = d.budgetEstService ?? d.budgetService
+      } else if (budgetSource === 'invoice') {
+        budgetMaterial = d.budgetInvMaterial ?? d.budgetMaterial
+        budgetService = d.budgetInvService ?? d.budgetService
+      } else if (budgetSource === 'payment') {
+        budgetMaterial = d.budgetPayMaterial ?? d.budgetMaterial
+        budgetService = d.budgetPayService ?? d.budgetService
+      }
+
+      const budgetTotal = budgetMaterial + budgetService
 
       const isProjectOverbudget =
-        (d.budgetMaterial > 0 && d.spentMaterial > d.budgetMaterial) ||
-        (d.budgetService > 0 && spentService > d.budgetService)
+        (budgetMaterial > 0 && d.spentMaterial > budgetMaterial) ||
+        (budgetService > 0 && spentService > budgetService)
 
-      const matPct = d.budgetMaterial > 0 ? (d.spentMaterial / d.budgetMaterial) * 100 : (d.spentMaterial > 0 ? 100 : 0)
-      const svcPct = d.budgetService > 0 ? (spentService / d.budgetService) * 100 : (spentService > 0 ? 100 : 0)
+      const matPct = budgetMaterial > 0 ? (d.spentMaterial / budgetMaterial) * 100 : (d.spentMaterial > 0 ? 100 : 0)
+      const svcPct = budgetService > 0 ? (spentService / budgetService) * 100 : (spentService > 0 ? 100 : 0)
       const totalPct = budgetTotal > 0 ? (spentTotal / budgetTotal) * 100 : (spentTotal > 0 ? 100 : 0)
 
       return {
         ...d,
+        budgetMaterial,
+        budgetService,
         spentService,
         spentTotal,
         budgetTotal,
@@ -182,7 +216,7 @@ export default function CostControlPage() {
         totalPct
       }
     })
-  }, [data, overtimeRate, hoursRate, reportRate, calcMethod])
+  }, [data, overtimeRate, hoursRate, reportRate, calcMethod, budgetSource])
 
   const filtered = useMemo(() => {
     return calculatedRows.filter((d) => {
@@ -283,7 +317,7 @@ export default function CostControlPage() {
   const invOpts: Option[] = (metadata?.invoiceStatusList || []).map((t) => ({ value: t.fsId, label: t.fsDescription }))
   const flagOpts: Option[] = (metadata?.projectFlagList || []).map((t) => ({ value: t.flagId, label: t.flagDescription }))
 
-  const hasUnapplied = lFrom !== dateFrom || lTo !== dateTo || lDateType !== dateType || !sameSet(lCust, cust) || !sameSet(lSu, su) || !sameSet(lOt, ot) || !sameSet(lPs, ps) || !sameSet(lInv, inv) || !sameSet(lPrjFlag, prjFlag) || !sameSet(lPePic, pePic) || !sameSet(lPeTeam, peTeam)
+  const hasUnapplied = lFrom !== dateFrom || lTo !== dateTo || lDateType !== dateType || lBudgetSource !== budgetSource || !sameSet(lCust, cust) || !sameSet(lSu, su) || !sameSet(lOt, ot) || !sameSet(lPs, ps) || !sameSet(lInv, inv) || !sameSet(lPrjFlag, prjFlag) || !sameSet(lPePic, pePic) || !sameSet(lPeTeam, peTeam)
 
   const exportRows = useMemo(() => {
     return (calculatedRows || []).map(r => ({
@@ -330,6 +364,18 @@ export default function CostControlPage() {
         {/* Filter Card */}
         <FilterCard from={lFrom} to={lTo} onDateChange={(f, t) => { setLFrom(f); setLTo(t) }} onApply={onApply} onClear={onClear} hasUnapplied={hasUnapplied} loading={loading && !!data} dateLabel="Filter Date">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 items-start">
+            <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Sumber Budget</label>
+              <Select value={lBudgetSource} onValueChange={(v) => setLBudgetSource((v as BudgetSource) || 'auto')}>
+                <SelectTrigger className="w-full text-xs h-9 bg-background"><SelectValue>{lBudgetSource === 'po' ? 'PO Budget (PO Total)' : lBudgetSource === 'est' ? 'Estimate Budget (Est Total)' : lBudgetSource === 'invoice' ? 'Invoice Amount (Billed)' : lBudgetSource === 'payment' ? 'Payment Amount (Collected)' : 'Auto (Smart Fallback)'}</SelectValue></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="auto">Auto (Smart Fallback)</SelectItem>
+                  <SelectItem value="po">PO Budget (PO Total)</SelectItem>
+                  <SelectItem value="est">Estimate Budget (Est Total)</SelectItem>
+                  <SelectItem value="invoice">Invoice Amount (Billed)</SelectItem>
+                  <SelectItem value="payment">Payment Amount (Collected)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Basis Tanggal</label>
               <Select value={lDateType} onValueChange={(v) => setLDateType(v || 'po')}>
                 <SelectTrigger className="w-full text-xs h-9 bg-background"><SelectValue>{lDateType === 'invoice' ? 'Invoice Date' : lDateType === 'payment' ? 'Payment Date' : lDateType === 'plan_start' ? 'Planned Start Date' : lDateType === 'plan_due' ? 'Planned End Date' : lDateType === 'actual_end' ? 'Actual End Date' : 'PO / Project Date'}</SelectValue></SelectTrigger>
