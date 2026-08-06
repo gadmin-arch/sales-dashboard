@@ -943,7 +943,13 @@ export default function CostControlPage() {
                           Detail Overtime (Lembur Kerja)
                         </h3>
                         <ExportButton 
-                          data={(selectedCalculatedProject.overtimeItems || []).map(i => ({ 'Date': i.date, 'Worker Name': i.workerName, 'Reason': i.reason || '-', 'Hours': i.hours }))} 
+                          data={(selectedCalculatedProject.overtimeItems || []).map(i => ({
+                            'Date': i.date,
+                            'Worker Name': i.workerName,
+                            'Reason': i.reason || '-',
+                            'Hours': i.hours,
+                            ...(overtimeRate > 0 ? { 'Rate Cost (IDR)': i.hours * overtimeRate } : {})
+                          }))} 
                           filename={`cost-control-${selectedCalculatedProject.prjId}-overtimes.csv`} 
                         />
                       </div>
@@ -956,6 +962,7 @@ export default function CostControlPage() {
                                 <TableHead className="py-2.5">Worker Name</TableHead>
                                 <TableHead className="py-2.5">Activity / Reason</TableHead>
                                 <TableHead className="py-2.5 text-right">Hours</TableHead>
+                                {overtimeRate > 0 && <TableHead className="py-2.5 text-right">Rate Cost (Total)</TableHead>}
                               </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -965,6 +972,11 @@ export default function CostControlPage() {
                                   <TableCell className="py-2 font-medium text-foreground">{item.workerName}</TableCell>
                                   <TableCell className="py-2 max-w-[220px] truncate text-muted-foreground" title={item.reason}>{item.reason || '-'}</TableCell>
                                   <TableCell className="py-2 text-right font-mono font-semibold text-foreground">{item.hours} hrs</TableCell>
+                                  {overtimeRate > 0 && (
+                                    <TableCell className="py-2 text-right font-mono font-semibold text-amber-600">
+                                      {fmtRp(item.hours * overtimeRate)}
+                                    </TableCell>
+                                  )}
                                 </TableRow>
                               ))}
                             </TableBody>
@@ -985,7 +997,17 @@ export default function CostControlPage() {
                           Detail Daily Reports (Laporan Kerja)
                         </h3>
                         <ExportButton 
-                          data={(selectedCalculatedProject.reportItems || []).map(i => ({ 'Date': i.date, 'Worker Name': i.workerName, 'Remarks': i.remarks || '-', 'Hours': i.hours }))} 
+                          data={(selectedCalculatedProject.reportItems || []).map(i => {
+                            const activeRate = calcMethod === 'hours' ? hoursRate : reportRate
+                            const rateCost = calcMethod === 'hours' ? i.hours * hoursRate : reportRate
+                            return {
+                              'Date': i.date,
+                              'Worker Name': i.workerName,
+                              'Remarks': i.remarks || '-',
+                              'Hours': i.hours,
+                              ...(activeRate > 0 ? { 'Rate Cost (IDR)': rateCost } : {})
+                            }
+                          })} 
                           filename={`cost-control-${selectedCalculatedProject.prjId}-reports.csv`} 
                         />
                       </div>
@@ -998,17 +1020,29 @@ export default function CostControlPage() {
                                 <TableHead className="py-2.5">Worker Name</TableHead>
                                 <TableHead className="py-2.5">Activity / Remarks</TableHead>
                                 <TableHead className="py-2.5 text-right">Hours</TableHead>
+                                {(calcMethod === 'hours' ? hoursRate : reportRate) > 0 && (
+                                  <TableHead className="py-2.5 text-right">Rate Cost (Total)</TableHead>
+                                )}
                               </TableRow>
                             </TableHeader>
                             <TableBody>
-                              {selectedCalculatedProject.reportItems.map((item, idx) => (
-                                <TableRow key={idx} className="hover:bg-muted/30">
-                                  <TableCell className="py-2 whitespace-nowrap text-muted-foreground">{item.date}</TableCell>
-                                  <TableCell className="py-2 font-medium text-foreground">{item.workerName}</TableCell>
-                                  <TableCell className="py-2 max-w-[220px] truncate text-muted-foreground" title={item.remarks}>{item.remarks || '-'}</TableCell>
-                                  <TableCell className="py-2 text-right font-mono font-semibold text-foreground">{item.hours} hrs</TableCell>
-                                </TableRow>
-                              ))}
+                              {selectedCalculatedProject.reportItems.map((item, idx) => {
+                                const activeRate = calcMethod === 'hours' ? hoursRate : reportRate
+                                const itemCost = calcMethod === 'hours' ? item.hours * hoursRate : reportRate
+                                return (
+                                  <TableRow key={idx} className="hover:bg-muted/30">
+                                    <TableCell className="py-2 whitespace-nowrap text-muted-foreground">{item.date}</TableCell>
+                                    <TableCell className="py-2 font-medium text-foreground">{item.workerName}</TableCell>
+                                    <TableCell className="py-2 max-w-[220px] truncate text-muted-foreground" title={item.remarks}>{item.remarks || '-'}</TableCell>
+                                    <TableCell className="py-2 text-right font-mono font-semibold text-foreground">{item.hours} hrs</TableCell>
+                                    {activeRate > 0 && (
+                                      <TableCell className="py-2 text-right font-mono font-semibold text-emerald-600">
+                                        {fmtRp(itemCost)}
+                                      </TableCell>
+                                    )}
+                                  </TableRow>
+                                )
+                              })}
                             </TableBody>
                           </Table>
                         </div>
