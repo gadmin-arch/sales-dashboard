@@ -9,6 +9,7 @@ import {
   getAllPeStatuses,
   getAllFinanceStatuses,
   getAllOrders,
+  getFlagLabel,
 } from '@/database/repos/orders'
 import { getAllSalesUsers } from '@/database/repos/sales-users'
 
@@ -111,11 +112,13 @@ async function compute(searchParams: URLSearchParams) {
     ]
     const projectStatusList = peStatuses
     const invoiceStatusList = financeStatuses
-    const projectFlagList = [
-      { flagId: 'External', flagDescription: 'External' },
-      { flagId: 'Internal', flagDescription: 'Internal' },
-      { flagId: 'Urgent', flagDescription: 'Urgent' },
-    ]
+    const activeFlags = new Set<string>()
+    dateFilteredOrders.forEach(p => {
+      if (p.prjFlag) activeFlags.add(p.prjFlag)
+    })
+    const projectFlagList = Array.from(activeFlags)
+      .map((f) => ({ flagId: f, flagDescription: getFlagLabel(f) || f }))
+      .sort((a, b) => a.flagDescription.localeCompare(b.flagDescription))
 
     return ({
       projects: projectsData,

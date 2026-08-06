@@ -799,10 +799,16 @@ export default function CostControlPage() {
                   {/* Tab Contents: Purchases */}
                   {!detailLoading && detailTab === 'purchasing' && (
                     <div className="space-y-2">
-                      <h3 className="font-bold text-xs flex items-center gap-1.5 text-foreground">
-                        <ShoppingCart className="h-4 w-4 text-sky-500" />
-                        Detail Pembelian (Purchase Orders)
-                      </h3>
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-bold text-xs flex items-center gap-1.5 text-foreground">
+                          <ShoppingCart className="h-4 w-4 text-sky-500" />
+                          Detail Pembelian (Purchase Orders)
+                        </h3>
+                        <ExportButton 
+                          data={(selectedCalculatedProject.purchasingItems || []).map(i => ({ 'PO Number': i.poNumber, 'Date': i.date, 'Description': i.description, 'Type': i.type, 'Vendor': i.vendor || '-', 'Amount': i.amount }))} 
+                          filename={`cost-control-${selectedCalculatedProject.prjId}-purchases.csv`} 
+                        />
+                      </div>
                       {selectedCalculatedProject.purchasingItems && selectedCalculatedProject.purchasingItems.length > 0 ? (
                         <div className="max-h-[400px] overflow-y-auto border rounded-xl shadow-inner bg-card">
                           <Table className="text-[11px]">
@@ -838,10 +844,16 @@ export default function CostControlPage() {
                   {/* Tab Contents: Reimbursements */}
                   {!detailLoading && detailTab === 'reimburse' && (
                     <div className="space-y-2">
-                      <h3 className="font-bold text-xs flex items-center gap-1.5 text-foreground">
-                        <Receipt className="h-4 w-4 text-purple-500" />
-                        Detail Reimburse (Cash Out)
-                      </h3>
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-bold text-xs flex items-center gap-1.5 text-foreground">
+                          <Receipt className="h-4 w-4 text-purple-500" />
+                          Detail Reimburse (Cash Out)
+                        </h3>
+                        <ExportButton 
+                          data={(selectedCalculatedProject.reimburseItems || []).map(i => ({ 'Date': i.date, 'Description': i.description, 'Type': i.type, 'Requester': i.requestor, 'Amount': i.amount }))} 
+                          filename={`cost-control-${selectedCalculatedProject.prjId}-reimbursements.csv`} 
+                        />
+                      </div>
                       {selectedCalculatedProject.reimburseItems && selectedCalculatedProject.reimburseItems.length > 0 ? (
                         <div className="max-h-[400px] overflow-y-auto border rounded-xl shadow-inner bg-card">
                           <Table className="text-[11px]">
@@ -874,10 +886,16 @@ export default function CostControlPage() {
                   {/* Tab Contents: Meal Benefits */}
                   {!detailLoading && detailTab === 'meal' && (
                     <div className="space-y-2">
-                      <h3 className="font-bold text-xs flex items-center gap-1.5 text-foreground">
-                        <Utensils className="h-4 w-4 text-orange-500" />
-                        Detail Meal Benefits
-                      </h3>
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-bold text-xs flex items-center gap-1.5 text-foreground">
+                          <Utensils className="h-4 w-4 text-orange-500" />
+                          Detail Meal Benefits
+                        </h3>
+                        <ExportButton 
+                          data={(selectedCalculatedProject.mealItems || []).map(i => ({ 'Date': i.date, 'User': i.userName || i.userId || '-', 'Type': i.type || 'Meal', 'Notes': i.notes || '-', 'Request Amount': i.amount, 'Approved Amount': i.approved }))} 
+                          filename={`cost-control-${selectedCalculatedProject.prjId}-meals.csv`} 
+                        />
+                      </div>
                       {selectedCalculatedProject.mealItems && selectedCalculatedProject.mealItems.length > 0 ? (
                         <div className="max-h-[400px] overflow-y-auto border rounded-xl shadow-inner bg-card">
                           <Table className="text-[11px]">
@@ -917,10 +935,16 @@ export default function CostControlPage() {
                   {/* Tab Contents: Overtimes */}
                   {!detailLoading && detailTab === 'overtime' && (
                     <div className="space-y-2">
-                      <h3 className="font-bold text-xs flex items-center gap-1.5 text-foreground">
-                        <Clock className="h-4 w-4 text-amber-500" />
-                        Detail Overtime (Lembur Kerja)
-                      </h3>
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-bold text-xs flex items-center gap-1.5 text-foreground">
+                          <Clock className="h-4 w-4 text-amber-500" />
+                          Detail Overtime (Lembur Kerja)
+                        </h3>
+                        <ExportButton 
+                          data={(selectedCalculatedProject.overtimeItems || []).map(i => ({ 'Date': i.date, 'Worker Name': i.workerName, 'Reason': i.reason || '-', 'Hours': i.hours }))} 
+                          filename={`cost-control-${selectedCalculatedProject.prjId}-overtimes.csv`} 
+                        />
+                      </div>
                       {selectedCalculatedProject.overtimeItems && selectedCalculatedProject.overtimeItems.length > 0 ? (
                         <div className="max-h-[400px] overflow-y-auto border rounded-xl shadow-inner bg-card">
                           <Table className="text-[11px]">
@@ -953,10 +977,16 @@ export default function CostControlPage() {
                   {/* Tab Contents: Daily Reports */}
                   {!detailLoading && detailTab === 'report' && (
                     <div className="space-y-2">
-                      <h3 className="font-bold text-xs flex items-center gap-1.5 text-foreground">
-                        <Clock className="h-4 w-4 text-emerald-500" />
-                        Detail Daily Reports (Laporan Kerja)
-                      </h3>
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-bold text-xs flex items-center gap-1.5 text-foreground">
+                          <Clock className="h-4 w-4 text-emerald-500" />
+                          Detail Daily Reports (Laporan Kerja)
+                        </h3>
+                        <ExportButton 
+                          data={(selectedCalculatedProject.reportItems || []).map(i => ({ 'Date': i.date, 'Worker Name': i.workerName, 'Remarks': i.remarks || '-', 'Hours': i.hours }))} 
+                          filename={`cost-control-${selectedCalculatedProject.prjId}-reports.csv`} 
+                        />
+                      </div>
                       {selectedCalculatedProject.reportItems && selectedCalculatedProject.reportItems.length > 0 ? (
                         <div className="max-h-[400px] overflow-y-auto border rounded-xl shadow-inner bg-card">
                           <Table className="text-[11px]">
