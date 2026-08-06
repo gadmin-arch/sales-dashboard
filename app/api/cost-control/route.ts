@@ -213,8 +213,8 @@ async function compute(searchParams: URLSearchParams) {
     })
 }
 
-// v3: bumped cache key to cost-control-v3 so endUserList is served freshly.
-const getView = cachedRouteView('cost-control-v3', compute, ['detail'], (full, view) => {
+// v4: bumped cache key to cost-control-v4 for date-filtered invoice and payment budget baselines.
+const getView = cachedRouteView('cost-control-v4', compute, ['detail'], (full, view) => {
   if (view.detail) {
     const p = full.projects.find((x) => x.prjId === view.detail)
     return {

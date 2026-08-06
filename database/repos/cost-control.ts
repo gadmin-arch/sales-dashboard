@@ -151,6 +151,39 @@ export async function getCostControlData(f: CostControlFilter = {}): Promise<Pro
   // Filter projects
   const fromTime = f.dateFrom ? parseDate(f.dateFrom)?.getTime() : undefined
   const toTime = f.dateTo ? parseDate(f.dateTo)?.getTime() : undefined
+
+  // Build prjId -> invoice & payment totals in range maps
+  const prjInvAmountInRangeMap = new Map<string, number>()
+  const prjPayAmountInRangeMap = new Map<string, number>()
+
+  for (const inv of invoicingData.invoices) {
+    if (!inv.invId || !inv.invDate) continue
+    const t = parseDate(inv.invDate)?.getTime()
+    if (fromTime !== undefined && (t === undefined || t < fromTime)) continue
+    if (toTime !== undefined && (t === undefined || t > toTime)) continue
+
+    const prjList = invToPrjIds.get(inv.invId) || []
+    if (prjList.length === 0) continue
+    const share = (inv.invTotal || 0) / prjList.length
+    for (const pId of prjList) {
+      prjInvAmountInRangeMap.set(pId, (prjInvAmountInRangeMap.get(pId) || 0) + share)
+    }
+  }
+
+  for (const pd of invoicingData.paymentDetails) {
+    if (!pd.invId || !pd.date) continue
+    const t = parseDate(pd.date)?.getTime()
+    if (fromTime !== undefined && (t === undefined || t < fromTime)) continue
+    if (toTime !== undefined && (t === undefined || t > toTime)) continue
+
+    const prjList = invToPrjIds.get(pd.invId) || []
+    if (prjList.length === 0) continue
+    const share = (pd.amount || 0) / prjList.length
+    for (const pId of prjList) {
+      prjPayAmountInRangeMap.set(pId, (prjPayAmountInRangeMap.get(pId) || 0) + share)
+    }
+  }
+
   const projects = allProjects.filter(p => {
     // Non-HO branch site users can ONLY see projects created or owned by their account
     if (userSite && userSite !== 'HO') {
@@ -458,11 +491,15 @@ export async function getCostControlData(f: CostControlFilter = {}): Promise<Pro
     const budgetEstMaterial = prj.prjEstPoMaterial || 0
     const budgetEstService = prj.prjEstPoService || 0
 
-    const invBase = prj.prjInvAmount || 0
+    const invBase = (f.dateType === 'invoice' && (fromTime !== undefined || toTime !== undefined))
+      ? (prjInvAmountInRangeMap.get(pId) || 0)
+      : (prj.prjInvAmount || 0)
     const budgetInvMaterial = poTotal > 0 ? (prj.prjPoMaterial || 0) * (invBase / poTotal) : invBase
     const budgetInvService = poTotal > 0 ? (prj.prjPoService || 0) * (invBase / poTotal) : 0
 
-    const payBase = prj.prjPayAmount || 0
+    const payBase = (f.dateType === 'payment' && (fromTime !== undefined || toTime !== undefined))
+      ? (prjPayAmountInRangeMap.get(pId) || 0)
+      : (prj.prjPayAmount || 0)
     const budgetPayMaterial = poTotal > 0 ? (prj.prjPoMaterial || 0) * (payBase / poTotal) : payBase
     const budgetPayService = poTotal > 0 ? (prj.prjPoService || 0) * (payBase / poTotal) : 0
 
