@@ -14,8 +14,8 @@ export function getDbPool(): Pool {
   pool = new Pool({
     connectionString,
     max: 10,
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 5000,
+    idleTimeoutMillis: 60000,
+    connectionTimeoutMillis: 30000,
   })
   
   pool.on('error', (err) => {
